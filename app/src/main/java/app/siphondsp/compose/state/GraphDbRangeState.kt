@@ -22,6 +22,12 @@ object GraphDbRangeState {
     @Composable
     fun current(): GraphDbRange = stateFor(LocalContext.current).value
 
+    /**
+     * The current range, from anywhere. Read inside a draw lambda it is observed by that draw
+     * phase, so a change redraws the canvas; read in a gesture handler it is the window on screen.
+     */
+    fun read(context: Context): GraphDbRange = stateFor(context).value
+
     fun set(context: Context, range: GraphDbRange) {
         stateFor(context).value = range
         PeqGraphPreferences(context).dbRange = range

@@ -343,8 +343,10 @@ fun CrossoverResponseGraph(
     }
 
     // The dB axis: the user's fixed choice, shared with every response graph (see GraphDbRange).
+    // The overlay's chip shows [dbRange]; the draw reads the live state itself, so a change
+    // redraws the canvas from its draw phase.
     val dbRange = GraphDbRangeState.current()
-    val axis = DbAxis(dbRange)
+    val rangeContext = LocalContext.current
     val view = CrossoverGraphView
     val showLeft = view.channels != GraphChannels.RIGHT
     val showRight = view.channels != GraphChannels.LEFT
@@ -357,6 +359,7 @@ fun CrossoverResponseGraph(
         val bottom = size.height - PAD_BOTTOM_DP * density
         if (right <= left || bottom <= top) return@ComposeCanvas
         val frame = spectrumTick.intValue // read in the draw phase -> redraws each spectrum tick
+        val axis = DbAxis(GraphDbRangeState.read(rangeContext)) // likewise: a range change redraws
         // Before this generation's spring starts, the clock may still hold the last one's overshoot.
         val morphT = if (morph.started == generation) (morphClock.value - (generation - 1)).coerceAtLeast(0f) else 0f
         morph.blend(curves, morphT, generation)

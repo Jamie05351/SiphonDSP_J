@@ -303,8 +303,12 @@ fun PeqGraph(
     val convolver = rememberConvolverResponse(showConvolver, convolverGrid)
     // The dB axis is the user's fixed choice, shared by every response graph: never fitted to the
     // curves, which are clipped at its edges instead.
+    // The ⋮ menu's check mark comes from this; the draw and the tap handler each read the live
+    // state themselves (GraphDbRangeState.read), so a change redraws the canvas from the draw
+    // phase and a tap always hit-tests the window that is on screen. Nothing is written to the
+    // model during composition.
     val dbRange = GraphDbRangeState.current()
-    model.dbRange = dbRange
+    val rangeContext = LocalContext.current
     remember(ValuesKey(systemValues), peqState, sampleRate, carBaseline, convolver) {
         model.recompute(systemValues, peqState, sampleRate, carBaseline, convolver)
     }
@@ -390,7 +394,7 @@ fun PeqGraph(
                         val right = size.width - PlotPadRight.toPx()
                         val bottom = size.height - PlotPadBottom.toPx()
                         if (right <= left || bottom <= top) return@detectTapGestures
-                        val geometry = model.geometry(left, right, top, bottom, maxFrequency)
+                        val geometry = model.geometry(left, right, top, bottom, maxFrequency, GraphDbRangeState.read(rangeContext))
                         val hit = hitTestFocusedBank(
                             offset, geometry, model.curves, peqState, activeBank, channelDisplay, maxFrequency, density,
                             model, showIndividualFilters, sampleRate,
@@ -421,7 +425,7 @@ fun PeqGraph(
             val right = size.width - PlotPadRight.toPx()
             val bottom = size.height - PlotPadBottom.toPx()
             if (right <= left || bottom <= top) return@ComposeCanvas
-            val geometry = model.geometry(left, right, top, bottom, maxFrequency)
+            val geometry = model.geometry(left, right, top, bottom, maxFrequency, GraphDbRangeState.read(rangeContext))
             val house = houseCurve?.let { model.houseOverlay(it, channelDisplay) }
             val ctx = PeqDrawContext(
                 geometry = geometry,
@@ -1696,12 +1700,10 @@ private class PeqResponseModel {
         staticKey = Int.MIN_VALUE
     }
 
-    /** The gain window: the user's fixed choice (see [GraphDbRange]), set by the composable. */
-    var dbRange = GraphDbRange.DEFAULT
-
-    /** Plot geometry on the chosen gain window; draw and hit-test both build theirs here. */
-    fun geometry(left: Float, right: Float, top: Float, bottom: Float, maxFrequency: Double) =
-        PeqPlotGeometry(left, right, top, bottom, maxFrequency, dbRange.bottomDb, dbRange.topDb)
+    /** Plot geometry on [range], the user's fixed gain window (see [GraphDbRange]); draw and
+     *  hit-test both build theirs here, each passing the range it is working with. */
+    fun geometry(left: Float, right: Float, top: Float, bottom: Float, maxFrequency: Double, range: GraphDbRange) =
+        PeqPlotGeometry(left, right, top, bottom, maxFrequency, range.bottomDb, range.topDb)
 
     // The house curve resampled onto the curves' grid, kept until the curve or the grid changes.
     private var houseSource: HouseCurve? = null
