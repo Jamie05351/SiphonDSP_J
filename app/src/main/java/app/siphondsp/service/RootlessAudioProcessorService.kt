@@ -1118,20 +1118,29 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                     // first, and the loop runs again at once, held awake by the audio (see
                     // audioHoldUntil); the idle timer is left as it is, so once the audio stops the
                     // loop suspends again even if no session change ever arrives.
-                    audio.clear()
-                    val waiting = try {
-                        currentRecorder.read(audio, bufferSizeBytes, AudioRecord.READ_NON_BLOCKING)
-                    } catch (_: IllegalStateException) {
-                        0
+                    // Everything waiting is read, not one block per check: a capture that delivers
+                    // zeros with nothing playing (in blocks shorter than the check interval) would
+                    // otherwise build a backlog the wake had to work through first, waking late on
+                    // audio older than live. Only real audio counts: waking on those zeros would
+                    // keep the pipeline from ever suspending. (A zero sample is all zero bytes in
+                    // both encodings.) Bounded, in case a capture delivers as fast as it's read.
+                    var woke = false
+                    for (attempt in 0 until MAX_IDLE_DRAIN_READS) {
+                        audio.clear()
+                        val waiting = try {
+                            currentRecorder.read(audio, bufferSizeBytes, AudioRecord.READ_NON_BLOCKING)
+                        } catch (_: IllegalStateException) {
+                            0
+                        }
+                        if (waiting <= 0) break
+                        if (isAudible(audio, waiting)) {
+                            heldBytes = waiting
+                            audioHoldUntil = SystemClock.elapsedRealtime() + IDLE_SUSPEND_DEBOUNCE_MS
+                            woke = true
+                            break
+                        }
                     }
-                    // Only real audio counts: some captures deliver zeros with nothing playing, and
-                    // waking on those would keep the pipeline from ever suspending. (A zero sample
-                    // is all zero bytes in both encodings.)
-                    if (isAudible(audio, waiting)) {
-                        heldBytes = waiting
-                        audioHoldUntil = SystemClock.elapsedRealtime() + IDLE_SUSPEND_DEBOUNCE_MS
-                        continue
-                    }
+                    if (woke) continue
                     try {
                         Thread.sleep(50)
                     }
@@ -1232,7 +1241,12 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                     continue
                 }
                 if(readCount == 0) {
-                    Thread.sleep(AudioPipelineHealth.IO_RETRY_DELAY_MS)
+                    // Inside an audio hold (awake on the audio alone, the reads non-blocking so a
+                    // capture that goes quiet can't park the loop), real audio is flowing: retry
+                    // within a couple of ms, well inside the track's block of slack, rather than
+                    // leave 20 ms gaps in the stream.
+                    val holding = SystemClock.elapsedRealtime() < audioHoldUntil
+                    Thread.sleep(if (holding) AUDIO_HOLD_RETRY_MS else AudioPipelineHealth.IO_RETRY_DELAY_MS)
                     continue
                 }
 
@@ -1595,6 +1609,10 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         private const val TRACK_BUFFER_BLOCKS = 2
         private const val STOP_JOIN_TIMEOUT_MS = 2000L
         private const val IDLE_SUSPEND_DEBOUNCE_MS = 400L
+        // Reads per idle check at most when draining the held capture (see the idle suspend).
+        private const val MAX_IDLE_DRAIN_READS = 64
+        // An empty non-blocking read while audio holds the loop awake is retried this soon.
+        private const val AUDIO_HOLD_RETRY_MS = 2L
         // A burst of app-session churn is re-checked once, 2 s after it goes quiet (10 s at most).
         private const val EXCLUSION_RECHECK_DEBOUNCE_MS = 2_000L
         private const val EXCLUSION_RECHECK_MAX_WAIT_MS = 10_000L
