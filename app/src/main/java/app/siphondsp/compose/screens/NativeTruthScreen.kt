@@ -58,6 +58,7 @@ import app.siphondsp.model.debug.RootlessPipelineRuntimeSnapshot
 import app.siphondsp.model.debug.StageProfile
 import app.siphondsp.service.AudioThreadTuning
 import app.siphondsp.service.RootlessAudioProcessorService
+import app.siphondsp.service.StreamStartLog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -96,6 +97,8 @@ fun NativeTruthScreen(modifier: Modifier = Modifier) {
     var timing by remember { mutableStateOf<StageProfile.Summary?>(null) }
     var timingCoreKhz by remember { mutableStateOf<Long?>(null) }
     var tuning by remember { mutableStateOf(AudioThreadTuning.status) }
+    var streamStarts by remember { mutableStateOf(StreamStartLog.snapshot()) }
+    var elapsedNowMs by remember { mutableLongStateOf(android.os.SystemClock.elapsedRealtime()) }
     // Per-stage timing runs only while this screen is open.
     DisposableEffect(Unit) {
         RootlessAudioProcessorService.setStageProfiling(true)
@@ -118,6 +121,8 @@ fun NativeTruthScreen(modifier: Modifier = Modifier) {
             if (profile != null) readings.addLast(now to profile)
             while (readings.size > 2 && now - readings[1].first >= TIMING_WINDOW_MS) readings.removeFirst()
             tuning = AudioThreadTuning.status
+            streamStarts = StreamStartLog.snapshot()
+            elapsedNowMs = android.os.SystemClock.elapsedRealtime()
             val rate = RootlessAudioProcessorService.engineStatus()?.sampleRate?.toDouble() ?: 0.0
             timing = profile?.summarize(readings.firstOrNull()?.second?.takeIf { readings.size > 1 }, rate)
             timingCoreKhz = timing?.lastCpu?.takeIf { it >= 0 }?.let { core -> withContext(Dispatchers.IO) { CpuFrequencies.currentKhz(core) } }
@@ -147,6 +152,7 @@ fun NativeTruthScreen(modifier: Modifier = Modifier) {
                 fontSize = 14.sp,
             )
         }
+        item { StreamStartSection(streamStarts, elapsedNowMs) }
         item { ProcessingTimeSection(timing, timingCoreKhz, cpu, tuning) }
         item { MeasurementSection() }
         item { EngineSection(handleReady, engineSampleRate, truth) }
@@ -488,6 +494,77 @@ private fun formatAgo(ageMs: Long): String {
         s < 60 -> "$s s ago"
         s < 3600 -> "${s / 60} min ago"
         else -> "${s / 3600} h ago"
+    }
+}
+
+/**
+ * The first buffers of each recent stream start (see [StreamStartLog]): per buffer, the input and
+ * output peak, the level change between them, and whether the engine processed it or it went out
+ * as captured. The settings line is the engine's own report after the first buffer, and the gain
+ * it implies (master volume + headroom + PEQ preamp) is what a processed buffer's change should
+ * be near. Red: louder than that allows, or passed through raw while the volume cuts.
+ */
+@Composable
+private fun StreamStartSection(starts: List<StreamStartLog.Start>, nowMs: Long) {
+    Column {
+        SectionHeader("STREAM STARTS")
+        DebugCard {
+            if (starts.isEmpty()) {
+                KeyValueRow("Recorded", "none yet: start playback", BmwYellow)
+                return@DebugCard
+            }
+            starts.forEachIndexed { index, start ->
+                if (index > 0) Spacer(Modifier.height(10.dp))
+                val loud = start.buffers.filter(start::suspicious)
+                KeyValueRow(
+                    start.reason,
+                    if (loud.isEmpty()) "OK · ${formatAgo(nowMs - start.atMs)}" else "LOUD x${loud.size} · ${formatAgo(nowMs - start.atMs)}",
+                    if (loud.isEmpty()) BmwGreen else BmwRed,
+                )
+                if (start.engineRead) {
+                    val volume = if (start.muted) "muted" else "${fmt(start.volumeDb.toDouble(), 1)} dB"
+                    val preamp = if (start.peqEnabled) "${fmt(start.preampDb.toDouble(), 1)} dB" else "off"
+                    KeyValueRow(
+                        "Engine",
+                        "vol $volume · headroom ${fmt(start.headroomDb.toDouble(), 1)} · preamp $preamp",
+                    )
+                    KeyValueRow(
+                        "Expected gain · IR",
+                        "${fmt(start.expectedGainDb.toDouble(), 1)} dB · ${if (start.convolverRunning) "running" else "not running"}" +
+                            if (start.neutral) " · NEUTRAL" else "",
+                    )
+                } else {
+                    KeyValueRow("Engine", "no status read yet", BmwYellow)
+                }
+                KeyValueRow("Format", "${start.sampleRate} Hz · ${if (start.float) "float" else "16-bit"} · ${start.bufferSamples / 2} frames")
+                Text(
+                    "   t ms    in dBFS   out dBFS    change",
+                    color = Color.Gray,
+                    fontSize = 13.sp,
+                    fontFamily = FontFamily.Monospace,
+                )
+                start.buffers.forEach { b ->
+                    val change = b.gainDb?.let { (if (it > 0) "+" else "") + fmt(it.toDouble(), 1) } ?: "—"
+                    val state = when {
+                        b.generated -> " gen"
+                        !b.processed -> " RAW"
+                        else -> ""
+                    }
+                    Text(
+                        "%7d %10s %10s %9s%s".format(
+                            b.tMs,
+                            fmt(b.inPeakDb.toDouble(), 1),
+                            fmt(b.outPeakDb.toDouble(), 1),
+                            change,
+                            state,
+                        ),
+                        color = if (start.suspicious(b)) BmwRed else Color.White,
+                        fontSize = 13.sp,
+                        fontFamily = FontFamily.Monospace,
+                    )
+                }
+            }
+        }
     }
 }
 

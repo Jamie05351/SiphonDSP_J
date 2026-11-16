@@ -1013,6 +1013,8 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
             // All zeros (allocateDirect clears it): the start-up priming block and the input
             // while the measurement generator runs.
             val silence = ByteBuffer.allocateDirect(bufferSizeBytes).order(ByteOrder.nativeOrder())
+            // Why the next stream start happens, for the stream-start log (Native DSP Truth).
+            var startReason = "service start"
 
             while (!isProcessorDisposing && !isServiceDisposing) {
                 if (diagnostics?.isFinished == true) diagnostics = null
@@ -1031,6 +1033,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                         lastRecreationPackages = recreationPackages
                         lastRecreationAt = SystemClock.elapsedRealtime()
                         recreationPackages = emptySet()
+                        startReason = "rebuild: $recreationReason"
                         safeStop(recorder)
                         safeStop(track)
                         track?.flush()
@@ -1091,6 +1094,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                     // AudioRecord/AudioTrack concurrently from another thread.
                     synchronized(recorderLifecycleLock) {
                         recorderSuspended = true
+                        startReason = "resume after idle"
                         safeStop(currentRecorder)
                         safeStop(currentTrack)
                     }
@@ -1131,6 +1135,11 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                     // rather than whatever the last stream left in its filters, delays, limiters
                     // and convolver. No fade, so a measurement sweep plays untouched.
                     engine.notifyStreamStart()
+                    StreamStartLog.begin(
+                        startReason, sampleRate, bufferSamples, encoding == AudioEncoding.PcmFloat,
+                        SystemClock.elapsedRealtime(),
+                    )
+                    startReason = "track restart"
                     writeFully(currentTrack, silence, bufferSizeBytes, bytesPerSample, diagnostics)
                 }
 
@@ -1207,8 +1216,13 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                     diagnostics?.recordFloatInput(audioFloats, processCount)
                     if (spectrum) SpectrumEngine.captureDry(audioFloats, processCount)
                 }
+                // Only for the first buffers after a stream start (see StreamStartLog).
+                val logStart = StreamStartLog.recording
+                val inPeakDb = if (!logStart) 0f
+                    else if (encoding == AudioEncoding.PcmShort) StreamStartLog.peakDb(audioShorts, processCount)
+                    else StreamStartLog.peakDb(audioFloats, processCount)
                 val processStart = System.nanoTime()
-                try {
+                val processed = try {
                     // In place; a bypassed or refused buffer is left as it was read and played as is.
                     engine.processDirect(audio, processCount, encoding)
                 } catch (e: Throwable) {
@@ -1220,6 +1234,15 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                 tuning.reportWork(processNanos)
                 lastSuccessfulProcess = SystemClock.elapsedRealtime()
                 diagnostics?.recordDspSuccess(processCount)
+                if (logStart) {
+                    val outPeakDb = if (encoding == AudioEncoding.PcmShort) StreamStartLog.peakDb(audioShorts, processCount)
+                        else StreamStartLog.peakDb(audioFloats, processCount)
+                    StreamStartLog.record(SystemClock.elapsedRealtime(), processCount, inPeakDb, outPeakDb, processed, generatedInput)
+                }
+                if (StreamStartLog.wantsEngine) {
+                    val peq = engine.appliedPeqState
+                    StreamStartLog.recordEngine(engine.engineStatus(), peq.enabled, peq.preampDb)
+                }
                 if (encoding == AudioEncoding.PcmShort) {
                     diagnostics?.recordShortOutput(audioShorts, processCount)
                     if (spectrum) SpectrumEngine.publishWet(audioShorts, sampleRate)
