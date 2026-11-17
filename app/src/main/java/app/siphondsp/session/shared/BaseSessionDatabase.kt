@@ -208,8 +208,11 @@ abstract class BaseSessionDatabase(protected val context: Context) {
     fun removeSession(sid: Int, gone: Boolean = false) {
         sessionList[sid]?.let { it ->
             Timber.d("Removed session: session ${sid}; data: $it")
-            if (gone) onSessionGone(sid, it) else onSessionRemoved(it)
+            // Out of the list before the hook: by the time a held mute exists (onSessionGone),
+            // the session must already read as gone, or a loss callback on it in between would
+            // be taken for an active session's and restart or stop the service.
             sessionList.remove(sid)
+            if (gone) onSessionGone(sid, it) else onSessionRemoved(it)
             changeCallbacks.forEach { it.onSessionChanged(sessionList) }
         }
     }

@@ -36,6 +36,7 @@ private fun media(uid: Int = 1000, pkg: String = "com.spotify.music") =
 class SessionGoneHooksTest {
     private class Db(context: android.content.Context) : BaseSessionDatabase(context) {
         val gone = mutableListOf<Int>()
+        val goneWhileStillListed = mutableListOf<Int>()
         val removed = mutableListOf<Int>()
         val excludedChanges = mutableListOf<List<Int>>()
         val processable = mutableListOf<Map<Int, Boolean>>()
@@ -45,7 +46,10 @@ class SessionGoneHooksTest {
         override fun shouldAddSession(id: Int, uid: Int, packageName: String) = true
         override fun createSession(id: Int, uid: Int, packageName: String): IEffectSession = Session(uid, packageName)
         override fun onSessionRemoved(item: IEffectSession) { removed += item.uid }
-        override fun onSessionGone(sid: Int, item: IEffectSession) { gone += sid }
+        override fun onSessionGone(sid: Int, item: IEffectSession) {
+            gone += sid
+            if (sessionList.containsKey(sid)) goneWhileStillListed += sid
+        }
         override fun onExcludedUidsChanged(uids: Array<Int>) { excludedChanges += uids.toList() }
         override fun onSessionsCleared() { cleared++ }
         override fun onDumpApplied(dump: ISessionInfoDump, accepted: (Int, AudioSessionDumpEntry) -> Boolean) {
@@ -66,6 +70,7 @@ class SessionGoneHooksTest {
         assertFalse("a quiet session still reads as idle", db.sessionList.containsKey(5))
         assertEquals(listOf(5), db.gone)
         assertTrue(db.removed.isEmpty())
+        assertTrue("the hook must see the session already gone", db.goneWhileStillListed.isEmpty())
     }
 
     @Test fun anIdReusedByAnotherAppIsRemovedNotGone() {
