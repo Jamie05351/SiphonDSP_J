@@ -39,7 +39,7 @@ class SessionGoneHooksTest {
         val removed = mutableListOf<Int>()
         val excludedChanges = mutableListOf<List<Int>>()
         val processable = mutableListOf<Map<Int, Boolean>>()
-        var destroyed = false
+        var cleared = 0
         var accept: (AudioSessionDumpEntry) -> Boolean = { true }
         override fun shouldAcceptSessionDump(id: Int, session: AudioSessionDumpEntry) = accept(session)
         override fun shouldAddSession(id: Int, uid: Int, packageName: String) = true
@@ -47,7 +47,7 @@ class SessionGoneHooksTest {
         override fun onSessionRemoved(item: IEffectSession) { removed += item.uid }
         override fun onSessionGone(sid: Int, item: IEffectSession) { gone += sid }
         override fun onExcludedUidsChanged(uids: Array<Int>) { excludedChanges += uids.toList() }
-        override fun onDestroyed() { destroyed = true }
+        override fun onSessionsCleared() { cleared++ }
         override fun onDumpApplied(dump: ISessionInfoDump, accepted: (Int, AudioSessionDumpEntry) -> Boolean) {
             processable += dump.sessions.mapValues { (sid, e) -> accepted(sid, e) }
         }
@@ -85,7 +85,16 @@ class SessionGoneHooksTest {
         db.destroy()
         assertEquals(listOf(1000, 3000), db.removed)
         assertTrue(db.gone.isEmpty())
-        assertTrue(db.destroyed)
+        assertEquals(1, db.cleared)
+    }
+
+    @Test fun clearingWithoutDestroyAlsoDropsWhatIsHeld() {
+        db.update(Dump(mapOf(5 to media())))
+        db.update(Dump(emptyMap()))
+        idle(2_000)
+        assertEquals(listOf(5), db.gone)
+        db.clearSessions() // a dump-method change
+        assertEquals(1, db.cleared)
     }
 
     @Test fun eachDumpReportsWhichIdsWouldBeProcessed() {

@@ -74,15 +74,17 @@ abstract class BaseSessionDatabase(protected val context: Context) {
     /** The excluded uids changed: anything still held for them must go too. */
     protected open fun onExcludedUidsChanged(uids: Array<Int>) {}
 
-    /** The database is being destroyed, after its sessions have been removed. */
-    protected open fun onDestroyed() {}
+    /**
+     * Every session was just removed ([clearSessions]: a dump-method change, or destroy): drop
+     * anything still held for sessions that went quiet, since nothing tracks them from here.
+     */
+    protected open fun onSessionsCleared() {}
 
     fun destroy()
     {
         isDisposing = true
         cancelPendingRemovals()
         clearSessions()
-        onDestroyed()
     }
 
     fun clearSessions(){
@@ -90,6 +92,7 @@ abstract class BaseSessionDatabase(protected val context: Context) {
         clearExcludedPlaying()
         sessionList.forEach { (_, session) -> onSessionRemoved(session) }
         sessionList.clear()
+        onSessionsCleared()
     }
 
     private fun cancelPendingRemovals() {

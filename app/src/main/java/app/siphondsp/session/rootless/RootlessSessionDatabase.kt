@@ -27,7 +27,7 @@ class RootlessSessionDatabase(context: Context) : BaseSessionDatabase(context) {
     // here, apart from sessionList, so a quiet session still reads as idle everywhere else. A
     // mute on a session with nothing playing does nothing. Released when the id comes back for
     // anything that wouldn't be processed, when the app is excluded, past MAX_HELD_MUTES, and
-    // when the service stops. Main thread, plus the audio worker via setExcludedUids().
+    // whenever the sessions are cleared (a dump-method change, or the service stopping). Main thread, plus the audio worker via setExcludedUids().
     private val heldMutes = LinkedHashMap<Int, MutedEffectSession>()
     private val heldLock = Any()
 
@@ -125,7 +125,7 @@ class RootlessSessionDatabase(context: Context) : BaseSessionDatabase(context) {
         excluded.forEach { (sid, s) -> release(s); log(sid, s.packageName, Kind.RELEASED, "excluded") }
     }
 
-    override fun onDestroyed() {
+    override fun onSessionsCleared() {
         val all = synchronized(heldLock) { heldMutes.values.toList().also { heldMutes.clear() } }
         all.forEach(::release)
     }
