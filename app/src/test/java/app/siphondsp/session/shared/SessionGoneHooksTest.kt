@@ -20,6 +20,7 @@ private data class Session(override var uid: Int, override var packageName: Stri
 
 private class Dump(sessionMap: Map<Int, AudioSessionDumpEntry>) : ISessionInfoDump {
     override val sessions = HashMap(sessionMap)
+    override fun toString() = "Dump($sessions)"
 }
 
 private fun media(uid: Int = 1000, pkg: String = "com.spotify.music") =
