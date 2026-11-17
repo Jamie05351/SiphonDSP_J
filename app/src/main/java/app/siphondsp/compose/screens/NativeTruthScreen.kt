@@ -59,6 +59,7 @@ import app.siphondsp.model.debug.StageProfile
 import app.siphondsp.service.AudioThreadTuning
 import app.siphondsp.service.RootlessAudioProcessorService
 import app.siphondsp.service.StreamStartLog
+import app.siphondsp.session.rootless.SessionMuteLog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -98,6 +99,7 @@ fun NativeTruthScreen(modifier: Modifier = Modifier) {
     var timingCoreKhz by remember { mutableStateOf<Long?>(null) }
     var tuning by remember { mutableStateOf(AudioThreadTuning.status) }
     var streamStarts by remember { mutableStateOf(StreamStartLog.snapshot()) }
+    var sessionMutes by remember { mutableStateOf(SessionMuteLog.snapshot()) }
     var elapsedNowMs by remember { mutableLongStateOf(android.os.SystemClock.elapsedRealtime()) }
     // Per-stage timing runs only while this screen is open.
     DisposableEffect(Unit) {
@@ -122,6 +124,7 @@ fun NativeTruthScreen(modifier: Modifier = Modifier) {
             while (readings.size > 2 && now - readings[1].first >= TIMING_WINDOW_MS) readings.removeFirst()
             tuning = AudioThreadTuning.status
             streamStarts = StreamStartLog.snapshot()
+            sessionMutes = SessionMuteLog.snapshot()
             elapsedNowMs = android.os.SystemClock.elapsedRealtime()
             val rate = RootlessAudioProcessorService.engineStatus()?.sampleRate?.toDouble() ?: 0.0
             timing = profile?.summarize(readings.firstOrNull()?.second?.takeIf { readings.size > 1 }, rate)
@@ -153,6 +156,7 @@ fun NativeTruthScreen(modifier: Modifier = Modifier) {
             )
         }
         item { StreamStartSection(streamStarts, elapsedNowMs) }
+        item { SessionMuteSection(sessionMutes, elapsedNowMs) }
         item { ProcessingTimeSection(timing, timingCoreKhz, cpu, tuning) }
         item { MeasurementSection() }
         item { EngineSection(handleReady, engineSampleRate, truth) }
@@ -567,6 +571,51 @@ private fun StreamStartSection(starts: List<StreamStartLog.Start>, nowMs: Long) 
                         fontFamily = FontFamily.Monospace,
                     )
                 }
+            }
+        }
+    }
+}
+
+/**
+ * Each app session's mute (see [SessionMuteLog]). Until an app's session has a mute on it, its
+ * own audio plays straight out, unprocessed and at the head unit's full volume, and the stream
+ * starts above can't see that. Per session start: KEPT, muted from its first sample (no burst);
+ * NEW, a mute made only now, so the app played unmuted for about the time shown; FAILED, no mute
+ * at all. HELD and RELEASED: what happened to a quiet session's mute.
+ */
+@Composable
+private fun SessionMuteSection(events: List<SessionMuteLog.Event>, nowMs: Long) {
+    Column {
+        SectionHeader("SESSION MUTES")
+        DebugCard {
+            if (events.isEmpty()) {
+                KeyValueRow("Recorded", "none yet: start playback", BmwYellow)
+                return@DebugCard
+            }
+            KeyValueRow("Held for quiet sessions", events.first().held.toString())
+            events.forEach { e ->
+                val label = when (e.kind) {
+                    SessionMuteLog.Kind.KEPT -> "KEPT"
+                    SessionMuteLog.Kind.NEW -> if (e.seenBefore) "NEW (id seen before)" else "NEW (new id)"
+                    SessionMuteLog.Kind.REPLACED -> "REPLACED"
+                    SessionMuteLog.Kind.FAILED -> "FAILED"
+                    SessionMuteLog.Kind.HELD -> "held"
+                    SessionMuteLog.Kind.RELEASED -> "released"
+                }
+                val color = when (e.kind) {
+                    SessionMuteLog.Kind.KEPT -> BmwGreen
+                    SessionMuteLog.Kind.NEW, SessionMuteLog.Kind.REPLACED -> BmwYellow
+                    SessionMuteLog.Kind.FAILED -> BmwRed
+                    SessionMuteLog.Kind.HELD, SessionMuteLog.Kind.RELEASED -> Color.Gray
+                }
+                val parts = buildList {
+                    add(e.packageName.substringAfterLast('.').ifEmpty { e.packageName })
+                    if (e.isStart && e.kind != SessionMuteLog.Kind.KEPT)
+                        add(e.afterPlaybackChangeMs?.let { "unmuted ~$it ms" } ?: "unmuted ? ms")
+                    if (e.detail.isNotEmpty()) add(e.detail)
+                    add(formatAgo(nowMs - e.atMs))
+                }
+                KeyValueRow("$label · ${e.sessionId}", parts.joinToString(" · "), color)
             }
         }
     }
