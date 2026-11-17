@@ -60,6 +60,7 @@ import app.siphondsp.model.NativeBmwDspValues
 import app.siphondsp.model.ThreeWayCrossover
 import kotlinx.coroutines.delay
 import kotlin.math.log10
+import kotlin.math.roundToInt
 
 /**
  * Compose port of [app.siphondsp.fragment.NativeBmwDspResponseView] -- the read-only "unified
@@ -615,15 +616,66 @@ private fun drawResponse(
         // polarity, as Band Align sets) an average is a curve neither channel has.
         CrossoverGraphMode.PHASE -> {
             fun phasePath(rad: DoubleArray) = pathFor { i -> valueToY(deg(rad[i]), -180f, 180f, top, bottom) }
-            // Band lines only when switched on (the overlay's LOW / MID / HIGH), each per shown channel.
-            fun bandLines(on: Boolean, l: DoubleArray, r: DoubleArray, leftPaint: Paint, rightPaint: Paint) {
-                if (!on) return
-                if (showLeft) nc.drawPath(phasePath(l), leftPaint)
-                if (showRight) nc.drawPath(phasePath(r), rightPaint)
+            // A band's phase only where the band plays (see BandPhaseFade): full strength within
+            // 15 dB of its passband, fading out by 20 dB, nothing beyond. Runs of one strength are
+            // one path, so a dashed line keeps its dashes through them.
+            fun fadedPhase(db: DoubleArray, rad: DoubleArray, paint: Paint) {
+                val points = minOf(db.size, rad.size, POINT_COUNT)
+                if (points < 2) return
+                val strengths = BandPhaseFade.segmentStrengths(if (db.size == points) db else db.copyOf(points))
+                fun x(i: Int) = left + (i.toFloat() / lastIndex) * (right - left)
+                fun y(i: Int) = valueToY(deg(rad[i]), -180f, 180f, top, bottom)
+                val baseAlpha = paint.alpha
+                var i = 0
+                while (i < strengths.size) {
+                    val strength = strengths[i]
+                    if (strength <= 0f) {
+                        i++
+                        continue
+                    }
+                    val path = Path().apply { moveTo(x(i), y(i)) }
+                    var j = i
+                    while (j < strengths.size && strengths[j] == strength) {
+                        path.lineTo(x(j + 1), y(j + 1))
+                        j++
+                    }
+                    paint.alpha = (baseAlpha * strength).roundToInt()
+                    nc.drawPath(path, paint)
+                    i = j
+                }
+                paint.alpha = baseAlpha
             }
-            bandLines(bands.low, curves.lowBranchPhaseFor(l), curves.lowBranchPhaseFor(r), lowPaint, rightPhase.low)
-            bandLines(bands.mid, curves.midBranchPhaseFor(l), curves.midBranchPhaseFor(r), midPaint, rightPhase.mid)
-            if (drawHigh) bandLines(bands.high, curves.highBranchPhaseFor(l), curves.highBranchPhaseFor(r), highPaint, rightPhase.high)
+            // Band lines only when switched on (the overlay's LOW / MID / HIGH), each per shown
+            // channel, each faded by its own channel's magnitude.
+            fun bandLines(
+                on: Boolean,
+                lDb: DoubleArray, lRad: DoubleArray,
+                rDb: DoubleArray, rRad: DoubleArray,
+                leftPaint: Paint, rightPaint: Paint,
+            ) {
+                if (!on) return
+                if (showLeft) fadedPhase(lDb, lRad, leftPaint)
+                if (showRight) fadedPhase(rDb, rRad, rightPaint)
+            }
+            bandLines(
+                bands.low,
+                curves.lowBranchDbFor(l), curves.lowBranchPhaseFor(l),
+                curves.lowBranchDbFor(r), curves.lowBranchPhaseFor(r),
+                lowPaint, rightPhase.low,
+            )
+            bandLines(
+                bands.mid,
+                curves.midBranchDbFor(l), curves.midBranchPhaseFor(l),
+                curves.midBranchDbFor(r), curves.midBranchPhaseFor(r),
+                midPaint, rightPhase.mid,
+            )
+            if (drawHigh) bandLines(
+                bands.high,
+                curves.highBranchDbFor(l), curves.highBranchPhaseFor(l),
+                curves.highBranchDbFor(r), curves.highBranchPhaseFor(r),
+                highPaint, rightPhase.high,
+            )
+            // The sum: always drawn in full.
             strokeSum(phasePath(curves.sumPhaseFor(r)), isLeft = false)
             strokeSum(phasePath(curves.sumPhaseFor(l)), isLeft = true)
         }
