@@ -132,8 +132,15 @@ class RootlessSessionDatabase(context: Context) : BaseSessionDatabase(context) {
 
     private fun release(session: MutedEffectSession) {
         try {
-            session.audioMuteEffect?.enabled = false
-            session.audioMuteEffect?.release()
+            session.audioMuteEffect?.let { effect ->
+                // Listeners off first: disabling fires the factory's enable-status listener, which
+                // would try to re-enable a mute on its way out and, failing, report a session loss
+                // -- for an id that may already be playing again under a new mute.
+                effect.setEnableStatusListener(null)
+                effect.setControlStatusListener(null)
+                effect.enabled = false
+                effect.release()
+            }
         }
         catch (ex: Exception) {
             Timber.e("release: effect already destroyed")

@@ -122,7 +122,7 @@ abstract class BaseSessionDatabase(protected val context: Context) {
             val reported = dump.sessions[sid] ?: return@forEach // still absent; let it run its course
             val tracked = sessionList[sid]
             val stillSameAcceptedSession = tracked != null && reported.uid == tracked.uid &&
-                !excludedUids.contains(reported.uid) && shouldAcceptSessionDump(sid, reported)
+                isProcessable(sid, reported)
             pendingRemovals.remove(sid)?.let { removalHandler.removeCallbacks(it) }
             if (!stillSameAcceptedSession) {
                 // Not the same session any more: release outright, never hold its effect.
@@ -140,31 +140,29 @@ abstract class BaseSessionDatabase(protected val context: Context) {
             !sessionList.contains(it.key) && !excludedUids.contains(it.value.uid)
         }
 
-        addedSessions.forEach next@ {
-            val sid = it.key
-            val data = it.value
-            val name = context.packageManager.getNameForUid(it.value.uid)
-            if (data.uid == myUid() || excludedPackages.contains(name)) {
-                Timber.d("Skipped session $sid due to package name $name ($data)")
-                return@next
-            }
-            if (sid == 0) {
-                Timber.w("Session 0 skipped ($data)")
-                return@next
-            }
-
-            if(shouldAcceptSessionDump(sid, data)) {
-                addSession(sid, data.uid, data.packageName)
-            }
+        addedSessions.forEach { (sid, data) ->
+            if (isProcessable(sid, data)) addSession(sid, data.uid, data.packageName)
         }
 
         removedSessions.forEach { scheduleRemoval(it.key) }
         onDumpApplied(dump) { sid, data -> isProcessable(sid, data) }
     }
 
+    /**
+     * Whether a dump entry would be processed: the one test both for adding a session and for
+     * keeping a held mute on its id (see [onDumpApplied]), so the two can never disagree.
+     */
     private fun isProcessable(sid: Int, data: AudioSessionDumpEntry): Boolean {
-        if (sid == 0 || data.uid == myUid() || excludedUids.contains(data.uid)) return false
-        if (excludedPackages.contains(context.packageManager.getNameForUid(data.uid))) return false
+        if (excludedUids.contains(data.uid)) return false
+        val name = context.packageManager.getNameForUid(data.uid)
+        if (data.uid == myUid() || excludedPackages.contains(name)) {
+            Timber.d("Skipped session $sid due to package name $name ($data)")
+            return false
+        }
+        if (sid == 0) {
+            Timber.w("Session 0 skipped ($data)")
+            return false
+        }
         return shouldAcceptSessionDump(sid, data)
     }
 
