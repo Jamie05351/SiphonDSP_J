@@ -58,7 +58,8 @@ std::array<float, kConfigSize> neutral(std::array<float, kConfigSize> c, std::ui
 std::vector<float> impulseResponse(NativeBmwDspProcessor& p, std::size_t frames, std::size_t at = 32) {
     std::vector<float> warm(2 * 4096, 0.f);
     p.process(warm.data(), warm.size());
-    p.notifyStreamStart();
+    // A measurement of the chain itself, as the self-test takes: never the stream-start fade.
+    p.notifyStreamStartUnfaded();
     std::vector<float> buf(2 * frames, 0.f);
     buf[2 * at] = 0.25f;
     buf[2 * at + 1] = -0.125f;

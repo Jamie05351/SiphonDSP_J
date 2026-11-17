@@ -1133,7 +1133,8 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                 if (primeTrack) {
                     // The track just (re)started: a new stream. Start the DSP chain from silence
                     // rather than whatever the last stream left in its filters, delays, limiters
-                    // and convolver. No fade, so a measurement sweep plays untouched.
+                    // and convolver, fading the output in over 50 ms -- except while measuring
+                    // (measurement neutral or the generator on), so a sweep plays untouched.
                     engine.notifyStreamStart()
                     StreamStartLog.begin(
                         startReason, sampleRate, bufferSamples, encoding == AudioEncoding.PcmFloat,
