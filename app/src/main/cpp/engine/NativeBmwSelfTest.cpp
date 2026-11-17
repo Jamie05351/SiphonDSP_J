@@ -118,8 +118,9 @@ public:
         for (int side = 0; side < 2; ++side) {
             std::fill(buffer.begin(), buffer.end(), 0.f);
             buffer[side] = kImpulse;
-            // Starts the chain from silence with every ramp on its setting: what a fresh stream gets.
-            p->notifyStreamStart();
+            // Starts the chain from silence with every ramp on its setting: what a fresh stream gets,
+            // without the stream-start fade, which would cut the impulse at sample 0.
+            p->notifyStreamStartUnfaded();
             p->process(buffer.data(), buffer.size());
             Path& path = side == 0 ? out.left : out.right;
             // The car's Left speaker is the hardware output's right channel (processFrameBack()).

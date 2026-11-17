@@ -28,6 +28,12 @@ double rms(const std::vector<float>& v, std::size_t fromFrame, std::size_t toFra
     return std::sqrt(sum / double(2 * (toFrame - fromFrame)));
 }
 
+std::array<float, kConfigSize> measuringNeutral() {
+    auto c = defaultConfig();
+    c[sch::kMeasurementNeutral] = 1.f;
+    return c;
+}
+
 NativeBmwDsp::ConvolverIr deltaIr(double gain, std::size_t at) {
     NativeBmwDsp::ConvolverIr ir;
     ir.sampleRate = kSampleRate;
@@ -66,16 +72,48 @@ TEST_CASE("A stream start clears the chain: nothing of the last stream replays")
     }
     const auto g = proc.guardCounters();
     CHECK(g.streamStarts == 1);
-    CHECK(g.fadeIns == 0);  // no fade on a stream start: see the next test
+    CHECK(g.fadeIns == 1);  // music: a stream start fades in (see below)
     CHECK(g.nonFiniteFaults == 0);
     CHECK(g.overRangeFaults == 0);
 }
 
-// Measurements play REW's own sweep into the stream, so a stream start must not shape it: after
-// the reset the output is exactly what a freshly started engine plays -- no fade, nothing left
-// over.
-TEST_CASE("After a stream start the output matches a fresh engine sample for sample") {
-    auto c = defaultConfig();
+// Music: a stream's first audio ramps up from silence over kFadeInSeconds instead of arriving as
+// a step, then plays exactly as a fresh engine does.
+TEST_CASE("A stream start fades the output in from silence") {
+    auto c = limiterOff();
+    NativeBmwDspProcessor used, fresh;
+    for (auto* p : {&used, &fresh}) {
+        p->setSampleRate(kSampleRate);
+        REQUIRE(p->configure(c.data(), c.size()));
+    }
+    auto music = stereoSine(60.0, 0.8, 24000);
+    used.process(music.data(), music.size());
+
+    used.notifyStreamStart();
+    auto x = stereoSine(1000.0, 0.5, 2 * kFadeFrames + 4800), reference = x;
+    used.process(x.data(), x.size());
+    fresh.process(reference.data(), reference.size());
+    const auto g = used.guardCounters();
+    CHECK(g.streamStarts == 1);
+    CHECK(g.fadeIns == 1);
+    // A ramp: quiet at first, the full level of a fresh engine only once the fade is through.
+    CHECK(rms(x, 0, kFadeFrames / 10) < 0.15 * rms(reference, 0, kFadeFrames / 10));
+    CHECK(rms(x, kFadeFrames / 2 - 48, kFadeFrames / 2 + 48) ==
+          doctest::Approx(0.5 * rms(reference, kFadeFrames / 2 - 48, kFadeFrames / 2 + 48)).epsilon(0.05));
+    for (std::size_t i = 2 * (kFadeFrames + 1); i < x.size(); ++i) {
+        REQUIRE(x[i] == reference[i]);
+    }
+    // Never louder than the unfaded output, anywhere in the ramp.
+    for (std::size_t i = 0; i < 2 * kFadeFrames; ++i) {
+        REQUIRE(std::fabs(x[i]) <= std::fabs(reference[i]) + 1e-6f);
+    }
+}
+
+// Measurements play REW's own sweep into the stream, so while measuring a stream start must not
+// shape it: after the reset the output is exactly what a freshly started engine plays -- no fade,
+// nothing left over.
+TEST_CASE("While measuring, after a stream start the output matches a fresh engine sample for sample") {
+    auto c = measuringNeutral();
     NativeBmwDspProcessor used, fresh;
     for (auto* p : {&used, &fresh}) {
         p->setSampleRate(kSampleRate);
@@ -92,10 +130,59 @@ TEST_CASE("After a stream start the output matches a fresh engine sample for sam
     for (std::size_t i = 0; i < sweep.size(); ++i) {
         REQUIRE(sweep[i] == reference[i]);
     }
+    CHECK(used.guardCounters().fadeIns == 0);
 }
 
-TEST_CASE("A stream start ends a fade still running from the last stream") {
-    auto c = limiterOff();
+TEST_CASE("The measurement generator on: a stream start doesn't fade") {
+    auto c = defaultConfig();
+    c[sch::kMeasGenType] = 1.f;  // the sweep: deterministic, so two engines can be compared
+    // Same history for both; only the stream start differs: plain (decided by the settings)
+    // against one that is unfaded by request. With the generator on they must match exactly.
+    NativeBmwDspProcessor used, unfaded;
+    for (auto* p : {&used, &unfaded}) {
+        p->setSampleRate(kSampleRate);
+        REQUIRE(p->configure(c.data(), c.size()));
+        std::vector<float> warm(2 * 4800, 0.f);
+        p->process(warm.data(), warm.size());
+    }
+    used.notifyStreamStart();
+    unfaded.notifyStreamStartUnfaded();
+    std::vector<float> buf(2 * 9600, 0.f), reference = buf;
+    used.process(buf.data(), buf.size());
+    unfaded.process(reference.data(), reference.size());
+    REQUIRE(peakAbs(reference) > 1e-3f);  // the generator is playing
+    for (std::size_t i = 0; i < buf.size(); ++i) {
+        REQUIRE(buf[i] == reference[i]);
+    }
+    const auto g = used.guardCounters();
+    CHECK(g.streamStarts == 1);
+    CHECK(g.fadeIns == 0);
+}
+
+TEST_CASE("An unfaded stream start (the self-test's) never fades, and wins over a plain one") {
+    auto c = defaultConfig();
+    NativeBmwDspProcessor used, fresh;
+    for (auto* p : {&used, &fresh}) {
+        p->setSampleRate(kSampleRate);
+        REQUIRE(p->configure(c.data(), c.size()));
+    }
+    auto music = stereoSine(60.0, 0.8, 24000);
+    used.process(music.data(), music.size());
+    used.notifyStreamStart();
+    used.notifyStreamStartUnfaded();  // both before one buffer: served once, unfaded
+    auto x = stereoSine(1000.0, 0.5, 9600), reference = x;
+    used.process(x.data(), x.size());
+    fresh.process(reference.data(), reference.size());
+    for (std::size_t i = 0; i < x.size(); ++i) {
+        REQUIRE(x[i] == reference[i]);
+    }
+    CHECK(used.guardCounters().streamStarts == 1);
+    CHECK(used.guardCounters().fadeIns == 0);
+}
+
+TEST_CASE("While measuring, a stream start ends a fade still running from the last stream") {
+    auto c = measuringNeutral();
+    c[sch::kMasterLimiterEnabled] = 0.f;
     NativeBmwDspProcessor used, fresh;
     for (auto* p : {&used, &fresh}) {
         p->setSampleRate(kSampleRate);

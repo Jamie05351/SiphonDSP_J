@@ -67,7 +67,7 @@ object NativeDsp {
     const val REALTIME_GUARD_CLIPPED = 4
     // Stream starts served (notifyStreamStart): chain cleared.
     const val REALTIME_STREAM_STARTS = 5
-    // 50 ms output fade-ins begun (guard fault, IR load while the convolver plays).
+    // 50 ms output fade-ins begun (stream start unless measuring, guard fault, IR load while the convolver plays).
     const val REALTIME_FADE_INS = 6
     const val REALTIME_COUNT = 7
 

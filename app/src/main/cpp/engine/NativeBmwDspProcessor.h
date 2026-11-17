@@ -130,10 +130,17 @@ public:
     const float* process(const float* samples, std::size_t sampleCount);
     // Any thread, lock-free: a stream is (re)starting. The next processed buffer starts the whole
     // chain from silence -- every filter, delay, limiter and convolver history cleared; settings,
-    // coefficients and the IR kept. Deliberately no fade: from then on the output is exactly what
-    // a freshly started engine plays, so a measurement sweep played into the stream is untouched.
-    // Without it a resumed stream carries on from whatever state the last one left behind.
-    void notifyStreamStart() { streamStartPending_.store(true, std::memory_order_release); }
+    // coefficients and the IR kept -- and fades the output in from silence over kFadeInSeconds,
+    // so the first audio of a stream never arrives as a step. Except while measuring (measurement
+    // neutral, or the measurement generator on): then no fade, and from there the output is
+    // exactly what a freshly started engine plays, so a sweep played into the stream is untouched.
+    // Without the reset a resumed stream carries on from whatever state the last one left behind.
+    void notifyStreamStart() { streamStartPending_.fetch_or(kStartPending, std::memory_order_release); }
+    // As notifyStreamStart(), but never faded whatever the settings: for the engine's own
+    // measurements (the self-test's impulse responses), which must see the chain untouched.
+    void notifyStreamStartUnfaded() {
+        streamStartPending_.fetch_or(kStartPending | kStartUnfaded, std::memory_order_release);
+    }
 
     // The output guard after the limiter (see processChunk()). Per sample, ahead of the clamp to
     // +-1: a NaN/Inf, or a finite sample beyond kFaultLevel (+36 dBFS: no setting gets there,
@@ -149,7 +156,7 @@ public:
         std::int64_t overRangeFaults = 0;  // faults caused by a sample beyond kFaultLevel
         std::int64_t clippedSamples = 0;   // finite samples the clamp to +-1 cut
         std::int64_t streamStarts = 0;     // notifyStreamStart() resets served
-        std::int64_t fadeIns = 0;          // fade-ins started (guard fault, IR load)
+        std::int64_t fadeIns = 0;          // fade-ins started (stream start, guard fault, IR load)
     };
     // Lock-free (relaxed atomics written by the audio thread).
     GuardCounters guardCounters() const;
@@ -395,7 +402,10 @@ private:
     bool fadeDown_ = false;
     float fadeInStep_ = 1.f / (kFadeInSeconds * 48000.f);
     float fadeOutStep_ = 1.f / (kFadeOutSeconds * 48000.f);
-    std::atomic<bool> streamStartPending_{false};
+    // notifyStreamStart*() requests, served by beginBuffer(): kStartPending, plus kStartUnfaded
+    // if any request since the last buffer asked for no fade.
+    static constexpr std::uint8_t kStartPending = 1u, kStartUnfaded = 2u;
+    std::atomic<std::uint8_t> streamStartPending_{0};
     // Per-stage timing (see NativeBmwProfiler.h); off unless requested.
     NativeBmwDsp::StageProfiler profiler_;
     struct GuardAtomics {
