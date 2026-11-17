@@ -58,6 +58,28 @@ abstract class BaseSessionDatabase(protected val context: Context) {
     protected abstract fun createSession(id: Int, uid: Int, packageName: String): IEffectSession?
     protected abstract fun onSessionRemoved(item: IEffectSession)
 
+    /**
+     * Session [sid] has stopped playing (gone from the dumps past the grace period). By default
+     * its effect is released like any other removal; the rootless database keeps the mute
+     * attached instead, so the app is muted from its first sample when it plays again.
+     */
+    protected open fun onSessionGone(sid: Int, item: IEffectSession) = onSessionRemoved(item)
+
+    /**
+     * A dump has been applied. [accepted] says, for any session id in it, whether that entry
+     * would be processed (not ours, not excluded, an accepted usage).
+     */
+    protected open fun onDumpApplied(dump: ISessionInfoDump, accepted: (Int, AudioSessionDumpEntry) -> Boolean) {}
+
+    /** The excluded uids changed: anything still held for them must go too. */
+    protected open fun onExcludedUidsChanged(uids: Array<Int>) {}
+
+    /**
+     * Every session was just removed ([clearSessions]: a dump-method change, or destroy): drop
+     * anything still held for sessions that went quiet, since nothing tracks them from here.
+     */
+    protected open fun onSessionsCleared() {}
+
     fun destroy()
     {
         isDisposing = true
@@ -70,6 +92,7 @@ abstract class BaseSessionDatabase(protected val context: Context) {
         clearExcludedPlaying()
         sessionList.forEach { (_, session) -> onSessionRemoved(session) }
         sessionList.clear()
+        onSessionsCleared()
     }
 
     private fun cancelPendingRemovals() {
@@ -99,9 +122,10 @@ abstract class BaseSessionDatabase(protected val context: Context) {
             val reported = dump.sessions[sid] ?: return@forEach // still absent; let it run its course
             val tracked = sessionList[sid]
             val stillSameAcceptedSession = tracked != null && reported.uid == tracked.uid &&
-                !excludedUids.contains(reported.uid) && shouldAcceptSessionDump(sid, reported)
+                isProcessable(sid, reported)
             pendingRemovals.remove(sid)?.let { removalHandler.removeCallbacks(it) }
             if (!stillSameAcceptedSession) {
+                // Not the same session any more: release outright, never hold its effect.
                 removeSession(sid)
             }
         }
@@ -116,32 +140,37 @@ abstract class BaseSessionDatabase(protected val context: Context) {
             !sessionList.contains(it.key) && !excludedUids.contains(it.value.uid)
         }
 
-        addedSessions.forEach next@ {
-            val sid = it.key
-            val data = it.value
-            val name = context.packageManager.getNameForUid(it.value.uid)
-            if (data.uid == myUid() || excludedPackages.contains(name)) {
-                Timber.d("Skipped session $sid due to package name $name ($data)")
-                return@next
-            }
-            if (sid == 0) {
-                Timber.w("Session 0 skipped ($data)")
-                return@next
-            }
-
-            if(shouldAcceptSessionDump(sid, data)) {
-                addSession(sid, data.uid, data.packageName)
-            }
+        addedSessions.forEach { (sid, data) ->
+            if (isProcessable(sid, data)) addSession(sid, data.uid, data.packageName)
         }
 
         removedSessions.forEach { scheduleRemoval(it.key) }
+        onDumpApplied(dump) { sid, data -> isProcessable(sid, data) }
+    }
+
+    /**
+     * Whether a dump entry would be processed: the one test both for adding a session and for
+     * keeping a held mute on its id (see [onDumpApplied]), so the two can never disagree.
+     */
+    private fun isProcessable(sid: Int, data: AudioSessionDumpEntry): Boolean {
+        if (excludedUids.contains(data.uid)) return false
+        val name = context.packageManager.getNameForUid(data.uid)
+        if (data.uid == myUid() || excludedPackages.contains(name)) {
+            Timber.d("Skipped session $sid due to package name $name ($data)")
+            return false
+        }
+        if (sid == 0) {
+            Timber.w("Session 0 skipped ($data)")
+            return false
+        }
+        return shouldAcceptSessionDump(sid, data)
     }
 
     private fun scheduleRemoval(sid: Int) {
         if (pendingRemovals.containsKey(sid)) return
         val runnable = Runnable {
             pendingRemovals.remove(sid)
-            removeSession(sid)
+            removeSession(sid, gone = true)
         }
         pendingRemovals[sid] = runnable
         removalHandler.postDelayed(runnable, SESSION_REMOVAL_GRACE_MS)
@@ -173,11 +202,15 @@ abstract class BaseSessionDatabase(protected val context: Context) {
         changeCallbacks.forEach { it.onSessionChanged(sessionList) }
     }
 
-    fun removeSession(sid: Int) {
+    /** [gone]: it stopped playing on its own (see [onSessionGone]), rather than being taken away. */
+    fun removeSession(sid: Int, gone: Boolean = false) {
         sessionList[sid]?.let { it ->
             Timber.d("Removed session: session ${sid}; data: $it")
-            onSessionRemoved(it)
+            // Out of the list before the hook: by the time a held mute exists (onSessionGone),
+            // the session must already read as gone, or a loss callback on it in between would
+            // be taken for an active session's and restart or stop the service.
             sessionList.remove(sid)
+            if (gone) onSessionGone(sid, it) else onSessionRemoved(it)
             changeCallbacks.forEach { it.onSessionChanged(sessionList) }
         }
     }
@@ -197,6 +230,7 @@ abstract class BaseSessionDatabase(protected val context: Context) {
         }
         if(notify)
             changeCallbacks.forEach { it.onSessionChanged(sessionList) }
+        onExcludedUidsChanged(uids)
     }
 
     fun registerOnSessionChangeListener(changeListener: OnSessionChangeListener) {

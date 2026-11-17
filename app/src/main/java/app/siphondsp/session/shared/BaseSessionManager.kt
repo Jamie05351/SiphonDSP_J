@@ -10,6 +10,7 @@ import android.media.session.MediaController
 import android.media.session.MediaSessionManager
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import androidx.annotation.CallSuper
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.getSystemService
@@ -27,6 +28,7 @@ import app.siphondsp.model.preference.SessionUpdateMode
 import app.siphondsp.service.NotificationListenerService
 import app.siphondsp.session.dump.DumpManager
 import app.siphondsp.session.dump.data.ISessionInfoDump
+import app.siphondsp.session.rootless.SessionMuteLog
 import app.siphondsp.utils.AppEvent
 import app.siphondsp.utils.AppEvents
 import app.siphondsp.utils.preferences.Preferences
@@ -76,6 +78,7 @@ abstract class BaseSessionManager(protected val context: Context) : DumpManager.
                 super.onPlaybackConfigChanged(configs)
 
                 Timber.d("Playback config changed")
+                SessionMuteLog.notePlaybackChange(SystemClock.elapsedRealtime())
                 pollOnce(false)
             }
         }
@@ -189,7 +192,10 @@ abstract class BaseSessionManager(protected val context: Context) : DumpManager.
         }
 
         pollingMutex.withLock {
-            handleSessionDump(dumpManager.dumpSessions())
+            val startedAtMs = SystemClock.elapsedRealtime()
+            val dump = dumpManager.dumpSessions()
+            handleSessionDump(dump)
+            if (dump != null) SessionMuteLog.noteDumpApplied(startedAtMs)
         }
     }
 
