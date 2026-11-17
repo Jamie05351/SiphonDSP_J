@@ -587,16 +587,26 @@ void NativeBmwDspProcessor::processChunk(float* w, std::size_t frames) {
 }
 
 void NativeBmwDspProcessor::beginBuffer() {
-    if (streamStartPending_.load(std::memory_order_relaxed) &&
-        streamStartPending_.exchange(false, std::memory_order_acquire)) {
-        bump(guard_.streamStarts);
+    if (streamStartPending_.load(std::memory_order_relaxed) == 0) {
+        return;
+    }
+    const std::uint8_t start = streamStartPending_.exchange(0, std::memory_order_acquire);
+    if ((start & kStartPending) == 0) {
+        return;
+    }
+    bump(guard_.streamStarts);
+    clearChainState();
+    const bool measuring = p_.measurementNeutral || p_.measGenType != 0 || (start & kStartUnfaded) != 0;
+    if (measuring) {
         // Clean state only, no fade: from here the output is sample-for-sample what a freshly
-        // started engine would play, so a measurement sweep (REW's, played into the stream) is
-        // never shaped by it. That includes ending a fade still running from the last stream (an
-        // IR dip or a fault's fade-in).
-        clearChainState();
+        // started engine would play, so a measurement sweep (REW's, played into the stream, or
+        // the generator's) is never shaped by it. That includes ending a fade still running from
+        // the last stream (an IR dip or a fault's fade-in).
         fadeGain_ = 1.f;
         fadeDown_ = false;
+    } else {
+        // Music: the stream's first audio ramps up from silence instead of arriving as a step.
+        startFadeIn(/*fromSilence=*/true);
     }
 }
 
