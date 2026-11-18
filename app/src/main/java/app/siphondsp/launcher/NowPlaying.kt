@@ -2,12 +2,16 @@ package app.siphondsp.launcher
 
 import android.content.ComponentName
 import android.content.Context
+import android.media.AudioManager
 import android.media.MediaMetadata
 import android.media.session.MediaController
 import android.media.session.MediaSessionManager
 import android.media.session.PlaybackState
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
+import android.view.KeyEvent
+import androidx.core.content.edit
 import androidx.compose.runtime.Immutable
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
@@ -17,7 +21,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import timber.log.Timber
 import app.siphondsp.service.NotificationListenerService as SiphonNotificationListener
 
-/** What is playing, for the home screen's now-playing card. */
+/** What is playing, for the home screen's music tile. */
 @Immutable
 data class Track(
     val title: String,
@@ -45,6 +49,14 @@ class NowPlaying(context: Context) {
 
     private val _track = MutableStateFlow<Track?>(null)
     val track: StateFlow<Track?> = _track.asStateFlow()
+    private val prefs = app.getSharedPreferences("now_playing", Context.MODE_PRIVATE)
+    private val _lastPlayer = MutableStateFlow(prefs.getString(KEY_LAST_PLAYER, null))
+    /**
+     * The package of the last app seen playing, kept across restarts, so the music tile can still
+     * name a player when no session is left.
+     */
+    val lastPlayer: StateFlow<String?> = _lastPlayer.asStateFlow()
+
     private val _allowed = MutableStateFlow(false)
     val allowed: StateFlow<Boolean> = _allowed.asStateFlow()
 
@@ -85,7 +97,15 @@ class NowPlaying(context: Context) {
     }
 
     fun playPause() {
-        val c = controller ?: return
+        val c = controller
+        if (c == null) {
+            // No session left: a media Play key goes to the app that last played, which resumes it.
+            val audio = app.getSystemService(AudioManager::class.java) ?: return
+            val now = SystemClock.uptimeMillis()
+            audio.dispatchMediaKeyEvent(KeyEvent(now, now, KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_MEDIA_PLAY, 0))
+            audio.dispatchMediaKeyEvent(KeyEvent(now, now, KeyEvent.ACTION_UP, KeyEvent.KEYCODE_MEDIA_PLAY, 0))
+            return
+        }
         if (c.playbackState?.state == PlaybackState.STATE_PLAYING) c.transportControls.pause() else c.transportControls.play()
     }
 
@@ -130,5 +150,14 @@ class NowPlaying(context: Context) {
                 packageName = c.packageName,
             )
         }
+        val player = c?.packageName
+        if (player != null && player != _lastPlayer.value) {
+            _lastPlayer.value = player
+            prefs.edit { putString(KEY_LAST_PLAYER, player) }
+        }
+    }
+
+    private companion object {
+        const val KEY_LAST_PLAYER = "last_player"
     }
 }

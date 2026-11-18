@@ -8,6 +8,10 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PageSize
+import androidx.compose.foundation.pager.PagerDefaults
+import androidx.compose.foundation.pager.PagerSnapDistance
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.ui.input.pointer.pointerInput
@@ -200,8 +204,6 @@ interface LauncherActions {
     fun mediaNext()
     fun mediaPrevious()
     fun openTrackApp(track: Track)
-    /** Switches the now-playing card between its compact and large sizes. */
-    fun toggleNowPlayingSize()
     /** Takes the home tile [key] (a [HomeTile.key]) out of the tile row. */
     fun hideTile(key: String)
     /** Puts every hidden home tile back in the tile row. */
@@ -211,13 +213,16 @@ interface LauncherActions {
 /**
  * The front page as the head unit's home screen, laid out in dp at 1280 x 480 like [HomeScreen]
  * (scaled down to fit a smaller screen): the car wallpaper, a slim master volume strip at the far
- * left, the row of home tiles beside it (three showing, swiped through), the app drawer and car
- * menu at the top right, and the DSP dock along the bottom: power, the five DSP tiles, the
- * headroom at OUT, then More and Settings. A dock tile opens its page.
+ * left, then the double-width music tile pinned beside it, then the swipe row of the other home
+ * tiles in pages of two (each swipe turns one page), the app drawer and car menu at the top right,
+ * and the DSP dock along the bottom: power, the five DSP tiles, the headroom at OUT, then More and
+ * Settings. A dock tile opens its page.
  *
  * [apps] is null until the installed apps first load. [carFunctions] are the car functions this head
  * unit has. [overlay] is the drawer or car menu when one is open. [look] is the user's wallpaper,
- * custom icons and hidden apps; [track] is what's playing, shown on a card above the car.
+ * custom icons and hidden apps (and hidden tiles); [track] is what's playing, shown on the music
+ * tile; [lastPlayer] is the package of the last app seen playing, which the music tile names when
+ * nothing is.
  *
  * Everything that can be tapped can also be reached with the iDrive knob (a D-pad), with the
  * DSP pages' focus ring on whatever it's on.
@@ -239,6 +244,7 @@ fun LauncherHome(
     modifier: Modifier = Modifier,
     look: LauncherCustomisation.Look = LauncherCustomisation.Look(),
     track: Track? = null,
+    lastPlayer: String? = null,
     nowPlayingAllowed: Boolean = true,
     appSwipeAllowed: Boolean = true,
     knobFocusRequests: Int = 0,
@@ -337,7 +343,7 @@ fun LauncherHome(
                                 engine.masterVolumeDb, engine.masterMuted, g, actions::volumeStep, actions::toggleMute,
                                 Modifier.at(PodX, TilesTop, PodWidth, TileHeight),
                             )
-                            TileRow(apps, slots, look.hidden, track, onOverlayChange, actions)
+                            TileRow(apps, slots, look.hidden, track, lastPlayer, onOverlayChange, actions)
                             CornerButton(DrawerX, stringResource(R.string.launcher_drawer), { onOverlayChange(LauncherOverlay.Drawer()) }) { drawDrawerGlyph() }
                             CornerButton(CarX, stringResource(R.string.launcher_car_menu), { onOverlayChange(LauncherOverlay.CarMenu()) }) { drawSettingsGlyph() }
                         }
@@ -359,7 +365,7 @@ fun LauncherHome(
             when (overlay) {
                 is LauncherOverlay.Drawer -> AppDrawer(apps, slots, look, overlay.pickFor, scale.dp(OverlayLeft), overlayTop, overlayBottom, overlayEntry, onOverlayChange, actions)
                 is LauncherOverlay.CarMenu -> CarMenu(
-                    carFunctions, overlay.pickFor, look.wallpaper != null, look.hidden.any { it.startsWith(HomeTile.KeyPrefix) }, nowPlayingAllowed, appSwipeAllowed, scale.dp(OverlayLeft), overlayTop, overlayBottom, overlayEntry, onOverlayChange, actions,
+                    carFunctions, overlay.pickFor, look.wallpaper != null, HomeTile.anyHidden(look.hidden), nowPlayingAllowed, appSwipeAllowed, scale.dp(OverlayLeft), overlayTop, overlayBottom, overlayEntry, onOverlayChange, actions,
                 )
                 LauncherOverlay.HiddenApps -> HiddenApps(apps, look, scale.dp(OverlayLeft), overlayTop, overlayBottom, overlayEntry, onOverlayChange, actions)
                 LauncherOverlay.None -> {}
@@ -398,31 +404,39 @@ private fun Modifier.at(x: Float, y: Float, w: Float, h: Float): Modifier {
 // --- The tile row ---
 
 /**
- * One row of tiles, [TilesPerPage] showing, beside the volume: every [HomeTile] not in [hidden], in
- * order. Swiping moves a tile at a time and wraps round from the last to the first; the dots under
- * it say which tile is at the left. The row keeps its own swipes: the swipe to the DSP settings page
- * works everywhere else on the home screen.
+ * The tiles beside the volume: the [MusicTile] pinned on the left, then the swipe row, pages of two
+ * tiles ([HomeTile.pages]: every other [HomeTile] not in [hidden], in order). A swipe turns exactly
+ * one page and always comes to rest on a whole pair; the row wraps round from the last page to the
+ * first, and the dots under it say which page is showing. The row keeps its own swipes: the swipe
+ * to the DSP settings page works everywhere else on the home screen.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun TileRow(
     apps: List<AppEntry>?,
     slots: List<SlotTarget>,
     hidden: Set<String>,
     track: Track?,
+    lastPlayer: String?,
     onOverlayChange: (LauncherOverlay) -> Unit,
     actions: LauncherActions,
 ) {
     val s = LocalHomeScale.current
     val view = LocalView.current
-    val tiles = HomeTile.entries.filter { it.key !in hidden }
-    if (tiles.isEmpty()) return
-    // Many copies of the row, starting in the middle, so swiping either way never runs out. Started
-    // again when a tile is hidden or shown, so every page still maps to the same tile and dot.
-    val pager = key(tiles.size) { rememberPagerState(initialPage = tiles.size * (LoopCopies / 2)) { tiles.size * LoopCopies } }
+    val scope = rememberCoroutineScope()
+    Box(Modifier.at(TilesX, TilesTop, MusicWidth, TileHeight)) {
+        MusicTile(slots, apps, track, lastPlayer, onOverlayChange, actions)
+    }
+    val pages = HomeTile.pages(hidden)
+    if (pages.isEmpty()) return
+    // Many copies of the pages, starting in the middle, so swiping either way never runs out. The
+    // loop is of pages, not tiles, so a pair always stays together. Started again when a tile is
+    // hidden or shown, so every page still maps to the same pair and dot.
+    val pager = key(pages) { rememberPagerState(initialPage = pages.size * (LoopCopies / 2)) { pages.size * LoopCopies } }
     HorizontalPager(
         pager,
         Modifier
-            .at(TilesX, TilesTop, TilesWidth, TileHeight)
+            .at(PagerX, TilesTop, PageWidth, TileHeight)
             // A touch on the row is the row's: the pager round the home screen mustn't take it
             // as the swipe to the settings page.
             .pointerInput(Unit) {
@@ -431,18 +445,43 @@ private fun TileRow(
                     view.parent?.requestDisallowInterceptTouchEvent(true)
                 }
             },
-        pageSize = PageSize.Fixed(s.dp(TileWidth)),
+        pageSize = PageSize.Fixed(s.dp(PageWidth)),
         pageSpacing = s.dp(TileGap),
-        beyondViewportPageCount = TilesPerPage,
+        // The pages either side are composed and laid out off screen, so their tiles don't pop in
+        // as a swipe starts, and the knob can move focus onto them.
+        beyondViewportPageCount = 1,
+        // One page per swipe, always snapping: a drag past SnapThreshold of a page, or a flick,
+        // goes on a page; anything less springs back.
+        flingBehavior = PagerDefaults.flingBehavior(
+            pager,
+            pagerSnapDistance = PagerSnapDistance.atMost(1),
+            snapPositionalThreshold = SnapThreshold,
+        ),
     ) { page ->
-        Tile(tiles[page % tiles.size], slots, apps, track, onOverlayChange, actions)
+        val pair = pages[page % pages.size]
+        Row(
+            Modifier
+                .fillMaxSize()
+                // The knob moving focus onto a tile off to one side turns the row to that tile's page.
+                .onFocusChanged {
+                    if (it.hasFocus && pager.currentPage != page) scope.launch { pager.animateScrollToPage(page) }
+                },
+            horizontalArrangement = Arrangement.spacedBy(s.dp(TileGap)),
+        ) {
+            for (slot in 0 until HomeTile.TilesPerPage) {
+                Box(Modifier.width(s.dp(TileWidth)).fillMaxHeight()) {
+                    // An odd count leaves the last page's second place empty.
+                    pair.getOrNull(slot)?.let { Tile(it, slots, apps, onOverlayChange, actions) }
+                }
+            }
+        }
     }
-    val current = pager.currentPage % tiles.size
+    val current = pager.currentPage % pages.size
     Row(
-        Modifier.at(TilesX, DotsTop, TilesWidth, DotSize),
+        Modifier.at(PagerX, DotsTop, PageWidth, DotSize),
         horizontalArrangement = Arrangement.spacedBy(s.dp(8f), Alignment.CenterHorizontally),
     ) {
-        for (i in tiles.indices) {
+        for (i in pages.indices) {
             Box(
                 Modifier
                     .width(s.dp(if (i == current) DotSize * 2.5f else DotSize))
@@ -454,16 +493,12 @@ private fun TileRow(
     }
 }
 
-/**
- * [tile], opening the app or car function kept in its slot. The music tile shows what's playing,
- * with the album art and the media controls. Hold for the slot's menu.
- */
+/** [tile], opening the app or car function kept in its slot. Hold for the slot's menu. */
 @Composable
 private fun Tile(
     tile: HomeTile,
     slots: List<SlotTarget>,
     apps: List<AppEntry>?,
-    track: Track?,
     onOverlayChange: (LauncherOverlay) -> Unit,
     actions: LauncherActions,
 ) {
@@ -486,55 +521,167 @@ private fun Tile(
         SlotTarget.Empty -> stringResource(if (tile == HomeTile.DSP) R.string.launcher_dsp_settings else R.string.launcher_tile_choose)
     }
     Box(Modifier.fillMaxSize()) {
-        // Whatever is playing shows on the music tile, from any player; tapping it opens that player.
-        val playing = track?.takeIf { tile == HomeTile.MUSIC }
-        if (playing != null) {
-            // The edge takes the colour of the app that's playing, as tapping opens that app: the
-            // slot's own entry when the player is the attached app (a package can list several),
-            // else the player's first entry; never the slot app's colour for a different player.
-            val player = app?.takeIf { it.component.packageName == playing.packageName }
-                ?: apps?.firstOrNull { it.component.packageName == playing.packageName }
-            HomeTileFace(
-                tile, listOf(playing.title, playing.artist).filter { it.isNotEmpty() }.joinToString(" · "), { actions.openTrackApp(playing) }, { menu = true },
-                art = playing.art,
-                edge = player?.accent ?: tile.accent,
-            ) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                    MediaButton(stringResource(R.string.launcher_media_previous), actions::mediaPrevious) { drawSkip(forward = false) }
-                    MediaButton(
-                        stringResource(if (playing.playing) R.string.launcher_media_pause else R.string.launcher_media_play), actions::mediaPlayPause,
-                    ) { if (playing.playing) drawPause() else drawPlay() }
-                    MediaButton(stringResource(R.string.launcher_media_next), actions::mediaNext) { drawSkip(forward = true) }
-                }
-            }
-        } else {
-            // The edge wears the attached app's own colour; a car function or an empty slot keeps the tile's.
-            HomeTileFace(tile, attached, open, { menu = true }, edge = app?.accent ?: tile.accent)
-        }
-        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-            MenuItem(R.string.launcher_slot_choose_app) { menu = false; onOverlayChange(LauncherOverlay.Drawer(pickFor = i)) }
-            MenuItem(R.string.launcher_slot_choose_car) { menu = false; onOverlayChange(LauncherOverlay.CarMenu(pickFor = i)) }
-            if (target != SlotTarget.Empty) {
-                MenuItem(R.string.launcher_slot_clear) { menu = false; actions.assignSlot(i, SlotTarget.Empty) }
-            }
-            MenuItem(R.string.launcher_tile_hide) { menu = false; actions.hideTile(tile.key) }
-        }
+        // The edge wears the attached app's own colour; a car function or an empty slot keeps the tile's.
+        HomeTileFace(tile, attached, open, { menu = true }, edge = app?.accent ?: tile.accent)
+        SlotMenu(menu, { menu = false }, i, target, onOverlayChange, actions, hide = { actions.hideTile(tile.key) })
     }
 }
 
+/** A slot's menu: choose an app or car function, clear it, and (except the music tile) hide the tile. */
+@Composable
+private fun SlotMenu(
+    expanded: Boolean,
+    dismiss: () -> Unit,
+    slot: Int,
+    target: SlotTarget,
+    onOverlayChange: (LauncherOverlay) -> Unit,
+    actions: LauncherActions,
+    hide: (() -> Unit)?,
+) {
+    DropdownMenu(expanded = expanded, onDismissRequest = dismiss) {
+        MenuItem(R.string.launcher_slot_choose_app) { dismiss(); onOverlayChange(LauncherOverlay.Drawer(pickFor = slot)) }
+        MenuItem(R.string.launcher_slot_choose_car) { dismiss(); onOverlayChange(LauncherOverlay.CarMenu(pickFor = slot)) }
+        if (target != SlotTarget.Empty) {
+            MenuItem(R.string.launcher_slot_clear) { dismiss(); actions.assignSlot(slot, SlotTarget.Empty) }
+        }
+        if (hide != null) MenuItem(R.string.launcher_tile_hide) { dismiss(); hide() }
+    }
+}
+
+/**
+ * The music tile, pinned at the left of the tile row and never hidden: the album art, then the
+ * title (up to two lines), artist and player, with previous, play / pause and next under them.
+ * Whatever is playing shows here, from any player. With nothing playing it names the last player
+ * (else the app in the music slot) with its icon, and offers Play. Tapping opens the player;
+ * holding opens the slot's menu.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun MusicTile(
+    slots: List<SlotTarget>,
+    apps: List<AppEntry>?,
+    track: Track?,
+    lastPlayer: String?,
+    onOverlayChange: (LauncherOverlay) -> Unit,
+    actions: LauncherActions,
+) {
+    val s = LocalHomeScale.current
+    val tile = HomeTile.MUSIC
+    val i = tile.ordinal
+    var menu by remember { mutableStateOf(false) }
+    val target = slots.getOrElse(i) { SlotTarget.Empty }
+    val slotApp = (target as? SlotTarget.App)?.let { t -> apps?.firstOrNull { it.component == t.component } }
+    // The player: what's playing, else the last app seen playing, else the music slot's app. The
+    // slot's own entry when it is that package (a package can list several), else its first entry.
+    val playerPackage = track?.packageName ?: lastPlayer ?: slotApp?.component?.packageName
+    val player = slotApp?.takeIf { it.component.packageName == playerPackage }
+        ?: apps?.firstOrNull { it.component.packageName == playerPackage }
+    val open: () -> Unit = {
+        when {
+            track != null -> actions.openTrackApp(track)
+            player != null -> actions.launchApp(player)
+            target is SlotTarget.Car -> actions.runCar(target.function)
+            // Nothing to open yet: choose the music slot's app. Not before the apps have loaded.
+            apps != null -> onOverlayChange(LauncherOverlay.Drawer(pickFor = i))
+            else -> {}
+        }
+    }
+    val title = stringResource(tile.title)
+    val heading = track?.title ?: player?.label ?: title
+    val detail = track?.artist ?: stringResource(R.string.launcher_nothing_playing)
+    val playerName = player?.label ?: playerPackage.orEmpty()
+    val corner = s.dp(MusicCorner)
+    Box(Modifier.fillMaxSize()) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .knobFocusRing(corner, grow = true)
+                .neonEdge(MusicCorner, player?.accent ?: tile.accent)
+                .clip(RoundedCornerShape(corner))
+                .background(HomePalette.TileBase)
+                .combinedClickable(role = Role.Button, onClick = open, onLongClick = { menu = true })
+                .semantics { contentDescription = listOf(title, heading, track?.artist.orEmpty(), playerName).filter { it.isNotEmpty() }.distinct().joinToString(": ") },
+        ) {
+            // The tile's own picture, faint, behind everything, so it reads as the music tile.
+            Image(
+                painterResource(tile.image), contentDescription = null, contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize().graphicsLayer { alpha = 0.22f },
+            )
+            Row(Modifier.fillMaxSize().padding(s.dp(MusicPad))) {
+                val artShape = RoundedCornerShape(s.dp(12f))
+                Box(
+                    Modifier.size(s.dp(MusicArt)).clip(artShape).background(HomePalette.Panel),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    val art = track?.art
+                    val icon = player?.icon
+                    when {
+                        art != null -> Image(art, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                        // No art (or nothing playing): the player's own icon in the middle.
+                        icon != null -> Image(icon, contentDescription = null, modifier = Modifier.size(s.dp(MusicArt * 0.5f)))
+                        else -> Image(
+                            painterResource(tile.image), contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize(),
+                        )
+                    }
+                }
+                Spacer(Modifier.width(s.dp(MusicInfoGap)))
+                Column(Modifier.width(s.dp(MediaControlsWidth)).fillMaxHeight()) {
+                    // The text takes what the controls leave, so it can never run over them.
+                    Column(Modifier.weight(1f).fillMaxWidth().clipToBounds()) {
+                        Text(
+                            heading, color = Color.White, fontSize = s.sp(16f), fontWeight = FontWeight.SemiBold,
+                            lineHeight = s.sp(19f), maxLines = 2, overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            detail, color = HomePalette.Subtitle, fontSize = s.sp(13f), maxLines = 1, overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(top = s.dp(4f)),
+                        )
+                        if (playerName.isNotEmpty() && playerName != heading) {
+                            Text(
+                                playerName, color = player?.accent ?: tile.accent, fontSize = s.sp(12f), fontWeight = FontWeight.Medium,
+                                maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = s.dp(3f)),
+                            )
+                        }
+                    }
+                    Row(
+                        Modifier.fillMaxWidth().height(s.dp(MediaButtonSize)),
+                        horizontalArrangement = Arrangement.spacedBy(s.dp(MediaButtonGap)),
+                    ) {
+                        if (track != null) {
+                            MediaButton(stringResource(R.string.launcher_media_previous), actions::mediaPrevious) { drawSkip(forward = false) }
+                            MediaButton(
+                                stringResource(if (track.playing) R.string.launcher_media_pause else R.string.launcher_media_play), actions::mediaPlayPause,
+                            ) { if (track.playing) drawPause() else drawPlay() }
+                            MediaButton(stringResource(R.string.launcher_media_next), actions::mediaNext) { drawSkip(forward = true) }
+                        } else {
+                            // Nothing playing: only Play, in its usual place, which resumes the last player.
+                            Spacer(Modifier.width(s.dp(MediaButtonSize)))
+                            MediaButton(stringResource(R.string.launcher_media_play), actions::mediaPlayPause) { drawPlay() }
+                        }
+                    }
+                }
+            }
+        }
+        // No Hide: the music tile always shows.
+        SlotMenu(menu, { menu = false }, i, target, onOverlayChange, actions, hide = null)
+    }
+}
+
+/** A media control: [MediaButtonSize] square, the minimum touch size at the base scale. */
 @Composable
 private fun MediaButton(label: String, onClick: () -> Unit, glyph: DrawScope.() -> Unit) {
     val s = LocalHomeScale.current
     Box(
         Modifier
-            .size(s.dp(44f), s.dp(36f))
-            .knobFocusRing(s.dp(10f))
-            .clip(RoundedCornerShape(s.dp(10f)))
+            .size(s.dp(MediaButtonSize))
+            .knobFocusRing(s.dp(12f))
+            .clip(RoundedCornerShape(s.dp(12f)))
+            .background(HomePalette.Panel.copy(alpha = 0.6f))
             .clickable(role = Role.Button, onClickLabel = label, onClick = onClick)
             .semantics { contentDescription = label },
         contentAlignment = Alignment.Center,
     ) {
-        Canvas(Modifier.size(s.dp(18f)), onDraw = glyph)
+        Canvas(Modifier.size(s.dp(20f)), onDraw = glyph)
     }
 }
 
@@ -831,19 +978,33 @@ private const val HeadroomSize = 104f
 private const val CornerSize = 58f
 private const val CarX = DesignW - Margin - CornerSize
 private const val DrawerX = CarX - 12f - CornerSize
-// The tile row beside the volume strip, three tiles showing.
-private const val TilesPerPage = 3
+// The tiles beside the volume strip: the music tile, then the swipe row, one page of two tiles
+// showing, each page as wide as the music tile.
 private const val TileWidth = 165f
 private const val TileGap = 19f
-private const val TilesWidth = TilesPerPage * TileWidth + (TilesPerPage - 1) * TileGap
+private const val PageWidth = HomeTile.TilesPerPage * TileWidth + (HomeTile.TilesPerPage - 1) * TileGap
+private const val MusicWidth = PageWidth
+// How far a drag must go, as a fraction of a page, to turn the page on release.
+private const val SnapThreshold = 0.3f
+// The music tile's insides: the art square, then the text and the controls under it.
+private const val MusicCorner = 16f
+private const val MusicPad = 16f
+private const val MusicInfoGap = 13f
+private const val MediaButtonSize = 48f
+private const val MediaButtonGap = 10f
+private const val MediaControlsWidth = 3 * MediaButtonSize + 2 * MediaButtonGap
 // Slim and against the left edge: a fallback for when the steering-wheel buttons fail.
 private const val PodWidth = 64f
 private const val PodX = 20f
 private const val TilesX = PodX + PodWidth + 20f
 private const val TilesTop = 60f
+private const val PagerX = TilesX + MusicWidth + TileGap
 private const val DotSize = 8f
 private const val DotsTop = DockTop - 14f - DotSize
 private const val TileHeight = DotsTop - 10f - TilesTop
+// Square: the tile's height less its padding, but no wider than leaves the text and controls their
+// width (that limit is what applies at 1280 x 480: 140).
+private val MusicArt = minOf(TileHeight - 2 * MusicPad, MusicWidth - 2 * MusicPad - MusicInfoGap - MediaControlsWidth)
 private const val LoopCopies = 1000
 private const val PanelMs = 380
 private const val SweepOnMs = 3000
