@@ -159,7 +159,9 @@ class NowPlaying(context: Context) {
                 packageName = c.packageName,
             )
         }
-        val player = c?.packageName
+        // Only a session that is playing counts: pick() falls back to any session, and a paused or
+        // idle one (a video or navigation app) isn't the player the music tile should name.
+        val player = c?.takeIf { it.playbackState?.state == PlaybackState.STATE_PLAYING }?.packageName
         if (player != null && player != _lastPlayer.value) {
             _lastPlayer.value = player
             prefs.edit { putString(KEY_LAST_PLAYER, player) }
