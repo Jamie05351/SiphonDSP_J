@@ -425,9 +425,9 @@ private fun LauncherRoute(
             override fun allowNowPlaying() { Launch.start(context, Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) }
             override fun allowAppSwipe() { AppSwipe.settingsToAllow(context)?.let { Launch.start(context, it) } }
             override fun mediaPlayPause() = nowPlaying.playPause()
+            override fun mediaPlay() = nowPlaying.play()
             override fun mediaNext() = nowPlaying.next()
             override fun mediaPrevious() = nowPlaying.previous()
-            override fun toggleNowPlayingSize() = customisation.toggleNowPlayingSize()
             override fun hideTile(key: String) = customisation.setHidden(key, true)
             override fun showHiddenTiles() {
                 customisation.look.value.hidden.filter { it.startsWith(HomeTile.KeyPrefix) }.forEach { customisation.setHidden(it, false) }
@@ -443,6 +443,7 @@ private fun LauncherRoute(
     val look by customisation.look.collectAsState()
     val track by nowPlaying.track.collectAsState()
     val nowPlayingAllowed by nowPlaying.allowed.collectAsState()
+    val lastPlayer by nowPlaying.lastPlayer.collectAsState()
     LaunchedEffect(apps) { apps?.let(slots::fillDefaults) }
     val carFunctions by produceState(emptyList<CarFunction>(), apps) {
         repeat(CAR_CHECK_TRIES) { attempt ->
@@ -467,6 +468,7 @@ private fun LauncherRoute(
         actions = actions,
         look = look,
         track = track,
+        lastPlayer = lastPlayer,
         nowPlayingAllowed = nowPlayingAllowed,
         appSwipeAllowed = appSwipeAllowed,
         knobFocusRequests = knobFocusRequests,

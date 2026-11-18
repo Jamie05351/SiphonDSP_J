@@ -53,6 +53,24 @@ internal enum class HomeTile(@StringRes val title: Int, val accent: Color, @Draw
 
     companion object {
         const val KeyPrefix = "tile:"
+
+        /** The tiles in the swipe row: every tile but [MUSIC], which is pinned beside it and can't be hidden. */
+        val Swipe: List<HomeTile> = entries.filter { it != MUSIC }
+
+        /** The swipe row's tiles not in [hidden], in order. A saved hidden key for [MUSIC] is ignored. */
+        fun visible(hidden: Set<String>): List<HomeTile> = Swipe.filter { it.key !in hidden }
+
+        /**
+         * The swipe row's pages: [visible] in pairs, page k holding tiles 2k and 2k + 1. With an odd
+         * count the last page holds one tile (its other half stays empty).
+         */
+        fun pages(hidden: Set<String>): List<List<HomeTile>> = visible(hidden).chunked(TilesPerPage)
+
+        /** Whether any swipe tile is hidden, so the car menu offers to show them again. */
+        fun anyHidden(hidden: Set<String>): Boolean = Swipe.any { it.key in hidden }
+
+        /** Tiles on one page of the swipe row. */
+        const val TilesPerPage = 2
     }
 }
 

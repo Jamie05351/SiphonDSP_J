@@ -96,9 +96,22 @@ class LauncherHomeRenderTest {
     @Test
     fun knobFocus() = render("knob-focus", overlay = LauncherOverlay.None, knob = 1)
 
-    /** The large now-playing card, with the system font size turned up as on the head unit. */
+    /** The music tile with the system font size turned up as on the head unit. */
     @Test
-    fun nowPlayingLarge() = render("now-playing-large", overlay = LauncherOverlay.None, large = true)
+    fun largeFont() = render("large-font", overlay = LauncherOverlay.None, large = true)
+
+    /** Nothing playing: the music tile names the last player and offers Play. */
+    @Test
+    fun nothingPlaying() = render("nothing-playing", overlay = LauncherOverlay.None, playing = false)
+
+    /** An odd number of swipe tiles (one hidden): the last page keeps an empty place. */
+    @Test
+    fun oddTiles() = render("odd-tiles", overlay = LauncherOverlay.None, hidden = setOf(HomeTile.DSP.key, HomeTile.MUSIC.key))
+
+    /** A smaller screen: the whole layout scaled down. */
+    @Test
+    @Config(qualifiers = "w800dp-h400dp-land-mdpi")
+    fun scaledDown() = render("scaled-down", overlay = LauncherOverlay.None, minWidth = 800)
 
     /** Every home tile side by side, for checking their pictures. */
     @Test
@@ -147,20 +160,28 @@ class LauncherHomeRenderTest {
         controller.pause().stop().destroy()
     }
 
-    private fun render(name: String, overlay: LauncherOverlay, knob: Int = 0, large: Boolean = false) {
+    private fun render(
+        name: String,
+        overlay: LauncherOverlay,
+        knob: Int = 0,
+        large: Boolean = false,
+        playing: Boolean = true,
+        hidden: Set<String> = emptySet(),
+        minWidth: Int = 1280,
+    ) {
         // Out of touch mode, as after a knob press, and with window focus, as on a real screen, so
         // knob (D-pad) focus can be taken and drawn.
         val instrumentation = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation()
         instrumentation.setInTouchMode(knob == 0)
         try {
-            renderIn(name, overlay, knob, large)
+            renderIn(name, overlay, knob, large, playing, hidden, minWidth)
         } finally {
             // Touch mode is global to the instrumentation; put it back for the next test.
             instrumentation.setInTouchMode(true)
         }
     }
 
-    private fun renderIn(name: String, overlay: LauncherOverlay, knob: Int, large: Boolean) {
+    private fun renderIn(name: String, overlay: LauncherOverlay, knob: Int, large: Boolean, playing: Boolean, hidden: Set<String>, minWidth: Int) {
         val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup().windowFocusChanged(true)
         val activity = controller.get()
         activity.setContent {
@@ -175,10 +196,11 @@ class LauncherHomeRenderTest {
                     apps = apps, slots = slots, carFunctions = CarFunction.entries,
                     overlay = overlay, onOverlayChange = {},
                     openingStage = null, animateTiles = false, actions = NoActions,
-                    track = Track("Blinding Lights", "The Weeknd", icon(0xFF8E2DE2.toInt()), playing = true, packageName = "test.Spotify"),
+                    track = if (playing) Track("Blinding Lights", "The Weeknd", icon(0xFF8E2DE2.toInt()), playing = true, packageName = "test.Spotify") else null,
+                    lastPlayer = "test.Spotify",
                     nowPlayingAllowed = false,
                     knobFocusRequests = knobRequests,
-                    look = LauncherCustomisation.Look(nowPlayingLarge = large),
+                    look = LauncherCustomisation.Look(hidden = hidden),
                 )
               }
             }
@@ -199,7 +221,7 @@ class LauncherHomeRenderTest {
         val bitmap = root.drawToBitmap()
         val out = File("build/launcher-renders").apply { mkdirs() }
         File(out, "$name.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
-        assertTrue(bitmap.width >= 1280 && bitmap.height >= 480)
+        assertTrue(bitmap.width >= minWidth && bitmap.height >= minWidth * 3 / 8)
         // Closed, so nothing from this screen (its window focus) carries into the next test.
         controller.pause().stop().destroy()
     }
@@ -236,9 +258,9 @@ class LauncherHomeRenderTest {
         override fun allowNowPlaying() {}
         override fun allowAppSwipe() {}
         override fun mediaPlayPause() {}
+        override fun mediaPlay() {}
         override fun mediaNext() {}
         override fun mediaPrevious() {}
         override fun openTrackApp(track: Track) {}
-        override fun toggleNowPlayingSize() {}
     }
 }
