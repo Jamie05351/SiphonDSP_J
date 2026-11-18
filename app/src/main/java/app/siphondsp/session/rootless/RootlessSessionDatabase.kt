@@ -40,8 +40,8 @@ class RootlessSessionDatabase(
     /** A mute waiting on a session that isn't (known to be) playing, and when it was attached. */
     private class Held(val session: MutedEffectSession, val attachedAtMs: Long, val trigger: Trigger)
 
-    // Last arm attempt per id: a mute that keeps losing control isn't remade on every callback.
-    private val lastArmAttemptMs = HashMap<Int, Long>()
+    // Successful arms only: a failed creation must remain immediately retryable. Under heldLock.
+    private val lastSuccessfulArmMs = HashMap<Int, Long>()
 
     private fun heldCount() = synchronized(heldLock) { heldMutes.size }
 
@@ -66,15 +66,21 @@ class RootlessSessionDatabase(
         if (synchronized(heldLock) { heldMutes.containsKey(sid) }) return false
         if (isExcludedOwner(uid, packageName)) return false
         val now = SystemClock.elapsedRealtime()
-        val last = lastArmAttemptMs[sid]
+        val last = synchronized(heldLock) { lastSuccessfulArmMs[sid] }
         if (last != null && now - last < ARM_RETRY_MS) return false
-        lastArmAttemptMs[sid] = now
-        if (lastArmAttemptMs.size > MAX_ARM_ATTEMPTS) {
-            lastArmAttemptMs.entries.removeAll { now - it.value >= ARM_RETRY_MS }
-        }
 
-        val effect = factory.make(sid, packageName) ?: return false
+        val effect = factory.make(sid, packageName)
+        if (effect == null) {
+            log(sid, packageName, Kind.ARM_FAILED, "early mute creation failed", trigger = trigger)
+            return false
+        }
         val attachedAt = SystemClock.elapsedRealtime()
+        synchronized(heldLock) {
+            lastSuccessfulArmMs[sid] = attachedAt
+            if (lastSuccessfulArmMs.size > MAX_ARM_ATTEMPTS) {
+                lastSuccessfulArmMs.entries.removeAll { attachedAt - it.value >= ARM_RETRY_MS }
+            }
+        }
         hold(sid, Held(MutedEffectSession(uid, packageName, effect), attachedAt, trigger))
         Timber.d("Session $sid ($packageName) armed on ${trigger.label} in ${attachedAt - now} ms")
         log(sid, packageName, Kind.ARMED, trigger = trigger, attachedAtMs = attachedAt)
@@ -179,9 +185,9 @@ class RootlessSessionDatabase(
 
     override fun onSessionsCleared() {
         val all = synchronized(heldLock) {
+            lastSuccessfulArmMs.clear()
             heldMutes.values.map { it.session }.also { heldMutes.clear() }
         }
-        lastArmAttemptMs.clear()
         all.forEach(::release)
     }
 

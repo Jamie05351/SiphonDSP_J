@@ -611,13 +611,14 @@ private fun SessionMuteSection(events: List<SessionMuteLog.Event>, nowMs: Long) 
                     SessionMuteLog.Kind.NEW -> if (e.seenBefore) "NEW (id seen before)" else "NEW (new id)"
                     SessionMuteLog.Kind.REPLACED -> "REPLACED"
                     SessionMuteLog.Kind.FAILED -> "FAILED"
+                    SessionMuteLog.Kind.ARM_FAILED -> "ARM FAILED"
                     SessionMuteLog.Kind.ARMED -> "armed"
                     SessionMuteLog.Kind.HELD -> "held"
                     SessionMuteLog.Kind.RELEASED -> "released"
                 }
                 val window = e.unmutedMs
                 val color = when (e.kind) {
-                    SessionMuteLog.Kind.FAILED -> BmwRed
+                    SessionMuteLog.Kind.FAILED, SessionMuteLog.Kind.ARM_FAILED -> BmwRed
                     SessionMuteLog.Kind.HELD, SessionMuteLog.Kind.RELEASED -> Color.Gray
                     SessionMuteLog.Kind.ARMED -> if (window != null) unmutedColor(window) else Color.Gray
                     else -> if (window != null) unmutedColor(window) else BmwYellow

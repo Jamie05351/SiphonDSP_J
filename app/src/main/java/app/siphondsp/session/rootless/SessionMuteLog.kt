@@ -39,6 +39,8 @@ object SessionMuteLog {
          * confirms the session logs it as [KEPT].
          */
         ARMED,
+        /** Early mute creation failed; no mute was attached and no playback start is inferred. */
+        ARM_FAILED,
         /** A session went quiet; its mute stays attached for when it plays again. */
         HELD,
         /** A held mute was released (see [Event.detail]). */
@@ -131,7 +133,7 @@ object SessionMuteLog {
             packageName = packageName,
             kind = kind,
             unmutedMs = when {
-                !timed || kind == Kind.FAILED -> null
+                !timed || kind == Kind.FAILED || kind == Kind.ARM_FAILED -> null
                 trigger == Trigger.HELD -> 0L
                 staleStart -> null
                 pendingSinceMs == 0L -> if (attachedAtMs != null) 0L else null

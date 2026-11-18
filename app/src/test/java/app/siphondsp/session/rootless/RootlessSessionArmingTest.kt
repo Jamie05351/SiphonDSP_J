@@ -2,9 +2,12 @@ package app.siphondsp.session.rootless
 
 import android.content.Context
 import android.media.AudioAttributes
+import android.media.audiofx.AudioEffect
 import androidx.test.core.app.ApplicationProvider
 import app.siphondsp.utils.MutedAudioEffectFactory
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -12,6 +15,8 @@ import org.mockito.kotlin.any
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
+import org.mockito.kotlin.times
+import org.mockito.kotlin.whenever
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
@@ -22,6 +27,7 @@ class RootlessSessionArmingTest {
     private lateinit var factory: MutedAudioEffectFactory
 
     @Before fun setUp() {
+        SessionMuteLog.clear()
         val context = ApplicationProvider.getApplicationContext<Context>()
         factory = mock()
         db = RootlessSessionDatabase(context, factory)
@@ -57,5 +63,29 @@ class RootlessSessionArmingTest {
     @Test fun eligibleMediaReachesTheMuteFactory() {
         arm(AudioAttributes.USAGE_MEDIA)
         verify(factory).make(7, "com.example.player")
+    }
+
+    @Test fun failedCreationCanBeRetriedImmediatelyAndEveryFailureIsLogged() {
+        // No clock advance: both attempts are inside the former 500 ms throttle window.
+        assertFalse(arm(AudioAttributes.USAGE_MEDIA))
+        assertFalse(arm(AudioAttributes.USAGE_MEDIA))
+        verify(factory, times(2)).make(7, "com.example.player")
+        val failures = SessionMuteLog.snapshot()
+        assertEquals(2, failures.size)
+        failures.forEach {
+            assertEquals(SessionMuteLog.Kind.ARM_FAILED, it.kind)
+            assertFalse(it.isStart)
+        }
+        assertFalse(SessionMuteLog.wasSeen(7))
+    }
+
+    @Test fun aSuccessfulRetryAttachesAMuteWithoutWaitingForADump() {
+        val effect = mock<AudioEffect>()
+        whenever(factory.make(7, "com.example.player")).thenReturn(null, effect)
+        assertFalse(arm(AudioAttributes.USAGE_MEDIA))
+        assertTrue(arm(AudioAttributes.USAGE_MEDIA))
+        verify(factory, times(2)).make(7, "com.example.player")
+        assertEquals(SessionMuteLog.Kind.ARMED, SessionMuteLog.snapshot().first().kind)
+        assertEquals(1, SessionMuteLog.snapshot().first().held)
     }
 }

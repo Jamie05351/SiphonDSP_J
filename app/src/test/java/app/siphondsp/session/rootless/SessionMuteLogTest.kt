@@ -95,6 +95,21 @@ class SessionMuteLogTest {
         SessionMuteLog.record(1_100, 7, "pkg", Kind.FAILED, held = 0)
         assertNull(SessionMuteLog.snapshot().first().unmutedMs)
     }
+
+    @Test fun aFailedEarlyArmIsVisibleWithoutInventingAPlaybackStart() {
+        SessionMuteLog.notePlaybackChange(1_000)
+        SessionMuteLog.record(1_004, 7, "pkg", Kind.ARM_FAILED, held = 0,
+            detail = "early mute creation failed", trigger = Trigger.CALLBACK)
+        val failed = SessionMuteLog.snapshot().first()
+        assertNull(failed.unmutedMs)
+        assertFalse(failed.isStart)
+        assertFalse(SessionMuteLog.wasSeen(7))
+        assertEquals(Trigger.CALLBACK, failed.trigger)
+        // The failed attempt doesn't consume the pending start; a retry reports its actual delay.
+        SessionMuteLog.record(1_010, 7, "pkg", Kind.ARMED, held = 1,
+            trigger = Trigger.CALLBACK, attachedAtMs = 1_010)
+        assertEquals(10L, SessionMuteLog.snapshot().first().unmutedMs)
+    }
     @Test fun staleUnansweredStartDoesNotTimeAnUnrelatedBroadcastArm() {
         SessionMuteLog.notePlaybackChange(1_000)
         SessionMuteLog.record(10_000, 7, "pkg", Kind.ARMED, held = 1,
