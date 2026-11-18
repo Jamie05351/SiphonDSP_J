@@ -149,6 +149,14 @@ abstract class BaseSessionDatabase(protected val context: Context) {
     }
 
     /**
+     * Whether audio from [uid]/[packageName] is never processed (excluded, ours, or a package
+     * known to cause issues) -- for attaching a mute before any dump has seen the session.
+     */
+    protected fun isExcludedOwner(uid: Int, packageName: String): Boolean =
+        uid == myUid() || excludedUids.contains(uid) || excludedPackages.contains(packageName) ||
+            excludedPackages.contains(context.packageManager.getNameForUid(uid))
+
+    /**
      * Whether a dump entry would be processed: the one test both for adding a session and for
      * keeping a held mute on its id (see [onDumpApplied]), so the two can never disagree.
      */

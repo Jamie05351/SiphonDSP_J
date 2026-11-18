@@ -1,6 +1,8 @@
 package app.siphondsp.session.rootless
 
 import android.content.*
+import app.siphondsp.session.rootless.SessionMuteLog.Trigger
+import app.siphondsp.utils.extensions.ContextExtensions.getPackageNameFromUid
 import app.siphondsp.session.dump.DumpManager
 import app.siphondsp.session.dump.data.ISessionInfoDump
 import app.siphondsp.session.dump.data.ISessionPolicyInfoDump
@@ -22,13 +24,42 @@ class RootlessSessionManager(context: Context) : BaseSessionManager(context)
     }
 
     private var failedDumps = 0
+    // Taken with the session dump on the worker (dumpOnWorker), applied with it on the main thread.
+    @Volatile private var allowlistDump: ISessionPolicyInfoDump? = null
+
+    override fun dumpOnWorker(): ISessionInfoDump? {
+        val dump = super.dumpOnWorker()
+        allowlistDump = if (dump is ISessionPolicyInfoDump) null else dumpManager.dumpCaptureAllowlistLog()
+        return dump
+    }
+
+    /** Only mute a currently identified, capture-eligible player before its dump arrives. */
+    override fun onPlayersStarted(players: List<StartedPlayer>) {
+        players.forEach { armPlayer(it, Trigger.CALLBACK) }
+    }
+
+    private fun armPlayer(player: StartedPlayer, trigger: Trigger, expectedPackage: String? = null) {
+        if (player.sessionId <= 0 || player.uid <= 0) return
+        val pkg = context.getPackageNameFromUid(player.uid) ?: return
+        if (expectedPackage != null && pkg != expectedPackage) return
+        sessionDatabase.arm(
+            player.sessionId, player.uid, pkg, trigger, player.attributes,
+            policyAllowed = sessionPolicyDatabase.isCaptureAllowed(player.uid, pkg),
+        )
+    }
+
+    override fun onSessionOpened(sessionId: Int, packageName: String) {
+        // The broadcast carries no usage or capture policy. Use current playback metadata for
+        // the exact session if visible; otherwise the requested dump must establish eligibility.
+        findPlaybackSession(sessionId)?.let { armPlayer(it, Trigger.BROADCAST, packageName) }
+    }
 
     override fun handleSessionDump(sessionDump: ISessionInfoDump?) {
         if(sessionDump is ISessionPolicyInfoDump) {
             sessionPolicyDatabase.update(sessionDump)
         }
         else {
-            dumpManager.dumpCaptureAllowlistLog()?.let { sessionPolicyDatabase.update(it) }
+            allowlistDump?.let { sessionPolicyDatabase.update(it) }
         }
 
         sessionDump?.let { sessionDatabase.update(it) }

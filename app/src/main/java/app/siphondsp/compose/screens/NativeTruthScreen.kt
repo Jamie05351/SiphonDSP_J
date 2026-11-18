@@ -579,9 +579,12 @@ private fun StreamStartSection(starts: List<StreamStartLog.Start>, nowMs: Long) 
 /**
  * Each app session's mute (see [SessionMuteLog]). Until an app's session has a mute on it, its
  * own audio plays straight out, unprocessed and at the head unit's full volume, and the stream
- * starts above can't see that. Per session start: KEPT, muted from its first sample (no burst);
- * NEW, a mute made only now, so the app played unmuted for about the time shown; FAILED, no mute
- * at all. HELD and RELEASED: what happened to a quiet session's mute.
+ * starts above can't see that. Every attach shows its unmuted window -- ms from the player
+ * starting to the mute being attached (target under 20 ms, yellow above 50) -- and what attached
+ * it: held from before, the playback callback, the session-open broadcast, or (slowest) a dump.
+ * Per session start: KEPT, the mute was already there; NEW/REPLACED, a mute made only when a dump
+ * found it; FAILED, no mute at all. ARMED: a mute attached ahead of any dump. HELD and RELEASED:
+ * what happened to a quiet session's mute.
  */
 @Composable
 private fun SessionMuteSection(events: List<SessionMuteLog.Event>, nowMs: Long) {
@@ -593,25 +596,41 @@ private fun SessionMuteSection(events: List<SessionMuteLog.Event>, nowMs: Long) 
                 return@DebugCard
             }
             KeyValueRow("Held for quiet sessions", events.first().held.toString())
+            val timed = events.mapNotNull { e -> e.unmutedMs?.takeIf { e.isStart } }
+            if (timed.isNotEmpty()) {
+                val worst = timed.max()
+                KeyValueRow(
+                    "Worst unmuted window",
+                    "$worst ms (target < ${SessionMuteLog.TARGET_UNMUTED_MS} ms)",
+                    unmutedColor(worst),
+                )
+            }
             events.forEach { e ->
                 val label = when (e.kind) {
                     SessionMuteLog.Kind.KEPT -> "KEPT"
                     SessionMuteLog.Kind.NEW -> if (e.seenBefore) "NEW (id seen before)" else "NEW (new id)"
                     SessionMuteLog.Kind.REPLACED -> "REPLACED"
                     SessionMuteLog.Kind.FAILED -> "FAILED"
+                    SessionMuteLog.Kind.ARM_FAILED -> "ARM FAILED"
+                    SessionMuteLog.Kind.ARMED -> "armed"
                     SessionMuteLog.Kind.HELD -> "held"
                     SessionMuteLog.Kind.RELEASED -> "released"
                 }
+                val window = e.unmutedMs
                 val color = when (e.kind) {
-                    SessionMuteLog.Kind.KEPT -> BmwGreen
-                    SessionMuteLog.Kind.NEW, SessionMuteLog.Kind.REPLACED -> BmwYellow
-                    SessionMuteLog.Kind.FAILED -> BmwRed
+                    SessionMuteLog.Kind.FAILED, SessionMuteLog.Kind.ARM_FAILED -> BmwRed
                     SessionMuteLog.Kind.HELD, SessionMuteLog.Kind.RELEASED -> Color.Gray
+                    SessionMuteLog.Kind.ARMED -> if (window != null) unmutedColor(window) else Color.Gray
+                    else -> if (window != null) unmutedColor(window) else BmwYellow
                 }
                 val parts = buildList {
                     add(e.packageName.substringAfterLast('.').ifEmpty { e.packageName })
-                    if (e.isStart && e.kind != SessionMuteLog.Kind.KEPT)
-                        add(e.afterPlaybackChangeMs?.let { "unmuted ~$it ms" } ?: "unmuted ? ms")
+                    if (e.kind == SessionMuteLog.Kind.ARMED) {
+                        add(if (window == null || window == 0L) "before start" else "unmuted $window ms")
+                    } else if (e.isStart && e.kind != SessionMuteLog.Kind.FAILED) {
+                        add(window?.let { "unmuted $it ms" } ?: "unmuted ? ms")
+                    }
+                    e.trigger?.let { add("via ${it.label}") }
                     if (e.detail.isNotEmpty()) add(e.detail)
                     add(formatAgo(nowMs - e.atMs))
                 }
@@ -619,6 +638,13 @@ private fun SessionMuteSection(events: List<SessionMuteLog.Event>, nowMs: Long) 
             }
         }
     }
+}
+
+/** Green within the target, plain up to the warning, yellow above it. */
+private fun unmutedColor(ms: Long): Color = when {
+    ms < SessionMuteLog.TARGET_UNMUTED_MS -> BmwGreen
+    ms <= SessionMuteLog.WARN_UNMUTED_MS -> Color.White
+    else -> BmwYellow
 }
 
 @Composable

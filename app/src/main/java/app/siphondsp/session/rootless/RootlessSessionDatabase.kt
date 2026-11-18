@@ -2,9 +2,12 @@ package app.siphondsp.session.rootless
 
 import android.content.Context
 import android.content.Intent
+import android.media.AudioAttributes
 import android.media.audiofx.AudioEffect
 import android.media.audiofx.DynamicsProcessing
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.os.SystemClock
 import app.siphondsp.model.AudioSessionDumpEntry
 import app.siphondsp.model.IEffectSession
@@ -12,12 +15,14 @@ import app.siphondsp.model.rootless.MutedEffectSession
 import app.siphondsp.session.dump.data.ISessionInfoDump
 import app.siphondsp.session.shared.BaseSessionDatabase
 import app.siphondsp.session.rootless.SessionMuteLog.Kind
+import app.siphondsp.session.rootless.SessionMuteLog.Trigger
 import app.siphondsp.utils.MutedAudioEffectFactory
 import timber.log.Timber
 
-class RootlessSessionDatabase(context: Context) : BaseSessionDatabase(context) {
-
-    private val factory by lazy { MutedAudioEffectFactory() }
+class RootlessSessionDatabase(
+    context: Context,
+    private val factory: MutedAudioEffectFactory = MutedAudioEffectFactory(),
+) : BaseSessionDatabase(context) {
     private var sessionLossListener: OnSessionLossListener? = null
     private var appProblemListener: OnAppProblemListener? = null
 
@@ -28,13 +33,109 @@ class RootlessSessionDatabase(context: Context) : BaseSessionDatabase(context) {
     // mute on a session with nothing playing does nothing. Released when the id comes back for
     // anything that wouldn't be processed, when the app is excluded, past MAX_HELD_MUTES, and
     // whenever the sessions are cleared (a dump-method change, or the service stopping). Main thread, plus the audio worker via setExcludedUids().
-    private val heldMutes = LinkedHashMap<Int, MutedEffectSession>()
+    //
+    // Mutes armed ahead of any dump (see arm()) wait here too: to everything else they are a
+    // held mute, so the dump that finds the session playing takes it as KEPT.
+    private val heldMutes = LinkedHashMap<Int, Held>()
     private val heldLock = Any()
+    private val confirmationHandler = Handler(Looper.getMainLooper())
+
+    /** A mute waiting on a session that isn't (known to be) playing, and when it was attached. */
+    private class Held(val session: MutedEffectSession, val attachedAtMs: Long, val trigger: Trigger) {
+        var confirmationTimeout: Runnable? = null
+    }
+
+    // Successful arms only: a failed creation must remain immediately retryable. Under heldLock.
+    private val lastSuccessfulArmMs = HashMap<Int, Long>()
 
     private fun heldCount() = synchronized(heldLock) { heldMutes.size }
 
-    private fun log(sid: Int, packageName: String, kind: Kind, detail: String = "") =
-        SessionMuteLog.record(SystemClock.elapsedRealtime(), sid, packageName, kind, heldCount(), detail)
+    private fun log(
+        sid: Int, packageName: String, kind: Kind, detail: String = "",
+        trigger: Trigger? = null, attachedAtMs: Long? = null,
+    ) = SessionMuteLog.record(SystemClock.elapsedRealtime(), sid, packageName, kind, heldCount(), detail, trigger, attachedAtMs)
+
+    /**
+     * Attach a mute to session [sid] of [uid]/[packageName] now, ahead of any dump: called on
+     * the app's session-open broadcast, or on the playback callback reporting a player start.
+     * Requires current attributes for this exact session and an explicitly allowed capture
+     * policy. An id/package broadcast or a historical session alone is insufficient. Main thread.
+     */
+    fun arm(
+        sid: Int, uid: Int, packageName: String, trigger: Trigger,
+        attributes: AudioAttributes, policyAllowed: Boolean,
+    ): Boolean {
+        if (!policyAllowed || attributes.allowedCapturePolicy != AudioAttributes.ALLOW_CAPTURE_BY_ALL ||
+            attributes.usage !in RECORDABLE_USAGES) return false
+        if (sid <= 0 || sessionList.containsKey(sid)) return false
+        if (synchronized(heldLock) { heldMutes.containsKey(sid) }) return false
+        if (isExcludedOwner(uid, packageName)) return false
+        val now = SystemClock.elapsedRealtime()
+        val last = synchronized(heldLock) { lastSuccessfulArmMs[sid] }
+        if (last != null && now - last < ARM_RETRY_MS) return false
+
+        val effect = factory.make(sid, packageName)
+        if (effect == null) {
+            log(sid, packageName, Kind.ARM_FAILED, "early mute creation failed", trigger = trigger)
+            return false
+        }
+        val attachedAt = SystemClock.elapsedRealtime()
+        synchronized(heldLock) {
+            lastSuccessfulArmMs[sid] = attachedAt
+            if (lastSuccessfulArmMs.size > MAX_ARM_ATTEMPTS) {
+                lastSuccessfulArmMs.entries.removeAll { attachedAt - it.value >= ARM_RETRY_MS }
+            }
+        }
+        hold(sid, Held(MutedEffectSession(uid, packageName, effect), attachedAt, trigger))
+        Timber.d("Session $sid ($packageName) armed on ${trigger.label} in ${attachedAt - now} ms")
+        log(sid, packageName, Kind.ARMED, trigger = trigger, attachedAtMs = attachedAt)
+        return true
+    }
+
+    /** Hold [held] for [sid], releasing whatever that pushes out. */
+    private fun hold(sid: Int, held: Held) {
+        val evicted = mutableListOf<Pair<Int, Held>>()
+        synchronized(heldLock) {
+            heldMutes.remove(sid)?.let {
+                cancelConfirmationTimeout(it)
+                if (it.session !== held.session) evicted += sid to it
+            }
+            heldMutes[sid] = held
+            if (held.trigger != Trigger.HELD) {
+                // Independent of dumps: an absent or failed dump must not leave an early
+                // mute attached indefinitely. Identity protects a newer mute on the same id.
+                val timeout = Runnable {
+                    val expired = synchronized(heldLock) {
+                        if (heldMutes[sid] !== held) false
+                        else {
+                            heldMutes.remove(sid)
+                            true
+                        }
+                    }
+                    if (expired) {
+                        releaseHeld(held)
+                        log(sid, held.session.packageName, Kind.RELEASED, "early mute not confirmed")
+                    }
+                }
+                held.confirmationTimeout = timeout
+                confirmationHandler.postDelayed(timeout, ARM_CONFIRMATION_TIMEOUT_MS)
+            }
+            while (heldMutes.size > MAX_HELD_MUTES) {
+                val oldest = heldMutes.keys.first()
+                evicted += oldest to heldMutes.remove(oldest)!!
+            }
+        }
+        evicted.forEach { (id, h) -> releaseHeld(h); log(id, h.session.packageName, Kind.RELEASED, "too many held") }
+    }
+
+    private fun cancelConfirmationTimeout(held: Held) {
+        held.confirmationTimeout?.let { confirmationHandler.removeCallbacks(it) }
+    }
+
+    private fun releaseHeld(held: Held) {
+        cancelConfirmationTimeout(held)
+        release(held.session)
+    }
 
     override val excludedPackages = arrayOf(
         context.packageName,
@@ -62,12 +163,14 @@ class RootlessSessionDatabase(context: Context) : BaseSessionDatabase(context) {
         val held = synchronized(heldLock) { heldMutes.remove(id) }
         var replaced = false
         if (held != null) {
-            if (held.uid == uid && held.packageName == packageName && reassertMute(held.audioMuteEffect)) {
-                Timber.d("Session $id ($packageName) plays again; its mute was still attached")
-                log(id, packageName, Kind.KEPT)
-                return held
+            cancelConfirmationTimeout(held)
+            val s = held.session
+            if (s.uid == uid && s.packageName == packageName && reassertMute(s.audioMuteEffect)) {
+                Timber.d("Session $id ($packageName) plays; its mute was already attached (${held.trigger.label})")
+                log(id, packageName, Kind.KEPT, trigger = held.trigger, attachedAtMs = held.attachedAtMs)
+                return s
             }
-            release(held)
+            release(s)
             replaced = true
         }
         val muteEffect = factory.make(id, packageName)
@@ -78,7 +181,7 @@ class RootlessSessionDatabase(context: Context) : BaseSessionDatabase(context) {
             appProblemListener?.onAppProblemDetected(uid)
             return null
         }
-        log(id, packageName, if (replaced) Kind.REPLACED else Kind.NEW)
+        log(id, packageName, if (replaced) Kind.REPLACED else Kind.NEW, trigger = Trigger.DUMP)
         return MutedEffectSession(uid, packageName, muteEffect)
     }
 
@@ -91,16 +194,8 @@ class RootlessSessionDatabase(context: Context) : BaseSessionDatabase(context) {
             log(sid, session.packageName, Kind.RELEASED, "no control")
             return
         }
-        val evicted = mutableListOf<Pair<Int, MutedEffectSession>>()
-        synchronized(heldLock) {
-            heldMutes.remove(sid)?.takeIf { it !== session }?.let { evicted += sid to it }
-            heldMutes[sid] = session
-            while (heldMutes.size > MAX_HELD_MUTES) {
-                val oldest = heldMutes.keys.first()
-                evicted += oldest to heldMutes.remove(oldest)!!
-            }
-        }
-        evicted.forEach { (id, s) -> release(s); log(id, s.packageName, Kind.RELEASED, "too many held") }
+        // Attached before this session's last start, so it's there before the next one.
+        hold(sid, Held(session, attachedAtMs = 0L, trigger = Trigger.HELD))
         Timber.d("Session $sid (${session.packageName}) went quiet; keeping its mute attached")
         log(sid, session.packageName, Kind.HELD)
     }
@@ -112,22 +207,25 @@ class RootlessSessionDatabase(context: Context) : BaseSessionDatabase(context) {
         val stale = synchronized(heldLock) {
             heldMutes.filter { (sid, held) ->
                 val entry = dump.sessions[sid] ?: return@filter false
-                entry.uid != held.uid || !accepted(sid, entry)
+                entry.uid != held.session.uid || !accepted(sid, entry)
             }.onEach { heldMutes.remove(it.key) }
         }
-        stale.forEach { (sid, s) -> release(s); log(sid, s.packageName, Kind.RELEASED, "id reused, not processed") }
+        stale.forEach { (sid, h) -> releaseHeld(h); log(sid, h.session.packageName, Kind.RELEASED, "id reused, not processed") }
     }
 
     override fun onExcludedUidsChanged(uids: Array<Int>) {
         val excluded = synchronized(heldLock) {
-            heldMutes.filter { uids.contains(it.value.uid) }.onEach { heldMutes.remove(it.key) }
+            heldMutes.filter { uids.contains(it.value.session.uid) }.onEach { heldMutes.remove(it.key) }
         }
-        excluded.forEach { (sid, s) -> release(s); log(sid, s.packageName, Kind.RELEASED, "excluded") }
+        excluded.forEach { (sid, h) -> releaseHeld(h); log(sid, h.session.packageName, Kind.RELEASED, "excluded") }
     }
 
     override fun onSessionsCleared() {
-        val all = synchronized(heldLock) { heldMutes.values.toList().also { heldMutes.clear() } }
-        all.forEach(::release)
+        val all = synchronized(heldLock) {
+            lastSuccessfulArmMs.clear()
+            heldMutes.values.toList().also { heldMutes.clear() }
+        }
+        all.forEach(::releaseHeld)
     }
 
     private fun release(session: MutedEffectSession) {
@@ -173,8 +271,9 @@ class RootlessSessionDatabase(context: Context) : BaseSessionDatabase(context) {
             }
             if (held != null) {
                 // A quiet session's held mute lost control: nothing is playing through it, so
-                // it's no reason to restart or stop. Let it go; a new one is made if it plays.
-                release(held)
+                // it's no reason to restart or stop. Let it go; the next player start arms the
+                // id again if its current metadata is eligible, or a dump makes a new mute.
+                releaseHeld(held)
                 log(sid, packageName, Kind.RELEASED, "lost control")
             } else {
                 sendFxCloseBroadcast(packageName, sid)
@@ -213,6 +312,12 @@ class RootlessSessionDatabase(context: Context) : BaseSessionDatabase(context) {
         const val EXTRA_IGNORE = "siphondsp.ignore"
         // Sessions are usually reused per player, so a handful covers every app in use.
         private const val MAX_HELD_MUTES = 16
+        private const val MAX_ARM_ATTEMPTS = 64
+        private val RECORDABLE_USAGES = setOf(
+            AudioAttributes.USAGE_UNKNOWN, AudioAttributes.USAGE_MEDIA, AudioAttributes.USAGE_GAME,
+        )
+        private const val ARM_RETRY_MS = 500L
+        private const val ARM_CONFIRMATION_TIMEOUT_MS = 3_000L
     }
 }
 
