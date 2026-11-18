@@ -258,6 +258,7 @@ class LauncherHomeRenderTest {
         override fun allowNowPlaying() {}
         override fun allowAppSwipe() {}
         override fun mediaPlayPause() {}
+        override fun mediaPlay() {}
         override fun mediaNext() {}
         override fun mediaPrevious() {}
         override fun openTrackApp(track: Track) {}

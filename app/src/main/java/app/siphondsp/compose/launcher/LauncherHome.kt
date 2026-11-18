@@ -201,6 +201,8 @@ interface LauncherActions {
     /** Opens the Android settings page for what the Spotify / Waze swipe still lacks. */
     fun allowAppSwipe()
     fun mediaPlayPause()
+    /** Play only (never pause), for the music tile's Play while it shows nothing playing. */
+    fun mediaPlay()
     fun mediaNext()
     fun mediaPrevious()
     fun openTrackApp(track: Track)
@@ -655,8 +657,10 @@ private fun MusicTile(
                             MediaButton(stringResource(R.string.launcher_media_next), actions::mediaNext) { drawSkip(forward = true) }
                         } else {
                             // Nothing playing: only Play, in its usual place, which resumes the last player.
+                            // Play, not play / pause: a session can be playing without a title (so no
+                            // track), and a toggle would then pause it.
                             Spacer(Modifier.width(s.dp(MediaButtonSize)))
-                            MediaButton(stringResource(R.string.launcher_media_play), actions::mediaPlayPause) { drawPlay() }
+                            MediaButton(stringResource(R.string.launcher_media_play), actions::mediaPlay) { drawPlay() }
                         }
                     }
                 }

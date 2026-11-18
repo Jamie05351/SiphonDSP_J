@@ -97,16 +97,25 @@ class NowPlaying(context: Context) {
     }
 
     fun playPause() {
+        val c = controller ?: return play()
+        if (c.playbackState?.state == PlaybackState.STATE_PLAYING) c.transportControls.pause() else c.transportControls.play()
+    }
+
+    /**
+     * Play, never pause: for the music tile's Play when it shows nothing playing, which can be a
+     * session that plays without a title (no track) as well as no session at all.
+     */
+    fun play() {
         val c = controller
-        if (c == null) {
-            // No session left: a media Play key goes to the app that last played, which resumes it.
-            val audio = app.getSystemService(AudioManager::class.java) ?: return
-            val now = SystemClock.uptimeMillis()
-            audio.dispatchMediaKeyEvent(KeyEvent(now, now, KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_MEDIA_PLAY, 0))
-            audio.dispatchMediaKeyEvent(KeyEvent(now, now, KeyEvent.ACTION_UP, KeyEvent.KEYCODE_MEDIA_PLAY, 0))
+        if (c != null) {
+            if (c.playbackState?.state != PlaybackState.STATE_PLAYING) c.transportControls.play()
             return
         }
-        if (c.playbackState?.state == PlaybackState.STATE_PLAYING) c.transportControls.pause() else c.transportControls.play()
+        // No session left: a media Play key goes to the app that last played, which resumes it.
+        val audio = app.getSystemService(AudioManager::class.java) ?: return
+        val now = SystemClock.uptimeMillis()
+        audio.dispatchMediaKeyEvent(KeyEvent(now, now, KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_MEDIA_PLAY, 0))
+        audio.dispatchMediaKeyEvent(KeyEvent(now, now, KeyEvent.ACTION_UP, KeyEvent.KEYCODE_MEDIA_PLAY, 0))
     }
 
     fun next() { controller?.transportControls?.skipToNext() }
