@@ -4,8 +4,10 @@ import android.annotation.SuppressLint
 import android.content.ComponentName
 import android.content.Context
 import android.content.SharedPreferences
+import android.media.AudioAttributes
 import android.media.AudioManager
 import android.media.AudioPlaybackConfiguration
+import android.media.AudioPlaybackConfigurationHidden
 import android.media.session.MediaController
 import android.media.session.MediaSessionManager
 import android.os.Handler
@@ -23,6 +25,8 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
+import dev.rikka.tools.refine.Refine
 import app.siphondsp.R
 import app.siphondsp.model.preference.SessionUpdateMode
 import app.siphondsp.service.NotificationListenerService
@@ -59,6 +63,14 @@ abstract class BaseSessionManager(protected val context: Context) : DumpManager.
     private val pollingMutex = Mutex()
     private val pollingScope = CoroutineScope(Dispatchers.Main)
     private var continuousPollingJob: Job? = null
+    // Requested dumps, coalesced: a request while one runs reruns it once that's done, rather
+    // than being dropped (which left a start unanswered until the next playback change). Main thread.
+    private var dumpJob: Job? = null
+    private var dumpRerun = false
+
+    // Each player's last state, by interface id, to tell a player starting from any other
+    // playback change. Main thread (the callback's handler).
+    private val playerStates = HashMap<Int, Int>()
 
     // Callbacks
     private var audioPlaybackCallback: AudioManager.AudioPlaybackCallback? = null
@@ -67,7 +79,28 @@ abstract class BaseSessionManager(protected val context: Context) : DumpManager.
     private val preferencesListener: SharedPreferences.OnSharedPreferenceChangeListener
     private val preferences: Preferences.App by inject()
 
+    /** Applies a dump; main thread. */
     protected abstract fun handleSessionDump(sessionDump: ISessionInfoDump?)
+
+    /**
+     * Takes the session dump, off the main thread: a system dump blocks for hundreds of ms on
+     * a head unit, and on the main thread it held up everything else waiting there -- the
+     * playback callback and the session-open broadcast included. Anything else that blocks on a
+     * dump goes here too, for [handleSessionDump] to use.
+     */
+    protected open fun dumpOnWorker(): ISessionInfoDump? = dumpManager.dumpSessions()
+
+    /** A player in the playback callback that has just started. [sessionId]/[uid] are 0/-1 unless visible to us. */
+    protected data class StartedPlayer(val sessionId: Int, val uid: Int)
+
+    /**
+     * The playback callback reported players starting ([players]; empty if it couldn't say
+     * which). Main thread, before any dump is taken: the place to mute them at once.
+     */
+    protected open fun onPlayersStarted(players: List<StartedPlayer>) {}
+
+    /** [packageName] opened audio-effect session [sessionId] (its broadcast). Main thread, before any dump. */
+    protected open fun onSessionOpened(sessionId: Int, packageName: String) {}
 
     init {
         Timber.d("Initializing SessionDumpManager")
@@ -77,9 +110,16 @@ abstract class BaseSessionManager(protected val context: Context) : DumpManager.
             override fun onPlaybackConfigChanged(configs: MutableList<AudioPlaybackConfiguration>?) {
                 super.onPlaybackConfigChanged(configs)
 
-                Timber.d("Playback config changed")
-                SessionMuteLog.notePlaybackChange(SystemClock.elapsedRealtime())
-                pollOnce(false)
+                val now = SystemClock.elapsedRealtime()
+                val started = startedPlayers(configs)
+                Timber.d("Playback config changed (started: ${started?.size ?: "?"})")
+                // Only a player starting can play unmuted: a pause or a stop doesn't start the
+                // clock. A change that can't be read is taken as a start, to be safe.
+                if (started == null || started.isNotEmpty()) {
+                    SessionMuteLog.notePlaybackChange(now)
+                    onPlayersStarted(started.orEmpty())
+                }
+                requestDump()
             }
         }
         audioManager.registerAudioPlaybackCallback(audioPlaybackCallback!!, Handler(Looper.getMainLooper()))
@@ -184,38 +224,78 @@ abstract class BaseSessionManager(protected val context: Context) : DumpManager.
         }
     }
 
-    private suspend fun pollSessionDump(blocking: Boolean = true)
+    private suspend fun pollSessionDump()
     {
-        if(pollingMutex.isLocked && !blocking)
-        {
-            return
-        }
-
         pollingMutex.withLock {
             val startedAtMs = SystemClock.elapsedRealtime()
-            val dump = dumpManager.dumpSessions()
+            val dump = withContext(Dispatchers.IO) { dumpOnWorker() }
             handleSessionDump(dump)
             if (dump != null) SessionMuteLog.noteDumpApplied(startedAtMs)
         }
     }
 
-    fun pollOnce(blocking: Boolean)
+    /** Take a session dump soon; one already running is followed by another (coalesced). */
+    private fun requestDump()
     {
-        pollingScope.launch {
-            pollSessionDump(blocking)
+        dumpRerun = true
+        if (dumpJob?.isActive == true) return
+        dumpJob = pollingScope.launch {
+            while (dumpRerun) {
+                dumpRerun = false
+                pollSessionDump()
+            }
+        }
+    }
+
+    /** [blocking] is kept for callers; every request is now coalesced, never dropped. */
+    @Suppress("UNUSED_PARAMETER")
+    fun pollOnce(blocking: Boolean) = requestDump()
+
+    /**
+     * The players in [configs] that have just started, with a recordable usage; null if the
+     * states can't be read. Session ids and uids come anonymized (0/-1) to an app without
+     * MODIFY_AUDIO_ROUTING, but the interface id and state don't.
+     */
+    private fun startedPlayers(configs: List<AudioPlaybackConfiguration>?): List<StartedPlayer>? {
+        configs ?: return null
+        return try {
+            val states = HashMap<Int, Int>(configs.size)
+            val started = mutableListOf<StartedPlayer>()
+            configs.forEach { c ->
+                val h = Refine.unsafeCast<AudioPlaybackConfigurationHidden>(c)
+                val piid = h.playerInterfaceId
+                val state = h.playerState
+                states[piid] = state
+                if (state == PLAYER_STATE_STARTED && playerStates[piid] != PLAYER_STATE_STARTED &&
+                    c.audioAttributes.usage in RECORDABLE_USAGES) {
+                    started += StartedPlayer(
+                        sessionId = runCatching { h.sessionId }.getOrDefault(0),
+                        uid = runCatching { h.clientUid }.getOrDefault(-1),
+                    )
+                }
+            }
+            playerStates.clear()
+            playerStates.putAll(states)
+            started
+        } catch (t: Throwable) {
+            Timber.w(t, "startedPlayers: playback states unreadable")
+            null
         }
     }
 
     @CallSuper
     override fun onDumpMethodChange(method: DumpManager.Method) {
-        pollOnce(true)
+        requestDump()
     }
 
     private fun onAudioEffectSessionChanged(event: AppEvent.AudioEffectSessionChanged) {
-        // Too unreliable, most players don't implement this
+        // Most players don't send these; those that do send them before playing, with the
+        // session id and package: enough to mute the session before its first sample.
         if (event.sessionId < 0) return
-        Timber.d("Audio effect control session broadcast: ${event.sessionId} (${event.packageName})")
-        pollOnce(false)
+        Timber.d("Audio effect control session ${if (event.opened) "open" else "close"} broadcast: ${event.sessionId} (${event.packageName})")
+        val pkg = event.packageName
+        if (event.opened && event.sessionId > 0 && !pkg.isNullOrEmpty()) onSessionOpened(event.sessionId, pkg)
+        requestDump()
     }
 
     @SuppressLint("BinaryOperationInTimber")
@@ -228,10 +308,16 @@ abstract class BaseSessionManager(protected val context: Context) : DumpManager.
                     "usage ${it.playbackInfo.audioAttributes?.usage}")
         }
 
-        pollOnce(false)
+        requestDump()
     }
 
     private companion object {
         const val MIN_POLLING_INTERVAL_MS = 100L
+        // AudioPlaybackConfiguration.PLAYER_STATE_STARTED (hidden).
+        const val PLAYER_STATE_STARTED = 2
+        // What the dumps accept (AudioSessionDumpEntry.isUsageRecordable).
+        val RECORDABLE_USAGES = setOf(
+            AudioAttributes.USAGE_UNKNOWN, AudioAttributes.USAGE_MEDIA, AudioAttributes.USAGE_GAME,
+        )
     }
 }

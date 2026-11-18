@@ -32,6 +32,7 @@ class SessionReceiver : BroadcastReceiver() {
             AppEvent.AudioEffectSessionChanged(
                 sessionId = intent.getIntExtra(AudioEffect.EXTRA_AUDIO_SESSION, AudioEffect.ERROR),
                 packageName = intent.getStringExtra(AudioEffect.EXTRA_PACKAGE_NAME),
+                opened = intent.action == AudioEffect.ACTION_OPEN_AUDIO_EFFECT_CONTROL_SESSION,
             )
         )
     }

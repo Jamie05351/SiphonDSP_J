@@ -27,29 +27,34 @@ class AudioServiceDumpProvider : ISessionDumpProvider {
         // API 31+
         val playbackConfRegex31 = """AudioPlaybackConfiguration.*u\/pid:(\d+)\/(\d+).*usage=(\w+).*content=(\w+).*sessionId:(\d+)""".toRegex()
 
-        val sidPidLookupMap = mutableMapOf<Int /* pid */, Int /* sid */>()
-        val globalSessionRefs = AudioFlingerServiceDumpUtils.dump(context)
-        globalSessionRefs?.forEach {
-            if(sidPidLookupMap.contains(it.pid))
-            {
-                Timber.w("SID/PID map: Duplicated PID (pid=${it.pid}; sid=${it.sid})")
-            }
-            else
-            {
-                Timber.d("SID/PID map: AudioFlinger: pid=${it.pid}; sid=${it.sid}")
-            }
+        // Only needed where the playback configurations carry no session id (API 29/30): a
+        // second system dump, which on API 31+ only delayed every session (and its mute).
+        val sidPidLookupMap: Map<Int /* pid */, Int /* sid */> by lazy {
+            val map = mutableMapOf<Int, Int>()
+            AudioFlingerServiceDumpUtils.dump(context)?.forEach {
+                if(map.contains(it.pid))
+                {
+                    Timber.w("SID/PID map: Duplicated PID (pid=${it.pid}; sid=${it.sid})")
+                }
+                else
+                {
+                    Timber.d("SID/PID map: AudioFlinger: pid=${it.pid}; sid=${it.sid}")
+                }
 
-            sidPidLookupMap[it.pid] = it.sid
+                map[it.pid] = it.sid
+            }
+            map
         }
 
         val sessions = hashMapOf<Int, AudioSessionDumpEntry>()
 
-        var matches = playbackConfRegex31.findAll(dump)
+        // Lists, not sequences: a sequence re-ran the regex over the whole dump for each count().
+        var matches = playbackConfRegex31.findAll(dump).toList()
         // Fallbacks
-        if(matches.count() <= 0)
-            matches = playbackConfRegex30.findAll(dump)
-        if(matches.count() <= 0)
-            matches = playbackConfRegex29.findAll(dump)
+        if(matches.isEmpty())
+            matches = playbackConfRegex30.findAll(dump).toList()
+        if(matches.isEmpty())
+            matches = playbackConfRegex29.findAll(dump).toList()
 
         // Note: API 29 & 30 lack a session id
         matches.forEach next@ {
