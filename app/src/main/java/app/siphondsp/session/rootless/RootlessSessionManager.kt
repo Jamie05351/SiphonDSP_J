@@ -1,7 +1,6 @@
 package app.siphondsp.session.rootless
 
 import android.content.*
-import android.content.pm.PackageManager
 import app.siphondsp.session.rootless.SessionMuteLog.Trigger
 import app.siphondsp.utils.extensions.ContextExtensions.getPackageNameFromUid
 import app.siphondsp.session.dump.DumpManager
@@ -34,29 +33,25 @@ class RootlessSessionManager(context: Context) : BaseSessionManager(context)
         return dump
     }
 
-    /**
-     * A player started: mute it now, not when a dump gets round to finding it. Its session id
-     * is only visible here on a device that shows it to us; otherwise arm the sessions of
-     * processed apps that played recently, which is what a recreated player session gets back.
-     */
+    /** Only mute a currently identified, capture-eligible player before its dump arrives. */
     override fun onPlayersStarted(players: List<StartedPlayer>) {
-        players.forEach { p ->
-            if (p.sessionId > 0 && p.uid > 0) {
-                val pkg = context.getPackageNameFromUid(p.uid) ?: return@forEach
-                sessionDatabase.arm(p.sessionId, p.uid, pkg, Trigger.CALLBACK)
-            }
-        }
-        sessionDatabase.armRecent(Trigger.CALLBACK)
+        players.forEach { armPlayer(it, Trigger.CALLBACK) }
     }
 
-    /** The app said which session it's about to play on: mute it before it does. */
+    private fun armPlayer(player: StartedPlayer, trigger: Trigger, expectedPackage: String? = null) {
+        if (player.sessionId <= 0 || player.uid <= 0) return
+        val pkg = context.getPackageNameFromUid(player.uid) ?: return
+        if (expectedPackage != null && pkg != expectedPackage) return
+        sessionDatabase.arm(
+            player.sessionId, player.uid, pkg, trigger, player.attributes,
+            policyAllowed = sessionPolicyDatabase.isCaptureAllowed(player.uid, pkg),
+        )
+    }
+
     override fun onSessionOpened(sessionId: Int, packageName: String) {
-        val uid = try {
-            context.packageManager.getPackageUid(packageName, 0)
-        } catch (_: PackageManager.NameNotFoundException) {
-            return
-        }
-        sessionDatabase.arm(sessionId, uid, packageName, Trigger.BROADCAST)
+        // The broadcast carries no usage or capture policy. Use current playback metadata for
+        // the exact session if visible; otherwise the requested dump must establish eligibility.
+        findPlaybackSession(sessionId)?.let { armPlayer(it, Trigger.BROADCAST, packageName) }
     }
 
     override fun handleSessionDump(sessionDump: ISessionInfoDump?) {

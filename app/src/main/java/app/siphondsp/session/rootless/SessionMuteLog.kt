@@ -17,6 +17,7 @@ package app.siphondsp.session.rootless
 object SessionMuteLog {
     const val EVENTS = 16
     private const val SEEN_IDS = 64
+    private const val MAX_PENDING_START_AGE_MS = 3_000L
 
     /** The unmuted window this aims for. */
     const val TARGET_UNMUTED_MS = 20L
@@ -88,7 +89,9 @@ object SessionMuteLog {
      */
     @Synchronized
     fun notePlaybackChange(nowMs: Long) {
-        if (pendingSinceMs == 0L) pendingSinceMs = nowMs
+        if (pendingSinceMs == 0L || nowMs - pendingSinceMs > MAX_PENDING_START_AGE_MS) {
+            pendingSinceMs = nowMs
+        }
     }
 
     /**
@@ -121,6 +124,7 @@ object SessionMuteLog {
     ) {
         val seenBefore = seen.contains(sessionId)
         val timed = kind != Kind.HELD && kind != Kind.RELEASED
+        val staleStart = pendingSinceMs != 0L && nowMs - pendingSinceMs > MAX_PENDING_START_AGE_MS
         val event = Event(
             atMs = nowMs,
             sessionId = sessionId,
@@ -128,6 +132,8 @@ object SessionMuteLog {
             kind = kind,
             unmutedMs = when {
                 !timed || kind == Kind.FAILED -> null
+                trigger == Trigger.HELD -> 0L
+                staleStart -> null
                 pendingSinceMs == 0L -> if (attachedAtMs != null) 0L else null
                 else -> ((attachedAtMs ?: nowMs) - pendingSinceMs).coerceAtLeast(0L)
             },

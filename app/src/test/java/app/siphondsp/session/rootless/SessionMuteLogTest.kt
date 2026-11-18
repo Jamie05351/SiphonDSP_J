@@ -95,4 +95,30 @@ class SessionMuteLogTest {
         SessionMuteLog.record(1_100, 7, "pkg", Kind.FAILED, held = 0)
         assertNull(SessionMuteLog.snapshot().first().unmutedMs)
     }
+    @Test fun staleUnansweredStartDoesNotTimeAnUnrelatedBroadcastArm() {
+        SessionMuteLog.notePlaybackChange(1_000)
+        SessionMuteLog.record(10_000, 7, "pkg", Kind.ARMED, held = 1,
+            trigger = Trigger.BROADCAST, attachedAtMs = 10_000)
+        assertNull(SessionMuteLog.snapshot().first().unmutedMs)
+        SessionMuteLog.record(10_100, 7, "pkg", Kind.KEPT, held = 0,
+            trigger = Trigger.BROADCAST, attachedAtMs = 10_000)
+        assertNull(SessionMuteLog.snapshot().first().unmutedMs)
+    }
+
+    @Test fun aNewStartReplacesAnExpiredUnansweredStart() {
+        SessionMuteLog.notePlaybackChange(1_000)
+        SessionMuteLog.notePlaybackChange(10_000)
+        SessionMuteLog.noteDumpApplied(9_900) // an older dump must not clear the new start
+        SessionMuteLog.record(10_004, 7, "pkg", Kind.ARMED, held = 1,
+            trigger = Trigger.CALLBACK, attachedAtMs = 10_004)
+        assertEquals(4L, SessionMuteLog.snapshot().first().unmutedMs)
+    }
+
+    @Test fun aHeldMuteStillReadsZeroAfterAnExpiredStart() {
+        SessionMuteLog.notePlaybackChange(1_000)
+        SessionMuteLog.record(10_000, 7, "pkg", Kind.KEPT, held = 0,
+            trigger = Trigger.HELD, attachedAtMs = 0)
+        assertEquals(0L, SessionMuteLog.snapshot().first().unmutedMs)
+    }
+
 }

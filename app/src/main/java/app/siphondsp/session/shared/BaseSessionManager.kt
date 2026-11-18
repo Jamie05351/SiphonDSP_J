@@ -63,10 +63,7 @@ abstract class BaseSessionManager(protected val context: Context) : DumpManager.
     private val pollingMutex = Mutex()
     private val pollingScope = CoroutineScope(Dispatchers.Main)
     private var continuousPollingJob: Job? = null
-    // Requested dumps, coalesced: a request while one runs reruns it once that's done, rather
-    // than being dropped (which left a start unanswered until the next playback change). Main thread.
-    private var dumpJob: Job? = null
-    private var dumpRerun = false
+    private val dumpRequests = CoalescingDumpRequests(pollingScope) { pollSessionDump() }
 
     // Each player's last state, by interface id, to tell a player starting from any other
     // playback change. Main thread (the callback's handler).
@@ -91,7 +88,7 @@ abstract class BaseSessionManager(protected val context: Context) : DumpManager.
     protected open fun dumpOnWorker(): ISessionInfoDump? = dumpManager.dumpSessions()
 
     /** A player in the playback callback that has just started. [sessionId]/[uid] are 0/-1 unless visible to us. */
-    protected data class StartedPlayer(val sessionId: Int, val uid: Int)
+    protected data class StartedPlayer(val sessionId: Int, val uid: Int, val attributes: AudioAttributes)
 
     /**
      * The playback callback reported players starting ([players]; empty if it couldn't say
@@ -234,18 +231,8 @@ abstract class BaseSessionManager(protected val context: Context) : DumpManager.
         }
     }
 
-    /** Take a session dump soon; one already running is followed by another (coalesced). */
-    private fun requestDump()
-    {
-        dumpRerun = true
-        if (dumpJob?.isActive == true) return
-        dumpJob = pollingScope.launch {
-            while (dumpRerun) {
-                dumpRerun = false
-                pollSessionDump()
-            }
-        }
-    }
+    /** May be called by the recorder worker; the queue dispatches all bookkeeping to main. */
+    private fun requestDump() = dumpRequests.request()
 
     /** [blocking] is kept for callers; every request is now coalesced, never dropped. */
     @Suppress("UNUSED_PARAMETER")
@@ -271,6 +258,7 @@ abstract class BaseSessionManager(protected val context: Context) : DumpManager.
                     started += StartedPlayer(
                         sessionId = runCatching { h.sessionId }.getOrDefault(0),
                         uid = runCatching { h.clientUid }.getOrDefault(-1),
+                        attributes = c.audioAttributes,
                     )
                 }
             }
@@ -283,14 +271,23 @@ abstract class BaseSessionManager(protected val context: Context) : DumpManager.
         }
     }
 
+    /** Current metadata only: never guess a session's usage from its previous owner. */
+    protected fun findPlaybackSession(sessionId: Int): StartedPlayer? = runCatching {
+        audioManager.activePlaybackConfigurations.firstNotNullOfOrNull { config ->
+            val hidden = Refine.unsafeCast<AudioPlaybackConfigurationHidden>(config)
+            if (hidden.sessionId == sessionId) {
+                StartedPlayer(sessionId, hidden.clientUid, config.audioAttributes)
+            } else null
+        }
+    }.getOrNull()
+
     @CallSuper
     override fun onDumpMethodChange(method: DumpManager.Method) {
         requestDump()
     }
 
     private fun onAudioEffectSessionChanged(event: AppEvent.AudioEffectSessionChanged) {
-        // Most players don't send these; those that do send them before playing, with the
-        // session id and package: enough to mute the session before its first sample.
+        // The broadcast identifies the session, but eligibility still needs playback metadata.
         if (event.sessionId < 0) return
         Timber.d("Audio effect control session ${if (event.opened) "open" else "close"} broadcast: ${event.sessionId} (${event.packageName})")
         val pkg = event.packageName

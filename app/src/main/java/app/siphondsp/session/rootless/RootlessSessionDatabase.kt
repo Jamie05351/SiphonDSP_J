@@ -2,6 +2,7 @@ package app.siphondsp.session.rootless
 
 import android.content.Context
 import android.content.Intent
+import android.media.AudioAttributes
 import android.media.audiofx.AudioEffect
 import android.media.audiofx.DynamicsProcessing
 import android.os.Build
@@ -16,9 +17,10 @@ import app.siphondsp.session.rootless.SessionMuteLog.Trigger
 import app.siphondsp.utils.MutedAudioEffectFactory
 import timber.log.Timber
 
-class RootlessSessionDatabase(context: Context) : BaseSessionDatabase(context) {
-
-    private val factory by lazy { MutedAudioEffectFactory() }
+class RootlessSessionDatabase(
+    context: Context,
+    private val factory: MutedAudioEffectFactory = MutedAudioEffectFactory(),
+) : BaseSessionDatabase(context) {
     private var sessionLossListener: OnSessionLossListener? = null
     private var appProblemListener: OnAppProblemListener? = null
 
@@ -38,16 +40,6 @@ class RootlessSessionDatabase(context: Context) : BaseSessionDatabase(context) {
     /** A mute waiting on a session that isn't (known to be) playing, and when it was attached. */
     private class Held(val session: MutedEffectSession, val attachedAtMs: Long, val trigger: Trigger)
 
-    // Sessions of processed apps that have played, newest last: what the playback callback arms
-    // again when a player starts, before a dump can say which session it is. Session ids aren't
-    // visible to a normal app in the callback, but a player that recreates its session usually
-    // gets the same id back -- and without this, a released mute on such an id stays off until
-    // the next dump finds it (hundreds of ms of unprocessed audio). An id is dropped as soon as
-    // anything shows it isn't a processed app's any more (another app, excluded, usage), so this
-    // can never arm a mute on audio nothing would process. Main thread, plus the audio worker via
-    // setExcludedUids(); under heldLock.
-    private val recent = LinkedHashMap<Int, Owner>()
-    private class Owner(val uid: Int, val packageName: String, val lastPlayedAtMs: Long)
     // Last arm attempt per id: a mute that keeps losing control isn't remade on every callback.
     private val lastArmAttemptMs = HashMap<Int, Long>()
 
@@ -58,20 +50,18 @@ class RootlessSessionDatabase(context: Context) : BaseSessionDatabase(context) {
         trigger: Trigger? = null, attachedAtMs: Long? = null,
     ) = SessionMuteLog.record(SystemClock.elapsedRealtime(), sid, packageName, kind, heldCount(), detail, trigger, attachedAtMs)
 
-    private fun noteRecent(sid: Int, uid: Int, packageName: String) = synchronized(heldLock) {
-        recent.remove(sid)
-        recent[sid] = Owner(uid, packageName, SystemClock.elapsedRealtime())
-        while (recent.size > MAX_RECENT) recent.remove(recent.keys.first())
-    }
-
-    private fun forgetRecent(sid: Int) = synchronized(heldLock) { recent.remove(sid) }
-
     /**
      * Attach a mute to session [sid] of [uid]/[packageName] now, ahead of any dump: called on
      * the app's session-open broadcast, or on the playback callback reporting a player start.
-     * Nothing if the session already has one, or its app is never processed. Main thread.
+     * Requires current attributes for this exact session and an explicitly allowed capture
+     * policy. An id/package broadcast or a historical session alone is insufficient. Main thread.
      */
-    fun arm(sid: Int, uid: Int, packageName: String, trigger: Trigger): Boolean {
+    fun arm(
+        sid: Int, uid: Int, packageName: String, trigger: Trigger,
+        attributes: AudioAttributes, policyAllowed: Boolean,
+    ): Boolean {
+        if (!policyAllowed || attributes.allowedCapturePolicy != AudioAttributes.ALLOW_CAPTURE_BY_ALL ||
+            attributes.usage !in RECORDABLE_USAGES) return false
         if (sid <= 0 || sessionList.containsKey(sid)) return false
         if (synchronized(heldLock) { heldMutes.containsKey(sid) }) return false
         if (isExcludedOwner(uid, packageName)) return false
@@ -79,9 +69,8 @@ class RootlessSessionDatabase(context: Context) : BaseSessionDatabase(context) {
         val last = lastArmAttemptMs[sid]
         if (last != null && now - last < ARM_RETRY_MS) return false
         lastArmAttemptMs[sid] = now
-        if (lastArmAttemptMs.size > MAX_RECENT * 4) {
-            val keep = synchronized(heldLock) { recent.keys + sid }
-            lastArmAttemptMs.keys.retainAll(keep)
+        if (lastArmAttemptMs.size > MAX_ARM_ATTEMPTS) {
+            lastArmAttemptMs.entries.removeAll { now - it.value >= ARM_RETRY_MS }
         }
 
         val effect = factory.make(sid, packageName) ?: return false
@@ -90,23 +79,6 @@ class RootlessSessionDatabase(context: Context) : BaseSessionDatabase(context) {
         Timber.d("Session $sid ($packageName) armed on ${trigger.label} in ${attachedAt - now} ms")
         log(sid, packageName, Kind.ARMED, trigger = trigger, attachedAtMs = attachedAt)
         return true
-    }
-
-    /**
-     * A player started (playback callback) and its session isn't known yet: arm every recent
-     * session of a processed app that has no mute, so a recreated session that gets its id
-     * back is muted from about its first sample. A mute on an id with nothing playing does
-     * nothing; one on an id that turns out to be another app's is released by the next dump.
-     */
-    fun armRecent(trigger: Trigger) {
-        val now = SystemClock.elapsedRealtime()
-        val candidates = synchronized(heldLock) {
-            recent.entries.reversed()
-                .filter { (sid, o) -> now - o.lastPlayedAtMs < RECENT_WINDOW_MS && !heldMutes.containsKey(sid) }
-                .take(MAX_ARM_PER_START)
-                .map { it.key to it.value }
-        }
-        candidates.forEach { (sid, o) -> arm(sid, o.uid, o.packageName, trigger) }
     }
 
     /** Hold [held] for [sid], releasing whatever that pushes out. */
@@ -152,7 +124,6 @@ class RootlessSessionDatabase(context: Context) : BaseSessionDatabase(context) {
             val s = held.session
             if (s.uid == uid && s.packageName == packageName && reassertMute(s.audioMuteEffect)) {
                 Timber.d("Session $id ($packageName) plays; its mute was already attached (${held.trigger.label})")
-                noteRecent(id, uid, packageName)
                 log(id, packageName, Kind.KEPT, trigger = held.trigger, attachedAtMs = held.attachedAtMs)
                 return s
             }
@@ -162,13 +133,11 @@ class RootlessSessionDatabase(context: Context) : BaseSessionDatabase(context) {
         val muteEffect = factory.make(id, packageName)
         if(muteEffect == null)
         {
-            forgetRecent(id)
             log(id, packageName, Kind.FAILED)
             // Something weird happened, request user to solve issue
             appProblemListener?.onAppProblemDetected(uid)
             return null
         }
-        noteRecent(id, uid, packageName)
         log(id, packageName, if (replaced) Kind.REPLACED else Kind.NEW, trigger = Trigger.DUMP)
         return MutedEffectSession(uid, packageName, muteEffect)
     }
@@ -193,11 +162,6 @@ class RootlessSessionDatabase(context: Context) : BaseSessionDatabase(context) {
         // one, a usage the capture doesn't take) must not stay muted: nothing would play it.
         // Back for the same app and processed, createSession() has already taken it.
         val stale = synchronized(heldLock) {
-            // Not a processed app's session any more: never arm it again either.
-            recent.entries.removeAll { (sid, owner) ->
-                val entry = dump.sessions[sid] ?: return@removeAll false
-                entry.uid != owner.uid || !accepted(sid, entry)
-            }
             heldMutes.filter { (sid, held) ->
                 val entry = dump.sessions[sid] ?: return@filter false
                 entry.uid != held.session.uid || !accepted(sid, entry)
@@ -208,7 +172,6 @@ class RootlessSessionDatabase(context: Context) : BaseSessionDatabase(context) {
 
     override fun onExcludedUidsChanged(uids: Array<Int>) {
         val excluded = synchronized(heldLock) {
-            recent.values.removeAll { uids.contains(it.uid) }
             heldMutes.filter { uids.contains(it.value.session.uid) }.onEach { heldMutes.remove(it.key) }
         }
         excluded.forEach { (sid, h) -> release(h.session); log(sid, h.session.packageName, Kind.RELEASED, "excluded") }
@@ -216,7 +179,6 @@ class RootlessSessionDatabase(context: Context) : BaseSessionDatabase(context) {
 
     override fun onSessionsCleared() {
         val all = synchronized(heldLock) {
-            recent.clear()
             heldMutes.values.map { it.session }.also { heldMutes.clear() }
         }
         lastArmAttemptMs.clear()
@@ -267,7 +229,7 @@ class RootlessSessionDatabase(context: Context) : BaseSessionDatabase(context) {
             if (held != null) {
                 // A quiet session's held mute lost control: nothing is playing through it, so
                 // it's no reason to restart or stop. Let it go; the next player start arms the
-                // id again (it stays in `recent`), or a dump makes a new one if it plays.
+                // id again if its current metadata is eligible, or a dump makes a new mute.
                 release(held)
                 log(sid, packageName, Kind.RELEASED, "lost control")
             } else {
@@ -307,11 +269,10 @@ class RootlessSessionDatabase(context: Context) : BaseSessionDatabase(context) {
         const val EXTRA_IGNORE = "siphondsp.ignore"
         // Sessions are usually reused per player, so a handful covers every app in use.
         private const val MAX_HELD_MUTES = 16
-        // Sessions remembered for arming on a player start, and how many one start may arm.
-        private const val MAX_RECENT = 16
-        private const val MAX_ARM_PER_START = 8
-        // A session not played for this long isn't armed on a start any more.
-        private const val RECENT_WINDOW_MS = 30 * 60_000L
+        private const val MAX_ARM_ATTEMPTS = 64
+        private val RECORDABLE_USAGES = setOf(
+            AudioAttributes.USAGE_UNKNOWN, AudioAttributes.USAGE_MEDIA, AudioAttributes.USAGE_GAME,
+        )
         private const val ARM_RETRY_MS = 500L
     }
 }
