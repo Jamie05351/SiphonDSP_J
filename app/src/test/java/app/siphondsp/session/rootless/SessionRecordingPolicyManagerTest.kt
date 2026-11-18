@@ -30,6 +30,7 @@ class SessionRecordingPolicyManagerTest {
                 override val capturePermissionLog = hashMapOf<String, Boolean>().apply {
                     if (allowed != null) put(pkg, allowed)
                 }
+                override fun toString() = "PolicyDump($capturePermissionLog)"
             })
         }
 
