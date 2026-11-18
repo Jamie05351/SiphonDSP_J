@@ -6,6 +6,8 @@ import android.media.AudioAttributes
 import android.media.audiofx.AudioEffect
 import android.media.audiofx.DynamicsProcessing
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.os.SystemClock
 import app.siphondsp.model.AudioSessionDumpEntry
 import app.siphondsp.model.IEffectSession
@@ -36,9 +38,12 @@ class RootlessSessionDatabase(
     // held mute, so the dump that finds the session playing takes it as KEPT.
     private val heldMutes = LinkedHashMap<Int, Held>()
     private val heldLock = Any()
+    private val confirmationHandler = Handler(Looper.getMainLooper())
 
     /** A mute waiting on a session that isn't (known to be) playing, and when it was attached. */
-    private class Held(val session: MutedEffectSession, val attachedAtMs: Long, val trigger: Trigger)
+    private class Held(val session: MutedEffectSession, val attachedAtMs: Long, val trigger: Trigger) {
+        var confirmationTimeout: Runnable? = null
+    }
 
     // Successful arms only: a failed creation must remain immediately retryable. Under heldLock.
     private val lastSuccessfulArmMs = HashMap<Int, Long>()
@@ -89,16 +94,47 @@ class RootlessSessionDatabase(
 
     /** Hold [held] for [sid], releasing whatever that pushes out. */
     private fun hold(sid: Int, held: Held) {
-        val evicted = mutableListOf<Pair<Int, MutedEffectSession>>()
+        val evicted = mutableListOf<Pair<Int, Held>>()
         synchronized(heldLock) {
-            heldMutes.remove(sid)?.takeIf { it.session !== held.session }?.let { evicted += sid to it.session }
+            heldMutes.remove(sid)?.let {
+                cancelConfirmationTimeout(it)
+                if (it.session !== held.session) evicted += sid to it
+            }
             heldMutes[sid] = held
+            if (held.trigger != Trigger.HELD) {
+                // Independent of dumps: an absent or failed dump must not leave an early
+                // mute attached indefinitely. Identity protects a newer mute on the same id.
+                val timeout = Runnable {
+                    val expired = synchronized(heldLock) {
+                        if (heldMutes[sid] !== held) false
+                        else {
+                            heldMutes.remove(sid)
+                            true
+                        }
+                    }
+                    if (expired) {
+                        releaseHeld(held)
+                        log(sid, held.session.packageName, Kind.RELEASED, "early mute not confirmed")
+                    }
+                }
+                held.confirmationTimeout = timeout
+                confirmationHandler.postDelayed(timeout, ARM_CONFIRMATION_TIMEOUT_MS)
+            }
             while (heldMutes.size > MAX_HELD_MUTES) {
                 val oldest = heldMutes.keys.first()
-                evicted += oldest to heldMutes.remove(oldest)!!.session
+                evicted += oldest to heldMutes.remove(oldest)!!
             }
         }
-        evicted.forEach { (id, s) -> release(s); log(id, s.packageName, Kind.RELEASED, "too many held") }
+        evicted.forEach { (id, h) -> releaseHeld(h); log(id, h.session.packageName, Kind.RELEASED, "too many held") }
+    }
+
+    private fun cancelConfirmationTimeout(held: Held) {
+        held.confirmationTimeout?.let { confirmationHandler.removeCallbacks(it) }
+    }
+
+    private fun releaseHeld(held: Held) {
+        cancelConfirmationTimeout(held)
+        release(held.session)
     }
 
     override val excludedPackages = arrayOf(
@@ -127,6 +163,7 @@ class RootlessSessionDatabase(
         val held = synchronized(heldLock) { heldMutes.remove(id) }
         var replaced = false
         if (held != null) {
+            cancelConfirmationTimeout(held)
             val s = held.session
             if (s.uid == uid && s.packageName == packageName && reassertMute(s.audioMuteEffect)) {
                 Timber.d("Session $id ($packageName) plays; its mute was already attached (${held.trigger.label})")
@@ -173,22 +210,22 @@ class RootlessSessionDatabase(
                 entry.uid != held.session.uid || !accepted(sid, entry)
             }.onEach { heldMutes.remove(it.key) }
         }
-        stale.forEach { (sid, h) -> release(h.session); log(sid, h.session.packageName, Kind.RELEASED, "id reused, not processed") }
+        stale.forEach { (sid, h) -> releaseHeld(h); log(sid, h.session.packageName, Kind.RELEASED, "id reused, not processed") }
     }
 
     override fun onExcludedUidsChanged(uids: Array<Int>) {
         val excluded = synchronized(heldLock) {
             heldMutes.filter { uids.contains(it.value.session.uid) }.onEach { heldMutes.remove(it.key) }
         }
-        excluded.forEach { (sid, h) -> release(h.session); log(sid, h.session.packageName, Kind.RELEASED, "excluded") }
+        excluded.forEach { (sid, h) -> releaseHeld(h); log(sid, h.session.packageName, Kind.RELEASED, "excluded") }
     }
 
     override fun onSessionsCleared() {
         val all = synchronized(heldLock) {
             lastSuccessfulArmMs.clear()
-            heldMutes.values.map { it.session }.also { heldMutes.clear() }
+            heldMutes.values.toList().also { heldMutes.clear() }
         }
-        all.forEach(::release)
+        all.forEach(::releaseHeld)
     }
 
     private fun release(session: MutedEffectSession) {
@@ -230,13 +267,13 @@ class RootlessSessionDatabase(
     init {
         factory.sessionLossListener = { sid, packageName ->
             val held = synchronized(heldLock) {
-                heldMutes[sid]?.takeIf { !sessionList.containsKey(sid) }?.also { heldMutes.remove(sid) }?.session
+                heldMutes[sid]?.takeIf { !sessionList.containsKey(sid) }?.also { heldMutes.remove(sid) }
             }
             if (held != null) {
                 // A quiet session's held mute lost control: nothing is playing through it, so
                 // it's no reason to restart or stop. Let it go; the next player start arms the
                 // id again if its current metadata is eligible, or a dump makes a new mute.
-                release(held)
+                releaseHeld(held)
                 log(sid, packageName, Kind.RELEASED, "lost control")
             } else {
                 sendFxCloseBroadcast(packageName, sid)
@@ -280,6 +317,7 @@ class RootlessSessionDatabase(
             AudioAttributes.USAGE_UNKNOWN, AudioAttributes.USAGE_MEDIA, AudioAttributes.USAGE_GAME,
         )
         private const val ARM_RETRY_MS = 500L
+        private const val ARM_CONFIRMATION_TIMEOUT_MS = 3_000L
     }
 }
 
