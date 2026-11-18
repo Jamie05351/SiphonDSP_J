@@ -101,6 +101,11 @@ class SessionRecordingPolicyManager(private val context: Context) {
         }
     }
 
+    /** Unknown policies are not evidence that a new early mute can be captured. */
+    fun isCaptureAllowed(uid: Int, packageName: String): Boolean = synchronized(sessionPolicyList) {
+        sessionPolicyList[packageName]?.let { it.uid == uid && !it.isRestricted } == true
+    }
+
     fun getRestrictedUids(): Array<Int> {
         return synchronized(sessionPolicyList) {
             sessionPolicyList.values // create copy to prevent concurrent access

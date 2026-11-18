@@ -25,7 +25,12 @@ sealed interface AppEvent {
     data object BackupRestored : AppEvent
 
     /** A player opened or closed an audio-effect session (the system's control broadcast). */
-    data class AudioEffectSessionChanged(val sessionId: Int, val packageName: String?) : AppEvent
+    data class AudioEffectSessionChanged(
+        val sessionId: Int,
+        val packageName: String?,
+        /** OPEN_AUDIO_EFFECT_CONTROL_SESSION (rather than CLOSE). */
+        val opened: Boolean = false,
+    ) : AppEvent
 
     /** The capture's buffer size or encoding changed: rebuild the capture pipeline. */
     data object RestartCapture : AppEvent

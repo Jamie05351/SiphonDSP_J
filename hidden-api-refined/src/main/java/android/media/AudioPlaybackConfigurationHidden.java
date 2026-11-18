@@ -28,4 +28,14 @@ public class AudioPlaybackConfigurationHidden {
     public int getSessionId() {
         throw new RuntimeException("Stub!");
     }
+
+    /** The player's interface id, unique per player (kept in the anonymized copies apps get). */
+    public int getPlayerInterfaceId() {
+        throw new RuntimeException("Stub!");
+    }
+
+    /** The player's state (kept in the anonymized copies apps get). */
+    public int getPlayerState() {
+        throw new RuntimeException("Stub!");
+    }
 }
