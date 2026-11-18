@@ -591,7 +591,9 @@ private fun MusicTile(
     val title = stringResource(tile.title)
     val heading = track?.title ?: player?.label ?: title
     val detail = track?.artist ?: stringResource(R.string.launcher_nothing_playing)
-    val playerName = player?.label ?: playerPackage.orEmpty()
+    // The player's label only: never a package id (apps still loading, or the player uninstalled
+    // or without a launcher entry), which then simply isn't named.
+    val playerName = player?.label.orEmpty()
     val corner = s.dp(MusicCorner)
     Box(Modifier.fillMaxSize()) {
         Box(
