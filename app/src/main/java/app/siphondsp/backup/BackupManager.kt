@@ -148,6 +148,8 @@ class BackupManager(private val context: Context): KoinComponent {
 
             // Clean restore
             if(!dirty) {
+                // An archive with no IR files represents an empty set, too.
+                File(context.filesDir, "convolver").deleteRecursively()
                 // Remove profiles
                 File(context.applicationInfo.dataDir + "/files/profiles").deleteRecursively()
 
@@ -176,7 +178,6 @@ class BackupManager(private val context: Context): KoinComponent {
                     file.copyRecursively(context.noBackupFilesDir, true)
                 else if (file.isDirectory && file.name == "convolver") {
                     val destination = File(context.filesDir, "convolver")
-                    if (!dirty) destination.deleteRecursively()
                     file.copyRecursively(destination, true)
                 }
                 else if(file.isDirectory && file.name == "profiles") {

@@ -110,8 +110,12 @@ def read_response(m: Measurement, frequencies: np.ndarray, sample_rate: int, ref
         n = max(2**18, 1 << (len(samples) - 1).bit_length())
         h = np.fft.rfft(samples, n)
         f = np.fft.rfftfreq(n, 1 / rate)
-        # Preserve complex response rather than interpolating through wrapped phase.
+        # De-rotate the impulse's bulk delay before interpolating complex components.
+        # Otherwise interpolation between rapidly rotating bins creates false attenuation.
+        delay = int(np.argmax(np.abs(samples)))
+        h *= np.exp(2j * np.pi * f * delay / rate)
         result = np.interp(frequencies, f, h.real) + 1j * np.interp(frequencies, f, h.imag)
+        result *= np.exp(-2j * np.pi * frequencies * delay / rate)
         return result * 10 ** ((m.calibration_db - reference_db) / 20)
     if p.suffix.lower() not in (".txt", ".csv", ".frd"):
         raise ValueError(f"{p.name}: export REW frequency/SPL/phase text; .mdat is not supported")

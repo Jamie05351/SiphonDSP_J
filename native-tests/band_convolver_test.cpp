@@ -89,3 +89,17 @@ TEST_CASE("band mode common trim cannot change relative IR gain through positive
     double maxError=0;for(std::size_t i=0;i<x.size();++i)maxError=std::max(maxError,std::fabs(double(x[i]-y[i])));
     CHECK(maxError<1e-7);
 }
+
+TEST_CASE("resuming crossovers discards audio buffered in band FIRs") {
+    NativeBmwDspProcessor p; std::string error;
+    auto c=defaultConfig(); c[nbschema::kConvolverEnabled]=1;
+    p.configure(c.data(),c.size());
+    for(int b=0;b<3;++b) REQUIRE(p.loadBandConvolverIr(b,bandDelta(1,1,12000),error));
+    REQUIRE(p.setConvolverMode(1,error)); warm(p);
+    auto tone=stereoSine(1000,.02,3000); p.process(tone.data(),tone.size());
+    c[nbschema::kCrossoverBypass]=1; p.configure(c.data(),c.size()); warm(p);
+    c[nbschema::kCrossoverBypass]=0; p.configure(c.data(),c.size());
+    std::vector<float> silence(2*20000,0); p.process(silence.data(),silence.size());
+    float peak=0; for(float x:silence)peak=std::max(peak,std::fabs(x));
+    CHECK(peak<1e-7f);
+}

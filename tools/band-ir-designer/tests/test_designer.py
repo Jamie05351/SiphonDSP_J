@@ -39,6 +39,19 @@ class DesignerTest(unittest.TestCase):
     def options(self, **kw):
         return Options(taps=2048, latency_frames=1024, bass_db=0, treble_db=0, **kw)
 
+    def test_delayed_wav_keeps_unit_magnitude_and_absolute_phase_between_bins(self):
+        # Analytic pure delay: unit magnitude at every frequency, including between FFT bins.
+        delay = 48000
+        impulse = np.zeros(delay + 100, dtype=np.float32)
+        impulse[delay] = 1
+        path = self.root / "delayed.wav"
+        wavfile.write(path, 48000, impulse)
+        frequencies = (np.arange(1, 20000, 137) + .5) * 48000 / 2**18
+        measurement = Measurement(str(path), "driver", "centre", "L", "low", "ref")
+        response = read_response(measurement, frequencies, 48000, 0)
+        expected = np.exp(-2j * np.pi * frequencies * delay / 48000)
+        np.testing.assert_allclose(response, expected, atol=1e-9)
+
     def test_unity_measurements_export_delayed_unity_without_crossover(self):
         r = design(self.fixtures(), self.options())
         for b in range(3):

@@ -388,6 +388,7 @@ void NativeBmwDspProcessor::clearBandState() {
 
 void NativeBmwDspProcessor::clearBandState(NativeBmwRouting::Band band) {
     using Band = NativeBmwRouting::Band;
+    bandConvolvers_[static_cast<std::size_t>(band)].clearHistory();
     const BandOutputs ids = bandOutputs(band);
     output(ids.left).clearState();
     output(ids.right).clearState();
