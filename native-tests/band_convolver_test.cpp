@@ -167,3 +167,46 @@ TEST_CASE("switching mode with the convolver off neither mutes nor resets the ch
     for(std::size_t i=0;i<x.size();++i) maxError=std::max(maxError,std::fabs(double(x[i]-y[i])));
     CHECK(maxError<1e-7);
 }
+
+TEST_CASE("a louder band IR lowers the shared cap smoothly, without a step in the other bands") {
+    NativeBmwDspProcessor p; std::string error;
+    auto c=defaultConfig(); c[nbschema::kConvolverEnabled]=1;
+    p.configure(c.data(),c.size());
+    for(int b=0;b<3;++b) REQUIRE(p.loadBandConvolverIr(b,bandDelta(),error));
+    REQUIRE(p.setConvolverMode(1,error)); warm(p);
+    // One continuous 1 kHz tone: settled first, then Low swaps to a +6 dB IR mid-stream, so
+    // every band comes down 6 dB -- as a ramp, not a step.
+    constexpr std::size_t kSettle=24000, kTotal=48000;
+    auto x=stereoSine(1000,.05,kTotal);
+    p.process(x.data(),2*kSettle);
+    REQUIRE(p.loadBandConvolverIr(0,bandDelta(2,2),error));
+    p.process(x.data()+2*kSettle,2*(kTotal-kSettle));
+    // Peak of each cycle (48 frames): a hard 6 dB step halves it from one cycle to the next;
+    // the ~10 ms ramp moves it a few percent per cycle.
+    std::vector<double> peaks;
+    for(std::size_t start=kSettle-4800;start+48<=kTotal;start+=48){
+        double peak=0; for(std::size_t i=start;i<start+48;++i) peak=std::max(peak,std::fabs(double(x[2*i])));
+        peaks.push_back(peak);
+    }
+    REQUIRE(peaks.front()>0);
+    REQUIRE(peaks.back()<peaks.front()*.6);  // it did come down ~6 dB overall
+    double worst=1;
+    for(std::size_t k=0;k+1<peaks.size();++k) worst=std::min(worst,peaks[k+1]/peaks[k]);
+    CHECK(worst>.8);
+}
+
+TEST_CASE("disabling the convolver and switching mode together still dips before the crossover fade") {
+    NativeBmwDspProcessor p; std::string error;
+    auto c=defaultConfig(); c[nbschema::kConvolverEnabled]=1;
+    p.configure(c.data(),c.size());
+    for(int b=0;b<3;++b) REQUIRE(p.loadBandConvolverIr(b,bandDelta(),error));
+    REQUIRE(p.setConvolverMode(1,error)); warm(p);
+    auto tone=stereoSine(1000,.02,2400); p.process(tone.data(),tone.size());
+    // One update: convolver off and crossovers bypassed (target mode 0). The band FIRs are still
+    // convolving, so the switch must wait for the dip rather than happen at once.
+    c[nbschema::kConvolverEnabled]=0; c[nbschema::kCrossoverBypass]=1; p.configure(c.data(),c.size());
+    std::vector<float> one(2*16,0); p.process(one.data(),one.size());
+    CHECK(p.activeConvolverMode()==1);
+    warm(p);
+    CHECK(p.activeConvolverMode()==0);
+}

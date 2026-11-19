@@ -161,7 +161,10 @@ public:
     // trim can only go below that. The master limiter after it catches the time-domain peaks a
     // phase-only change raises; the cap keeps the IR from eating into the limiter's headroom (or
     // driving it hard) through magnitude boost.
-    void process(float* left, float* right, std::size_t frames, bool enabled, float gainDb);
+    // takeUpdate false: the caller already ran takePending() for this chunk (and set a shared
+    // cap for that kernel), so no newer kernel may slip in before the chunk runs.
+    void process(float* left, float* right, std::size_t frames, bool enabled, float gainDb,
+                 bool takeUpdate = true);
     // Audio thread: takes a kernel the control side published, when no swap is in progress.
     // process() does this itself; calling it first lets a caller read kernelCap() for the
     // kernel the coming chunk will actually run.
@@ -171,8 +174,13 @@ public:
     double kernelCap() const;
     // Audio thread: a cap shared with sibling stages (> 0), replacing this stage's own -peak cap,
     // so several stages that sum together are brought down by one common amount and keep
-    // their relative levels. 0 restores the stage's own cap.
+    // their relative levels. It ramps (kGainRampSeconds) rather than steps, since a change
+    // made for one stage's kernel moves the level of all of them. 0 restores the stage's own
+    // cap.
     void setSharedCap(double cap) { sharedCap_ = cap; }
+    // Audio thread: on the direct path at full level, i.e. passing samples untouched with no
+    // latency and nothing to fade out.
+    bool idle() const { return path_ == Path::Direct && level_ >= 1.0; }
     // Sample-rate dependent ramp constants.
     void setSampleRate(float sampleRate);
     // Snap the gain to its target, and the path to the one the setting asks for when that needs
@@ -209,6 +217,7 @@ private:
     std::size_t swapHold_ = 0;  // frames previous_ stays alone: the new kernel's first block
     double gain_ = 1.0;         // linear IR gain, one-pole toward the setting
     double sharedCap_ = 0.0;    // see setSharedCap(); 0 = each kernel's own cap
+    double capNow_ = 0.0;       // sharedCap_ as ramped; 0 = not yet started (lands directly)
     double fadeStep_ = 1.0 / (0.02 * 48000.0);
     double dipStep_ = 1.0 / (0.005 * 48000.0);
     double gainCoef_ = 0.0020811617;  // 1 - exp(-1 / (10 ms * 48 kHz))

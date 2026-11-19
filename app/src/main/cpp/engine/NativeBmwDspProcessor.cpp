@@ -355,7 +355,7 @@ void NativeBmwDspProcessor::processBandStages(std::size_t frames) {
         }
         bandConvolvers_[static_cast<std::size_t>(band)].process(
             xl, xr, frames, audioConvolverMode_ == 1 && p_.convolverEnabled,
-            std::min(0.f, p_.convolverGainDb));
+            std::min(0.f, p_.convolverGainDb), /*takeUpdate=*/false);
     }
     profiler_.lap(P::Convolver);
     // Per-bus brick-wall limiter (stereo-linked), right after the driver gain so its threshold
@@ -525,9 +525,10 @@ void NativeBmwDspProcessor::processChunk(float* w, std::size_t frames) {
     const int requestedMode = requestedConvolverMode_.load(std::memory_order_acquire);
     const int targetMode = requestedMode == 1 && p_.crossoverBypass ? 0 : requestedMode;
     if (targetMode != audioConvolverMode_) {
-        if (!p_.convolverEnabled) {
-            // Neither path convolves: both are a true bypass, so there's nothing to fade out or
-            // clear. A stage enabled later starts from a clean history through its own fade.
+        if (!p_.convolverEnabled && convolverStagesIdle()) {
+            // Neither path convolves and none is still dipping out (one partition late): both
+            // are a true bypass, so there's nothing to fade out or clear. A stage enabled later
+            // starts from a clean history through its own fade.
             audioConvolverMode_ = targetMode;
         } else if (convolverModeGain_ <= 0.f) {
             audioConvolverMode_ = targetMode;

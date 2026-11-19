@@ -489,6 +489,7 @@ void ConvolverStage::clearHistory() {
 
 void ConvolverStage::snap(bool enabled, float gainDb) {
     gain_ = std::pow(10.0, static_cast<double>(gainDb) / 20.0);
+    capNow_ = sharedCap_;
     // Wherever it was, it lands on the path the setting asks for at full level; the convolved
     // path starts from silence, as after reset().
     path_ = enabled && active_ ? Path::Convolved : Path::Direct;
@@ -538,14 +539,17 @@ double ConvolverStage::kernelCap() const {
 }
 
 void ConvolverStage::process(float* left, float* right, std::size_t frames, bool enabled,
-                             float gainDb) {
+                             float gainDb, bool takeUpdate) {
     constexpr std::size_t L = kConvolverLatencyFrames;
-    takePending();
+    if (takeUpdate) {
+        takePending();
+    }
     const double targetGain = std::pow(10.0, static_cast<double>(gainDb) / 20.0);
     const bool wantConvolved = enabled && active_ != nullptr;
     // Direct and staying direct at full level: a true bypass, the chain's samples untouched.
     if (path_ == Path::Direct && !wantConvolved && level_ >= 1.0) {
         gain_ = targetGain;
+        capNow_ = sharedCap_;
         return;
     }
     for (std::size_t i = 0; i < frames; ++i) {
@@ -562,6 +566,11 @@ void ConvolverStage::process(float* left, float* right, std::size_t frames, bool
     }
     for (std::size_t i = 0; i < frames; ++i) {
         gain_ += (targetGain - gain_) * gainCoef_;
+        if (sharedCap_ > 0.0) {
+            capNow_ = capNow_ > 0.0 ? capNow_ + (sharedCap_ - capNow_) * gainCoef_ : sharedCap_;
+        } else {
+            capNow_ = 0.0;
+        }
         const bool onWantedPath = (path_ == Path::Convolved) == wantConvolved;
         if (!onWantedPath) {
             // Down to silence on the path playing now, then switch. The new path starts clean;
@@ -590,10 +599,10 @@ void ConvolverStage::process(float* left, float* right, std::size_t frames, bool
         for (int c = 0; c < 2; ++c) {
             double y = dry_[c][i];
             if (path_ == Path::Convolved) {
-                const double cur = active_ ? std::min(gain_, sharedCap_ > 0.0 ? sharedCap_ : active_->maxGain()) * wet_[c][i] : 0.0;
+                const double cur = active_ ? std::min(gain_, capNow_ > 0.0 ? capNow_ : active_->maxGain()) * wet_[c][i] : 0.0;
                 y = cur;
                 if (swapMix_ > 0.0) {
-                    const double prev = previous_ ? std::min(gain_, sharedCap_ > 0.0 ? sharedCap_ : previous_->maxGain()) * old_[c][i] : 0.0;
+                    const double prev = previous_ ? std::min(gain_, capNow_ > 0.0 ? capNow_ : previous_->maxGain()) * old_[c][i] : 0.0;
                     y = swapMix_ * prev + (1.0 - swapMix_) * cur;
                 }
             }

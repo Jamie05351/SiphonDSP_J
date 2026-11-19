@@ -484,11 +484,6 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
     // ConvolverIrStore.fingerprint() as of the last full load; null forces the next one.
     @Volatile private var loadedConvolverFingerprint: String? = null
 
-    private fun setSlotError(band: Int, error: String?) {
-        convolverSlotErrors[band + 1] = error
-        publishConvolverErrors()
-    }
-
     private fun publishConvolverErrors() {
         val all = convolverSlotErrors.filterNotNull() + listOfNotNull(convolverModeError)
         convolverLoadError = all.takeIf { it.isNotEmpty() }?.joinToString("; ")
@@ -510,9 +505,20 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         convolverLoadError
     }
 
-    /** A preset or restore load: reloads the IRs only when the stored files or mode changed. */
+    /**
+     * A preset or restore load: reloads the IRs only when the stored files or mode changed, the
+     * last load reported an error, or the engine has lost a stored slot (a failed sample-rate
+     * rebuild, say), so a preset switch still recovers what a full reload would.
+     */
     private fun loadStoredConvolverIrIfChanged() {
-        if (ConvolverIrStore.fingerprint(this) != loadedConvolverFingerprint) loadStoredConvolverIr()
+        val engineHasAll = (-1..2).all { band ->
+            !ConvolverIrStore.hasIr(this, band) ||
+                (if (band == -1) engine.convolverStatus() else engine.bandConvolverStatus(band))
+                    ?.let { it.loaded && it.streamFrames > 0 && it.error == null } == true
+        }
+        if (!engineHasAll || convolverLoadError != null ||
+            ConvolverIrStore.fingerprint(this) != loadedConvolverFingerprint
+        ) loadStoredConvolverIr()
     }
 
     // The store's file lock covers the existence check and the read, so an import swapping the
@@ -532,7 +538,18 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
 
     private fun reloadConvolverSlot(band: Int): String? = synchronized(convolverControlLock) {
         loadedConvolverFingerprint = null
-        loadStoredConvolverSlot(band).also { setSlotError(band, it) }
+        val error = loadStoredConvolverSlot(band)
+        convolverSlotErrors[band + 1] = error
+        // A slot loading can make the stored mode applicable again (per-band waiting on its last
+        // IR); a cleared band slot drops native to stereo. Reapply it so the mode error reflects now.
+        val stored = ConvolverIrStore.mode(this)
+        if (engine.convolverMode() != stored) {
+            convolverModeError = engine.setConvolverMode(stored)
+        } else if (error == null) {
+            convolverModeError = null
+        }
+        publishConvolverErrors()
+        error
     }
 
     private fun reloadBandConvolverSet(): String? = synchronized(convolverControlLock) {
@@ -545,6 +562,8 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
             convolverSlotErrors[band + 1] = slotError
             if (error == null) error = slotError
         }
+        // Either the mode applies again, or the set fell back to stereo: no older mode error stands.
+        convolverModeError = null
         if (error == null) {
             error = engine.setConvolverMode(previous)
             convolverModeError = error

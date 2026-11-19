@@ -54,15 +54,19 @@ fun rememberConvolverResponse(show: Boolean, grid: DoubleArray): ConvolverRespon
             response = null
             return@LaunchedEffect
         }
-        var fetched: Long? = Long.MIN_VALUE
+        // The active mode is part of the key: the audio side changes it (crossover bypass, the
+        // end of a mode dip) without a new generation, and it picks which curve to draw.
+        var fetched: Pair<Long?, Int?> = Long.MIN_VALUE to null
         while (true) {
-            val generation = withContext(Dispatchers.IO) { RootlessAudioProcessorService.convolverGeneration() }
-            if (generation != fetched) {
+            val (generation, activeMode) = withContext(Dispatchers.IO) {
+                RootlessAudioProcessorService.convolverGeneration() to RootlessAudioProcessorService.activeConvolverMode()
+            }
+            if ((generation to activeMode) != fetched) {
                 val next = if (generation == null) {
                     null
                 } else {
                     withContext(Dispatchers.IO) {
-                        if (RootlessAudioProcessorService.activeConvolverMode() == 1) {
+                        if (activeMode == 1) {
                             val slots = (0..2).map { RootlessAudioProcessorService.convolverResponse(grid, it) }
                             val complete = slots.filterNotNull()
                             val after = RootlessAudioProcessorService.convolverGeneration()
@@ -81,7 +85,7 @@ fun rememberConvolverResponse(show: Boolean, grid: DoubleArray): ConvolverRespon
                         ?.let { it.streamFrames == 0 } ?: true
                 if (settled) {
                     response = next
-                    fetched = next?.generation ?: generation
+                    fetched = (next?.generation ?: generation) to activeMode
                 }
             }
             delay(CONVOLVER_POLL_MS)

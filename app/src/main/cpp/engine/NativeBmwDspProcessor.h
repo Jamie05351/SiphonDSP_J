@@ -677,6 +677,10 @@ private:
     bool modeSwitchPending_ = false;  // audio owner only: dipping for a mode switch
     // audioConvolverMode_ as last published by the audio side (status / UI).
     std::atomic<int> activeConvolverMode_{0};
+    bool convolverStagesIdle() const {
+        return convolver_.idle() && bandConvolvers_[0].idle() && bandConvolvers_[1].idle() &&
+               bandConvolvers_[2].idle();
+    }
     float crossoverTarget() const {
         return modeSwitchPending_ ? xoverMix_ : (p_.crossoverBypass ? 1.f : 0.f);
     }
