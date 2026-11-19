@@ -377,11 +377,11 @@ fun LauncherHome(
             val overlayTop = scale.dp(TopMargin) + letterbox
             Box(Modifier.fillMaxSize().onFocusChanged { overlayHasFocus = it.hasFocus }) {
             when (overlay) {
-                is LauncherOverlay.Drawer -> AppDrawer(apps, slots, look, overlay.pickFor, scale.dp(OverlayLeft), overlayTop, overlayBottom, overlayEntry, onOverlayChange, actions)
+                is LauncherOverlay.Drawer -> AppDrawer(apps, slots, look, overlay.pickFor, HomeEdgePadding, overlayTop, overlayBottom, overlayEntry, onOverlayChange, actions)
                 is LauncherOverlay.CarMenu -> CarMenu(
-                    carFunctions, overlay.pickFor, look.wallpaper != null, HomeTile.anyHidden(look.hidden), nowPlayingAllowed, appSwipeAllowed, scale.dp(OverlayLeft), overlayTop, overlayBottom, overlayEntry, onOverlayChange, actions,
+                    carFunctions, overlay.pickFor, look.wallpaper != null, HomeTile.anyHidden(look.hidden), nowPlayingAllowed, appSwipeAllowed, HomeEdgePadding, overlayTop, overlayBottom, overlayEntry, onOverlayChange, actions,
                 )
-                LauncherOverlay.HiddenApps -> HiddenApps(apps, look, scale.dp(OverlayLeft), overlayTop, overlayBottom, overlayEntry, onOverlayChange, actions)
+                LauncherOverlay.HiddenApps -> HiddenApps(apps, look, HomeEdgePadding, overlayTop, overlayBottom, overlayEntry, onOverlayChange, actions)
                 LauncherOverlay.None -> {}
             }
             }
@@ -988,11 +988,9 @@ private fun DrawScope.drawSkip(forward: Boolean) {
 internal const val DesignW = 1280f
 internal const val DesignH = 480f
 private val HomeEdgePadding = 15.dp
-private const val Margin = 15f
 // Clear of the head unit's own top banner (back, recents, screen off...), which draws over apps;
 // the old front page left the same room.
 private const val TopMargin = 48f
-private const val OverlayLeft = Margin
 // The dock uses the full padded width and keeps a 6 dp bottom inset.
 private const val DockScale = 0.7f
 private const val DockInset = 6f
