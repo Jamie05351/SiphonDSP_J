@@ -654,7 +654,11 @@ private fun SessionMuteSection(events: List<SessionMuteLog.Event>, nowMs: Long) 
                     if (e.detail.isNotEmpty()) add(e.detail)
                     e.timing?.let { t ->
                         // Where the unmuted window went: waiting to look, looking, then muting.
-                        add("cb→lookup ${t.callbackToLookupMs?.let { "$it ms" } ?: "?"}")
+                        add("cb→lookup " + when {
+                            t.lookupInFlight -> "0 ms (in flight)"
+                            t.callbackToLookupMs != null -> "${t.callbackToLookupMs} ms"
+                            else -> "?"
+                        })
                         add("${t.path} ${t.lookupMs} ms" + if (t.detail.isNotEmpty()) " (${t.detail})" else "")
                         add("lookup→mute ${t.lookupToMuteMs?.let { "$it ms" } ?: "—"}")
                     }

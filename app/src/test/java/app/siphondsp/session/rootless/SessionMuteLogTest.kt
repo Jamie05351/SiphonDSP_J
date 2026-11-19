@@ -185,4 +185,15 @@ class SessionMuteLogTest {
         assertEquals(120L, SessionMuteLog.snapshot().first().unmutedMs) // timed from B, not A
         assertFalse(SessionMuteLog.hasPendingStart(245))
     }
+
+    @Test fun aLookupAlreadyRunningAtTheStartReadsZeroInFlight() {
+        SessionMuteLog.notePlaybackChange(1_000)
+        SessionMuteLog.beginLookup(SessionMuteLog.Lookup("dump", startedAtMs = 980, endedAtMs = 1_050))
+        SessionMuteLog.record(1_060, 7, "pkg", Kind.NEW, held = 0, trigger = Trigger.DUMP)
+        SessionMuteLog.endLookup()
+        val t = SessionMuteLog.snapshot().first().timing!!
+        assertEquals(0L, t.callbackToLookupMs)
+        assertTrue(t.lookupInFlight)
+        assertEquals(60L, SessionMuteLog.snapshot().first().unmutedMs)
+    }
 }

@@ -97,8 +97,14 @@ object SessionMuteLog {
     /** Where one new session's unmuted window went. */
     data class Timing(
         val path: String,
-        /** Playback-start callback to the lookup starting (waiting on a dump in flight, a main-thread hop); null with no start to time from. */
+        /**
+         * Playback-start callback to the lookup starting (waiting on a dump in flight, a
+         * main-thread hop); null with no start to time from. Never negative: 0 with
+         * [lookupInFlight] when the lookup had already begun before the start.
+         */
         val callbackToLookupMs: Long?,
+        /** The lookup was already running when the player started (a dump in flight caught it). */
+        val lookupInFlight: Boolean = false,
         /** The lookup itself (the dump, or reading the configurations). */
         val lookupMs: Long,
         /** Lookup done to the mute attached (applying it, making the effect); null if none was. */
@@ -204,9 +210,11 @@ object SessionMuteLog {
             detail = detail,
             timing = lookup?.takeIf { timed && kind != Kind.KEPT }?.let { l ->
                 val failed = kind == Kind.FAILED || kind == Kind.ARM_FAILED
+                val sinceStart = if (pendingSinceMs != 0L && !staleStart) l.startedAtMs - pendingSinceMs else null
                 Timing(
                     path = l.path,
-                    callbackToLookupMs = if (pendingSinceMs != 0L && !staleStart) l.startedAtMs - pendingSinceMs else null,
+                    callbackToLookupMs = sinceStart?.coerceAtLeast(0L),
+                    lookupInFlight = sinceStart != null && sinceStart < 0L,
                     lookupMs = l.endedAtMs - l.startedAtMs,
                     lookupToMuteMs = if (failed) null else ((attachedAtMs ?: nowMs) - l.endedAtMs).coerceAtLeast(0L),
                     detail = l.detail,

@@ -281,16 +281,24 @@ abstract class BaseSessionManager(protected val context: Context) : DumpManager.
      * after the start has been applied (its session muted) or [FAST_LOOKUP_WINDOW_MS] has gone.
      * Then back to the normal interval. A start during a burst extends it, and keeps it going
      * until a dump begun after that start too has been applied. A failed dump backs off to
-     * [FAST_LOOKUP_BACKOFF_MS] rather than dumping back to back. Main thread.
+     * [FAST_LOOKUP_BACKOFF_MS] rather than dumping back to back, and after
+     * [FAST_LOOKUP_MAX_FAILED] failures in a row the burst gives up: a start no dump can answer
+     * is left to the normal interval rather than dumped at for the whole window. Main thread.
      */
     private fun startFastLookup(startedAtMs: Long) {
         fastLookupUntilMs = startedAtMs + FAST_LOOKUP_WINDOW_MS
         if (fastLookupJob?.isActive == true) return
         fastLookupJob = pollingScope.launch(start = CoroutineStart.UNDISPATCHED) {
+            var failedInARow = 0
             while (isActive) {
                 val gotDump = pollSessionDump()
+                failedInARow = if (gotDump) 0 else failedInARow + 1
                 val now = SystemClock.elapsedRealtime()
                 if (!SessionMuteLog.hasPendingStart(now) || now >= fastLookupUntilMs) break
+                if (failedInARow >= FAST_LOOKUP_MAX_FAILED) {
+                    Timber.w("Fast lookup: $failedInARow dumps in a row failed; back to the normal interval")
+                    break
+                }
                 delay(if (gotDump) FAST_LOOKUP_INTERVAL_MS else FAST_LOOKUP_BACKOFF_MS)
             }
         }
@@ -389,6 +397,7 @@ abstract class BaseSessionManager(protected val context: Context) : DumpManager.
         const val FAST_LOOKUP_INTERVAL_MS = 10L
         const val FAST_LOOKUP_WINDOW_MS = 1_000L
         const val FAST_LOOKUP_BACKOFF_MS = 100L
+        const val FAST_LOOKUP_MAX_FAILED = 3
         const val PATH_CONFIG = "playback config"
         const val PATH_DUMP = "dump"
         private fun configField(name: String) = runCatching {
