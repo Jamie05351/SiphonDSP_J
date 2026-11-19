@@ -1,6 +1,7 @@
 package app.siphondsp.session.rootless
 
 import android.content.*
+import android.os.SystemClock
 import app.siphondsp.session.rootless.SessionMuteLog.Trigger
 import app.siphondsp.utils.extensions.ContextExtensions.getPackageNameFromUid
 import app.siphondsp.session.dump.DumpManager
@@ -27,11 +28,25 @@ class RootlessSessionManager(context: Context) : BaseSessionManager(context)
     // Taken with the session dump on the worker (dumpOnWorker), applied with it on the main thread.
     @Volatile private var allowlistDump: ISessionPolicyInfoDump? = null
 
+    @Volatile private var allowlistDumpMs: Long? = null
+
     override fun dumpOnWorker(): ISessionInfoDump? {
         val dump = super.dumpOnWorker()
-        allowlistDump = if (dump is ISessionPolicyInfoDump) null else dumpManager.dumpCaptureAllowlistLog()
+        if (dump is ISessionPolicyInfoDump) {
+            allowlistDump = null
+            allowlistDumpMs = null
+        } else {
+            // A second system dump, taken before the first is applied: part of every new
+            // session's unmuted window when the session dump isn't AudioPolicyService's.
+            val t0 = SystemClock.elapsedRealtime()
+            allowlistDump = dumpManager.dumpCaptureAllowlistLog()
+            allowlistDumpMs = SystemClock.elapsedRealtime() - t0
+        }
         return dump
     }
+
+    override fun lookupDetail(): String =
+        super.lookupDetail() + (allowlistDumpMs?.let { " + allowlist $it ms" } ?: "")
 
     /** Only mute a currently identified, capture-eligible player before its dump arrives. */
     override fun onPlayersStarted(players: List<StartedPlayer>) {

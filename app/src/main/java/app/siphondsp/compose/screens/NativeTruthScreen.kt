@@ -584,7 +584,10 @@ private fun StreamStartSection(starts: List<StreamStartLog.Start>, nowMs: Long) 
  * it: held from before, the playback callback, the session-open broadcast, or (slowest) a dump.
  * Per session start: KEPT, the mute was already there; NEW/REPLACED, a mute made only when a dump
  * found it; FAILED, no mute at all. ARMED: a mute attached ahead of any dump. HELD and RELEASED:
- * what happened to a quiet session's mute.
+ * what happened to a quiet session's mute. Each new mute also shows where its window went:
+ * callback to lookup start, the lookup itself (the dump, with each method's time, or reading the
+ * playback configurations), and lookup to mute attached. "Fast lookup" is what reading session
+ * ids straight off the playback callback saw: anonymized ids mean the dump has to do it.
  */
 @Composable
 private fun SessionMuteSection(events: List<SessionMuteLog.Event>, nowMs: Long) {
@@ -596,6 +599,23 @@ private fun SessionMuteSection(events: List<SessionMuteLog.Event>, nowMs: Long) 
                 return@DebugCard
             }
             KeyValueRow("Held for quiet sessions", events.first().held.toString())
+            SessionMuteLog.lastConfigLookup?.let { c ->
+                KeyValueRow(
+                    "Fast lookup (playback config)",
+                    "${c.visible}/${c.started} visible · ${c.micros} µs · ${c.detail} · ${formatAgo(nowMs - c.atMs)}",
+                    if (c.started > 0 && c.visible == c.started) BmwGreen else BmwYellow,
+                )
+            }
+            // Which path attached the newest new session's mute, and how fast.
+            events.firstOrNull { it.timing != null && it.kind != SessionMuteLog.Kind.FAILED && it.kind != SessionMuteLog.Kind.ARM_FAILED }
+                ?.let { e ->
+                    val t = e.timing!!
+                    KeyValueRow(
+                        "Last new session muted via",
+                        "${t.path} · unmuted ${e.unmutedMs?.let { "$it ms" } ?: "? ms"}",
+                        e.unmutedMs?.let(::unmutedColor) ?: BmwYellow,
+                    )
+                }
             val timed = events.mapNotNull { e -> e.unmutedMs?.takeIf { e.isStart } }
             if (timed.isNotEmpty()) {
                 val worst = timed.max()
@@ -632,6 +652,12 @@ private fun SessionMuteSection(events: List<SessionMuteLog.Event>, nowMs: Long) 
                     }
                     e.trigger?.let { add("via ${it.label}") }
                     if (e.detail.isNotEmpty()) add(e.detail)
+                    e.timing?.let { t ->
+                        // Where the unmuted window went: waiting to look, looking, then muting.
+                        add("cb→lookup ${t.callbackToLookupMs?.let { "$it ms" } ?: "?"}")
+                        add("${t.path} ${t.lookupMs} ms" + if (t.detail.isNotEmpty()) " (${t.detail})" else "")
+                        add("lookup→mute ${t.lookupToMuteMs?.let { "$it ms" } ?: "—"}")
+                    }
                     add(formatAgo(nowMs - e.atMs))
                 }
                 KeyValueRow("$label · ${e.sessionId}", parts.joinToString(" · "), color)

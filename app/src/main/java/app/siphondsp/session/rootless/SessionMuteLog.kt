@@ -76,12 +76,50 @@ object SessionMuteLog {
         /** Mutes held for quiet sessions, after this event. */
         val held: Int,
         val detail: String = "",
+        /** For a mute this attached (or failed to): where the time went. */
+        val timing: Timing? = null,
     ) {
         /** A session that started playing (rather than going quiet or being released). */
         val isStart: Boolean get() = kind == Kind.KEPT || kind == Kind.NEW || kind == Kind.REPLACED || kind == Kind.FAILED
     }
 
+    /** A lookup in progress: what found the sessions being applied, and when it ran. */
+    data class Lookup(
+        /** "playback config" (read straight off the callback's configurations) or "dump". */
+        val path: String,
+        val startedAtMs: Long,
+        val endedAtMs: Long,
+        /** e.g. which dump method answered and how long each dump took. */
+        val detail: String = "",
+    )
+
+    /** Where one new session's unmuted window went. */
+    data class Timing(
+        val path: String,
+        /** Playback-start callback to the lookup starting (waiting on a dump in flight, a main-thread hop); null with no start to time from. */
+        val callbackToLookupMs: Long?,
+        /** The lookup itself (the dump, or reading the configurations). */
+        val lookupMs: Long,
+        /** Lookup done to the mute attached (applying it, making the effect); null if none was. */
+        val lookupToMuteMs: Long?,
+        val detail: String,
+    )
+
+    /** What the fast path (reading session ids off the playback callback's configurations) saw last. */
+    data class ConfigLookup(
+        val atMs: Long,
+        /** Players that had just started. */
+        val started: Int,
+        /** Of those, how many had a session id and uid visible to us (not anonymized). */
+        val visible: Int,
+        val micros: Long,
+        val detail: String,
+    )
+
     private val events = ArrayDeque<Event>(EVENTS)
+    private var lookup: Lookup? = null
+    @Volatile var lastConfigLookup: ConfigLookup? = null
+        private set
     private val seen = LinkedHashSet<Int>()
     private var pendingSinceMs = 0L
 
@@ -104,6 +142,20 @@ object SessionMuteLog {
     fun noteDumpApplied(dumpStartedAtMs: Long) {
         if (pendingSinceMs != 0L && pendingSinceMs <= dumpStartedAtMs) pendingSinceMs = 0L
     }
+
+    /** A player start not yet answered by a dump begun after it, as of [nowMs]. */
+    @Synchronized
+    fun hasPendingStart(nowMs: Long): Boolean =
+        pendingSinceMs != 0L && nowMs - pendingSinceMs <= MAX_PENDING_START_AGE_MS
+
+    /** Mutes recorded until [endLookup] were attached by [lookup]. */
+    @Synchronized
+    fun beginLookup(lookup: Lookup) { this.lookup = lookup }
+
+    @Synchronized
+    fun endLookup() { lookup = null }
+
+    fun noteConfigLookup(result: ConfigLookup) { lastConfigLookup = result }
 
     /** Whether [sessionId] has started playing before (since the app was started). */
     @Synchronized
@@ -143,6 +195,16 @@ object SessionMuteLog {
             seenBefore = seenBefore,
             held = held,
             detail = detail,
+            timing = lookup?.takeIf { timed && kind != Kind.KEPT }?.let { l ->
+                val failed = kind == Kind.FAILED || kind == Kind.ARM_FAILED
+                Timing(
+                    path = l.path,
+                    callbackToLookupMs = if (pendingSinceMs != 0L && !staleStart) l.startedAtMs - pendingSinceMs else null,
+                    lookupMs = l.endedAtMs - l.startedAtMs,
+                    lookupToMuteMs = if (failed) null else ((attachedAtMs ?: nowMs) - l.endedAtMs).coerceAtLeast(0L),
+                    detail = l.detail,
+                )
+            },
         )
         if (events.size >= EVENTS) events.removeFirst()
         events.addLast(event)
@@ -162,5 +224,7 @@ object SessionMuteLog {
         events.clear()
         seen.clear()
         pendingSinceMs = 0L
+        lookup = null
+        lastConfigLookup = null
     }
 }

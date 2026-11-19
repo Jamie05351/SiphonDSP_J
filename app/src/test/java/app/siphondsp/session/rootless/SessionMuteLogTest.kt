@@ -136,4 +136,40 @@ class SessionMuteLogTest {
         assertEquals(0L, SessionMuteLog.snapshot().first().unmutedMs)
     }
 
+    @Test fun aNewSessionShowsWhereItsWindowWent() {
+        SessionMuteLog.notePlaybackChange(1_000)
+        assertTrue(SessionMuteLog.hasPendingStart(1_005))
+        SessionMuteLog.beginLookup(SessionMuteLog.Lookup("dump", startedAtMs = 1_002, endedAtMs = 1_070, detail = "AudioPolicyService 68 ms"))
+        SessionMuteLog.record(1_085, 7, "pkg", Kind.NEW, held = 0, trigger = Trigger.DUMP)
+        SessionMuteLog.endLookup()
+        SessionMuteLog.noteDumpApplied(1_002)
+        assertFalse(SessionMuteLog.hasPendingStart(1_090))
+        val e = SessionMuteLog.snapshot().first()
+        assertEquals(85L, e.unmutedMs) // from the callback, not from the dump finding it
+        val t = e.timing!!
+        assertEquals("dump", t.path)
+        assertEquals(2L, t.callbackToLookupMs)
+        assertEquals(68L, t.lookupMs)
+        assertEquals(15L, t.lookupToMuteMs)
+        assertEquals("AudioPolicyService 68 ms", t.detail)
+    }
+
+    @Test fun aKeptMuteAndAnEventOutsideALookupCarryNoTiming() {
+        SessionMuteLog.notePlaybackChange(1_000)
+        SessionMuteLog.record(1_004, 7, "pkg", Kind.ARMED, held = 1, trigger = Trigger.CALLBACK, attachedAtMs = 1_004)
+        SessionMuteLog.beginLookup(SessionMuteLog.Lookup("dump", 1_001, 1_060))
+        SessionMuteLog.record(1_062, 7, "pkg", Kind.KEPT, held = 0, trigger = Trigger.CALLBACK, attachedAtMs = 1_004)
+        SessionMuteLog.endLookup()
+        SessionMuteLog.snapshot().forEach { assertNull(it.timing) }
+    }
+
+    @Test fun aFailedMuteHasNoLookupToMute() {
+        SessionMuteLog.notePlaybackChange(1_000)
+        SessionMuteLog.beginLookup(SessionMuteLog.Lookup("dump", 1_010, 1_090))
+        SessionMuteLog.record(1_095, 7, "pkg", Kind.FAILED, held = 0)
+        SessionMuteLog.endLookup()
+        val t = SessionMuteLog.snapshot().first().timing!!
+        assertEquals(10L, t.callbackToLookupMs)
+        assertNull(t.lookupToMuteMs)
+    }
 }
