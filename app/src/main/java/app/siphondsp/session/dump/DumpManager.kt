@@ -3,6 +3,7 @@ package app.siphondsp.session.dump
 import android.content.Context
 import android.content.SharedPreferences
 import android.os.Build
+import android.os.SystemClock
 import app.siphondsp.BuildConfig
 import app.siphondsp.R
 import app.siphondsp.session.dump.data.ISessionInfoDump
@@ -58,13 +59,41 @@ class DumpManager constructor(val context: Context): KoinComponent {
     @Volatile var lastDumpFoundNothing = false
         private set
 
+    /**
+     * The last [dumpSessions]: each method tried and how long its dump took, e.g.
+     * "AudioPolicyService 48 ms" or "AudioService empty 40 ms, AudioPolicyService 51 ms".
+     */
+    @Volatile var lastDumpReport: String = ""
+        private set
+
+    private fun timed(method: Method, report: MutableList<String>, block: () -> ISessionInfoDump?): ISessionInfoDump? {
+        val t0 = SystemClock.elapsedRealtime()
+        var result: ISessionInfoDump? = null
+        try {
+            result = block()
+            return result
+        } finally {
+            val state = when {
+                result == null -> " failed"
+                result.sessions.isEmpty() -> " empty"
+                else -> ""
+            }
+            report += "${method.name}$state ${SystemClock.elapsedRealtime() - t0} ms"
+        }
+    }
+
     fun dumpSessions(): ISessionInfoDump? {
+        val report = mutableListOf<String>()
+        try { return dumpSessionsTimed(report) } finally { lastDumpReport = report.joinToString(", ") }
+    }
+
+    private fun dumpSessionsTimed(report: MutableList<String>): ISessionInfoDump? {
         val preferred = availableDumpMethods[activeDumpMethod]
         var dump: ISessionInfoDump? = null
         var sawEmpty = false
         lastDumpFoundNothing = false
         try {
-            dump = preferred?.dump(context)
+            dump = timed(activeDumpMethod, report) { preferred?.dump(context) }
             sawEmpty = dump != null && dump.sessions.isEmpty()
         } catch (ex: Exception) {
             Timber.e("Exception raised while dumping session info using method ${activeDumpMethod.name} (id ${activeDumpMethod})")
@@ -82,7 +111,7 @@ class DumpManager constructor(val context: Context): KoinComponent {
                 if(it.key != activeDumpMethod)
                 {
                     try {
-                        dump = it.value.dump(context)
+                        dump = timed(it.key, report) { it.value.dump(context) }
                         if (dump?.sessions?.isEmpty() == true) sawEmpty = true
                     } catch (ex: Exception) {
                         Timber.e("Exception raised while dumping session info using fallback method ${it.key.name} (id ${it.key})")
