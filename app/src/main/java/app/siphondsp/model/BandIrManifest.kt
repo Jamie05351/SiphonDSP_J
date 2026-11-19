@@ -15,6 +15,22 @@ data class BandIrManifest(
         kotlin.math.abs(lowMid - lowMidHz) <= 1.0 && kotlin.math.abs(midHigh - midHighHz) <= 1.0
 
     companion object {
+        /**
+         * The app's band corners per side, as (Low/Mid, Mid/High) pairs: one from the Low and
+         * Mid upper outputs, one from the Mid and High outputs. Mid/High is the Mid upper
+         * lowpass when it's on, otherwise the High highpass -- the only corner there is then.
+         */
+        fun appCorners(value: (Int) -> Float): List<Pair<Float, Float>> = (0..1).flatMap { side ->
+            val mid = NativeBmwDspValues.OUTPUT_MID_LEFT + side
+            val highHp = value(NativeBmwDspValues.highOutputIndex(NativeBmwDspValues.OUTPUT_HIGH_LEFT + side, NativeBmwDspValues.FIELD_CROSSOVER_FREQ))
+            val midHigh = if (value(NativeBmwDspValues.midUpperXoIndex(mid, NativeBmwDspValues.MID_UPPER_XO_FIELD_ENABLED)) >= .5f)
+                value(NativeBmwDspValues.midUpperXoIndex(mid, NativeBmwDspValues.MID_UPPER_XO_FIELD_FREQ)) else highHp
+            listOf(
+                value(NativeBmwDspValues.outputIndex(NativeBmwDspValues.OUTPUT_LOW_LEFT + side, NativeBmwDspValues.FIELD_CROSSOVER_FREQ)) to midHigh,
+                value(NativeBmwDspValues.outputIndex(mid, NativeBmwDspValues.FIELD_CROSSOVER_FREQ)) to highHp,
+            )
+        }
+
         fun parse(text: String): BandIrManifest {
             require(text.length <= 131072) { "Manifest is too large" }
             val json = JSONObject(text)

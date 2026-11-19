@@ -492,6 +492,7 @@ class DspEngine(val context: Context) : AutoCloseable {
     fun setConvolverMode(mode: Int): String? =
         withSharedHandle<String?>("DSP engine unavailable") { NativeDsp.setConvolverMode(it, mode) }
     fun convolverMode(): Int? = withSharedHandle<Int?>(null) { NativeDsp.getConvolverMode(it) }
+    fun activeConvolverMode(): Int? = withSharedHandle<Int?>(null) { NativeDsp.getActiveConvolverMode(it) }
 
 
     /** What the convolver is running; null with no native handle. */

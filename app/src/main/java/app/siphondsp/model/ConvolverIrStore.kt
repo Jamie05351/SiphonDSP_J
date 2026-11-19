@@ -47,6 +47,33 @@ object ConvolverIrStore {
     fun saveGain(context: Context, mode: Int, gain: Float): Boolean =
         gain.isFinite() && settings(context).edit().putFloat("gain_$mode", gain).commit()
     fun allBandsStored(context: Context): Boolean = (0..2).all { hasIr(context, it) }
+
+    /**
+     * Runs [block] with the stored files held still: an import (which swaps the whole band
+     * folder) can't run meanwhile. A reader that checks for a file and then loads it holds this
+     * across both, or it can find a slot missing mid-swap.
+     */
+    fun <T> withFilesLocked(block: () -> T): T = synchronized(lock, block)
+
+    /**
+     * Changes whenever what a full reload would load changes: the selected mode and every
+     * slot's file (size and modification time).
+     */
+    fun fingerprint(context: Context): String = synchronized(lock) {
+        buildString {
+            append(mode(context))
+            for (band in SLOT_STEREO..2) {
+                val file = irFile(context, band)
+                append('|')
+                if (file.isFile) append(file.length()).append(':').append(file.lastModified())
+            }
+        }
+    }
+
+    /** Forgets the mode and both trims, in memory and on disk (a clean restore of a backup without them). */
+    fun resetModePreferences(context: Context) {
+        check(settings(context).edit().clear().commit()) { "Could not reset convolution mode preferences" }
+    }
     private fun directory(context: Context, band: Int = SLOT_STEREO): File {
         require(band in SLOT_STEREO..2)
         val base = File(context.filesDir, DIRECTORY)

@@ -33,8 +33,9 @@ class ConvolverResponse(
             require(responses.size == 3)
             val first = responses.first()
             require(responses.all { it.matches(first.frequencies) && it.sampleRate == first.sampleRate })
+            // The set's peak is its loudest IR's: native caps all three bands by that one amount.
             return ConvolverResponse(first.generation, first.frequencies, first.re, first.im,
-                first.peakGainDb, first.latencyFrames, first.sampleRate, responses)
+                responses.maxOf { it.peakGainDb }, first.latencyFrames, first.sampleRate, responses)
         }
 
         /**

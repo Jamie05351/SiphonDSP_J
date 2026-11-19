@@ -62,7 +62,7 @@ fun rememberConvolverResponse(show: Boolean, grid: DoubleArray): ConvolverRespon
                     null
                 } else {
                     withContext(Dispatchers.IO) {
-                        if (RootlessAudioProcessorService.convolverMode() == 1) {
+                        if (RootlessAudioProcessorService.activeConvolverMode() == 1) {
                             val slots = (0..2).map { RootlessAudioProcessorService.convolverResponse(grid, it) }
                             val complete = slots.filterNotNull()
                             val after = RootlessAudioProcessorService.convolverGeneration()

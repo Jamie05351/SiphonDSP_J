@@ -124,6 +124,8 @@ object NativeDsp {
     external fun getBandConvolverError(self: NativeDspHandle, band: Int): String?
     external fun setConvolverMode(self: NativeDspHandle, mode: Int): String?
     external fun getConvolverMode(self: NativeDspHandle): Int
+    /** The mode the audio runs: stereo while per-band is selected but the crossovers are bypassed. */
+    external fun getActiveConvolverMode(self: NativeDspHandle): Int
 
     // CONVOLVER_COUNT doubles indexed by CONVOLVER_*; null for a gone handle.
     external fun getConvolverInfo(self: NativeDspHandle): DoubleArray?

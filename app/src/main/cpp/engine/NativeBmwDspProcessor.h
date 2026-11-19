@@ -301,6 +301,9 @@ public:
     ConvolverInfo bandConvolverInfo(int band);
     bool setConvolverMode(int mode, std::string& error);
     int convolverMode() const { return requestedConvolverMode_.load(std::memory_order_acquire); }
+    // The mode the audio actually runs: 0 while per-band is requested but the crossovers are
+    // bypassed (or until a requested switch completes).
+    int activeConvolverMode() const { return activeConvolverMode_.load(std::memory_order_acquire); }
     bool bandConvolverKernelActive(int band) const {
         return band >= 0 && band < 3 && bandConvolvers_[band].kernelActive();
     }
@@ -671,6 +674,12 @@ private:
     std::array<std::shared_ptr<const NativeBmwDsp::ConvolverIr>, 3> bandConvolverStreamIrs_;
     std::atomic<int> requestedConvolverMode_{0};
     int audioConvolverMode_ = 0;  // audio owner only
+    bool modeSwitchPending_ = false;  // audio owner only: dipping for a mode switch
+    // audioConvolverMode_ as last published by the audio side (status / UI).
+    std::atomic<int> activeConvolverMode_{0};
+    float crossoverTarget() const {
+        return modeSwitchPending_ ? xoverMix_ : (p_.crossoverBypass ? 1.f : 0.f);
+    }
     float convolverModeGain_ = 1.f;
     std::mutex convolverMutex_;
     NativeBmwDsp::ConvolverIr convolverSource_;

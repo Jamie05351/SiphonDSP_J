@@ -24,9 +24,10 @@ The designer exports a common IR delay. Its default 8192-frame delay plus the
 processing time. Check video/phone/navigation usability on the actual unit.
 
 Crossovers bypassed means their software branches, including band FIRs, are bypassed.
-The page rejects selecting band mode while crossovers are bypassed and warns if that
-setting changes later. Use stereo mode if full-range convolution with no band split
-is required.
+Per-band mode can stay selected meanwhile: the engine runs the stereo slot's IR (or no
+convolution, if that slot is empty) and the page reports per-band as paused. Turning the
+crossovers back on resumes per-band. Each change dips the output briefly to silence so
+paths with different latency are never mixed.
 
 ## Measurements and Windows program
 
@@ -54,9 +55,9 @@ measurements: direct `.mdat` decoding is not supported. It produces `low.wav`,
 `mid.wav`, `high.wav` and a versioned ZIP package with configuration/report metadata.
 Load the ZIP on the convolver page, inspect the three slots, then select Per-band.
 Individual mono/stereo WAV loading remains available. Set band-mode gain to 0 dB
-to reproduce the designer prediction. Band-mode trim is attenuation-only, so a
-positive shared trim cannot independently hit different IR peak caps and change
-the relative band gains.
+to reproduce the designer prediction. Band-mode trim is attenuation-only, and the
+three IRs share one unity cap (the loudest IR's peak), so an IR that boosts lowers all
+three bands together instead of only its own, and the relative band gains are kept.
 
 The designer fits both seats with explicit weights, bounded correction and
 regularization. It reports predicted improvement and deterioration per position,

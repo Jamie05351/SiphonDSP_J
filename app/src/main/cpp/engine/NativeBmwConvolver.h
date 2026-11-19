@@ -162,6 +162,17 @@ public:
     // phase-only change raises; the cap keeps the IR from eating into the limiter's headroom (or
     // driving it hard) through magnitude boost.
     void process(float* left, float* right, std::size_t frames, bool enabled, float gainDb);
+    // Audio thread: takes a kernel the control side published, when no swap is in progress.
+    // process() does this itself; calling it first lets a caller read kernelCap() for the
+    // kernel the coming chunk will actually run.
+    void takePending();
+    // Audio thread: the unity cap (linear) of the kernels this stage may play now (the active
+    // one and, through a swap, the previous one); +inf with none.
+    double kernelCap() const;
+    // Audio thread: a cap shared with sibling stages (> 0), replacing this stage's own -peak cap,
+    // so several stages that sum together are brought down by one common amount and keep
+    // their relative levels. 0 restores the stage's own cap.
+    void setSharedCap(double cap) { sharedCap_ = cap; }
     // Sample-rate dependent ramp constants.
     void setSampleRate(float sampleRate);
     // Snap the gain to its target, and the path to the one the setting asks for when that needs
@@ -197,6 +208,7 @@ private:
     double swapMix_ = 0.0;      // weight of previous_ during a kernel swap, 1 -> 0
     std::size_t swapHold_ = 0;  // frames previous_ stays alone: the new kernel's first block
     double gain_ = 1.0;         // linear IR gain, one-pole toward the setting
+    double sharedCap_ = 0.0;    // see setSharedCap(); 0 = each kernel's own cap
     double fadeStep_ = 1.0 / (0.02 * 48000.0);
     double dipStep_ = 1.0 / (0.005 * 48000.0);
     double gainCoef_ = 0.0020811617;  // 1 - exp(-1 / (10 ms * 48 kHz))

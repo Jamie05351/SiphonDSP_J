@@ -739,6 +739,11 @@ Java_app_siphondsp_interop_NativeDsp_getConvolverMode(JNIEnv*, jobject, jlong se
     return self ? fromHandle(self)->processor.convolverMode() : 0;
 }
 
+extern "C" JNIEXPORT jint JNICALL
+Java_app_siphondsp_interop_NativeDsp_getActiveConvolverMode(JNIEnv*, jobject, jlong self) {
+    return self ? fromHandle(self)->processor.activeConvolverMode() : 0;
+}
+
 extern "C" JNIEXPORT jdoubleArray JNICALL
 Java_app_siphondsp_interop_NativeDsp_getBandConvolverInfo(JNIEnv* env, jobject, jlong self, jint band) {
     if (!self || band < 0 || band >= 3) return nullptr;

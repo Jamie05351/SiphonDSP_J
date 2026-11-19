@@ -103,3 +103,67 @@ TEST_CASE("resuming crossovers discards audio buffered in band FIRs") {
     float peak=0; for(float x:silence)peak=std::max(peak,std::fabs(x));
     CHECK(peak<1e-7f);
 }
+
+TEST_CASE("crossover bypass in band mode runs the stereo IR and resumes per-band with the split") {
+    NativeBmwDspProcessor bands, stereo; std::string error;
+    auto c=defaultConfig(); c[nbschema::kConvolverEnabled]=1; c[nbschema::kCrossoverBypass]=1;
+    bands.configure(c.data(),c.size()); stereo.configure(c.data(),c.size());
+    for(int b=0;b<3;++b) REQUIRE(bands.loadBandConvolverIr(b,bandDelta(),error));
+    REQUIRE(bands.loadConvolverIr(bandDelta(.5,.5),error));
+    REQUIRE(stereo.loadConvolverIr(bandDelta(.5,.5),error));
+    // Per-band stays selected while bypassed; the audio runs the stereo slot.
+    REQUIRE(bands.setConvolverMode(1,error));
+    warm(bands); warm(stereo);
+    CHECK(bands.convolverMode()==1);
+    CHECK(bands.activeConvolverMode()==0);
+    auto x=stereoSine(1000,.01,6000),y=x;
+    bands.process(x.data(),x.size()); stereo.process(y.data(),y.size());
+    double maxError=0; float peak=0;
+    for(std::size_t i=0;i<x.size();++i){maxError=std::max(maxError,std::fabs(double(x[i]-y[i])));peak=std::max(peak,std::fabs(x[i]));}
+    CHECK(maxError<1e-7);
+    CHECK(peak>1e-3f);  // corrected, not silent
+    c[nbschema::kCrossoverBypass]=0; bands.configure(c.data(),c.size()); warm(bands);
+    CHECK(bands.activeConvolverMode()==1);
+}
+
+TEST_CASE("band IRs share one unity cap so their relative levels survive") {
+    NativeBmwDspProcessor corrected; std::string error;
+    auto c=defaultConfig(); c[nbschema::kConvolverEnabled]=1;
+    corrected.configure(c.data(),c.size());
+    // Low boosts +6 dB; Mid and High are flat. A per-band cap would flatten Low back to unity;
+    // the shared cap brings all three down 6 dB together.
+    REQUIRE(corrected.loadBandConvolverIr(0,bandDelta(2,2),error));
+    REQUIRE(corrected.loadBandConvolverIr(1,bandDelta(1,1),error));
+    REQUIRE(corrected.loadBandConvolverIr(2,bandDelta(1,1),error));
+    REQUIRE(corrected.setConvolverMode(1,error));
+    warm(corrected);
+    // Reference: the same IR shapes already at 0 dB peak (Low at unity, Mid/High at half), which
+    // no cap touches -- exactly what the shared cap should make of the set above.
+    NativeBmwDspProcessor half; half.configure(c.data(),c.size());
+    REQUIRE(half.loadBandConvolverIr(0,bandDelta(1,1),error));
+    REQUIRE(half.loadBandConvolverIr(1,bandDelta(.5,.5),error));
+    REQUIRE(half.loadBandConvolverIr(2,bandDelta(.5,.5),error));
+    REQUIRE(half.setConvolverMode(1,error));
+    warm(half);
+    auto x=stereoSine(1000,.01,6000),y=x;
+    corrected.process(x.data(),x.size()); half.process(y.data(),y.size());
+    double maxError=0;
+    for(std::size_t i=0;i<x.size();++i) maxError=std::max(maxError,std::fabs(double(x[i]-y[i])));
+    CHECK(maxError<1e-7);
+}
+
+TEST_CASE("switching mode with the convolver off neither mutes nor resets the chain") {
+    NativeBmwDspProcessor switched, steady; std::string error;
+    auto c=defaultConfig();
+    switched.configure(c.data(),c.size()); steady.configure(c.data(),c.size());
+    for(int b=0;b<3;++b) REQUIRE(switched.loadBandConvolverIr(b,bandDelta(),error));
+    warm(switched); warm(steady);
+    auto x=stereoSine(1000,.01,6000),y=x;
+    switched.process(x.data(),2000);  steady.process(y.data(),2000);
+    REQUIRE(switched.setConvolverMode(1,error));
+    switched.process(x.data()+2000,x.size()-2000); steady.process(y.data()+2000,y.size()-2000);
+    CHECK(switched.activeConvolverMode()==1);
+    double maxError=0;
+    for(std::size_t i=0;i<x.size();++i) maxError=std::max(maxError,std::fabs(double(x[i]-y[i])));
+    CHECK(maxError<1e-7);
+}

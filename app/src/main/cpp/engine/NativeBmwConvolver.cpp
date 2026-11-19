@@ -501,8 +501,7 @@ void ConvolverStage::snap(bool enabled, float gainDb) {
     swapHold_ = 0;
 }
 
-void ConvolverStage::process(float* left, float* right, std::size_t frames, bool enabled,
-                             float gainDb) {
+void ConvolverStage::takePending() {
     constexpr std::size_t L = kConvolverLatencyFrames;
     // A new kernel (or an unload) is taken when no swap is in progress.
     if (swapMix_ <= 0.0 && swapHold_ == 0) {
@@ -529,6 +528,19 @@ void ConvolverStage::process(float* left, float* right, std::size_t frames, bool
             // the next swap.
         }
     }
+}
+
+double ConvolverStage::kernelCap() const {
+    double cap = std::numeric_limits<double>::infinity();
+    if (active_) cap = std::min(cap, active_->maxGain());
+    if (previous_ && swapMix_ > 0.0) cap = std::min(cap, previous_->maxGain());
+    return cap;
+}
+
+void ConvolverStage::process(float* left, float* right, std::size_t frames, bool enabled,
+                             float gainDb) {
+    constexpr std::size_t L = kConvolverLatencyFrames;
+    takePending();
     const double targetGain = std::pow(10.0, static_cast<double>(gainDb) / 20.0);
     const bool wantConvolved = enabled && active_ != nullptr;
     // Direct and staying direct at full level: a true bypass, the chain's samples untouched.
@@ -578,10 +590,10 @@ void ConvolverStage::process(float* left, float* right, std::size_t frames, bool
         for (int c = 0; c < 2; ++c) {
             double y = dry_[c][i];
             if (path_ == Path::Convolved) {
-                const double cur = active_ ? std::min(gain_, active_->maxGain()) * wet_[c][i] : 0.0;
+                const double cur = active_ ? std::min(gain_, sharedCap_ > 0.0 ? sharedCap_ : active_->maxGain()) * wet_[c][i] : 0.0;
                 y = cur;
                 if (swapMix_ > 0.0) {
-                    const double prev = previous_ ? std::min(gain_, previous_->maxGain()) * old_[c][i] : 0.0;
+                    const double prev = previous_ ? std::min(gain_, sharedCap_ > 0.0 ? sharedCap_ : previous_->maxGain()) * old_[c][i] : 0.0;
                     y = swapMix_ * prev + (1.0 - swapMix_) * cur;
                 }
             }

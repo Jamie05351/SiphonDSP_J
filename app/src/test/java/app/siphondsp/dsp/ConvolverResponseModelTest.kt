@@ -37,6 +37,16 @@ class ConvolverResponseModelTest {
 
     private fun w(f: Double) = 2.0 * PI * f / SAMPLE_RATE
 
+    @Test fun bandSetCarriesTheLoudestIrsPeakAsTheSharedCap() {
+        val freqs = grid()
+        val set = ConvolverResponse.bandSet(listOf(
+            response(freqs, 2.0, 2.0, 6.0), response(freqs, 1.0, 1.0, 0.0), response(freqs, 1.0, 1.0, -3.0),
+        ))
+        assertEquals(6.0, set.peakGainDb, 0.0)
+        // Every band is brought down by the same amount: the loudest IR's peak.
+        assertEquals(-6.0, ConvolverResponse.appliedGainDb(0.0, set.peakGainDb), 0.0)
+    }
+
     private fun values(enabled: Boolean, trimDb: Float): FloatArray = NativeBmwDspValues.DEFAULTS.copyOf().also {
         it[NativeBmwDspValues.INDEX_CONVOLVER_ENABLED] = if (enabled) 1f else 0f
         it[NativeBmwDspValues.INDEX_CONVOLVER_GAIN] = trimDb

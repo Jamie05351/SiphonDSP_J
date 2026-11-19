@@ -9,6 +9,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import org.junit.runner.RunWith
+import app.siphondsp.model.ConvolverIrStore
 import org.kamranzafar.jtar.TarEntry
 import org.kamranzafar.jtar.TarOutputStream
 import org.robolectric.RobolectricTestRunner
@@ -64,5 +65,22 @@ class ConvolverBackupRestoreTest {
         restore(dirty = true)
         assertEquals("later stereo", stereo.readText())
         assertEquals("later band", band.readText())
+    }
+
+    @Test fun cleanRestoreOfBackupWithoutModeFileResetsCachedModeAndTrims() {
+        currentIrs()
+        // Load the prefs into Android's in-memory cache first, as a running app has them.
+        assertTrue(ConvolverIrStore.setMode(context, ConvolverIrStore.MODE_BANDS))
+        assertTrue(ConvolverIrStore.saveGain(context, ConvolverIrStore.MODE_BANDS, -4f))
+        restore(dirty = false)
+        assertEquals(ConvolverIrStore.MODE_STEREO, ConvolverIrStore.mode(context))
+        assertEquals(1.5f, ConvolverIrStore.savedGain(context, ConvolverIrStore.MODE_BANDS, 1.5f))
+    }
+
+    @Test fun dirtyRestoreOfBackupWithoutModeFileKeepsCurrentMode() {
+        currentIrs()
+        assertTrue(ConvolverIrStore.setMode(context, ConvolverIrStore.MODE_BANDS))
+        restore(dirty = true)
+        assertEquals(ConvolverIrStore.MODE_BANDS, ConvolverIrStore.mode(context))
     }
 }

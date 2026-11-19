@@ -73,10 +73,10 @@ class Options:
             raise ValueError("Regularization must be 0.0001..10")
         if not -30 <= self.bass_db <= 30 or not -30 <= self.treble_db <= 30:
             raise ValueError("Target bass/treble offsets must be within +/-30 dB")
-        if not -120 <= self.target_db <= 160 or abs(self.target_arrival_ms) > 1000:
-            raise ValueError("Target level must be -120..160 dB and arrival within +/-1000 ms")
-        if not -200 <= self.target_db <= 200:
-            raise ValueError("Target level must be within -200..200 dB")
+        if not -120 <= self.target_db <= 160:
+            raise ValueError("Target level must be -120..160 dB")
+        if abs(self.target_arrival_ms) > 1000:
+            raise ValueError("Target arrival must be within +/-1000 ms")
         if self.driver_weight <= 0 or self.passenger_weight <= 0:
             raise ValueError("Both seat weights must be positive")
 

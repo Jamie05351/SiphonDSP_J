@@ -336,6 +336,16 @@ void NativeBmwDspProcessor::processBandStages(std::size_t frames) {
     profiler_.lap(P::DelayGain);
     // All three correction FIRs have the same partition latency. Even silent bands consume
     // their kernel handoff and zero input, so re-enabling one cannot resurrect stale history.
+    // One unity cap for the set (the loudest IR's): capping each band at its own peak would
+    // shift the Low/Mid/High balance the correction was designed around.
+    double bandCap = std::numeric_limits<double>::infinity();
+    for (auto& stage : bandConvolvers_) {
+        stage.takePending();
+        bandCap = std::min(bandCap, stage.kernelCap());
+    }
+    for (auto& stage : bandConvolvers_) {
+        stage.setSharedCap(std::isfinite(bandCap) ? bandCap : 0.0);
+    }
     for (Band band : kBands) {
         float *xl, *xr;
         lanes(band, xl, xr);
@@ -404,7 +414,7 @@ void NativeBmwDspProcessor::processOutputStages(std::size_t frames, bool bandsRu
     // OutputRuntime::outputGain, so per-output polarity/mute always
     // apply), or the full-range path (crossover bypass), crossfaded between
     // the two over kCrossoverFadeSeconds.
-    const float xoverTarget = p_.crossoverBypass ? 1.f : 0.f;
+    const float xoverTarget = crossoverTarget();
     for (std::size_t i = 0; i < frames; ++i) {
         float oL = chunkFullL_[i], oR = chunkFullR_[i];
         if (bandsRun) {
@@ -509,11 +519,26 @@ void NativeBmwDspProcessor::processBackStages(std::size_t frames) {
 
 void NativeBmwDspProcessor::processChunk(float* w, std::size_t frames) {
     // Change architecture only at silence. No old/new paths with different latency are mixed.
+    // Per-band correction runs inside the band split, so with the crossovers bypassed it has
+    // nowhere to run: the full-range stereo slot takes over meanwhile (or nothing, if it has no
+    // IR), and per-band comes back with the split.
     const int requestedMode = requestedConvolverMode_.load(std::memory_order_acquire);
-    if (requestedMode != audioConvolverMode_ && convolverModeGain_ <= 0.f) {
-        audioConvolverMode_ = requestedMode;
-        clearChainState();
+    const int targetMode = requestedMode == 1 && p_.crossoverBypass ? 0 : requestedMode;
+    if (targetMode != audioConvolverMode_) {
+        if (!p_.convolverEnabled) {
+            // Neither path convolves: both are a true bypass, so there's nothing to fade out or
+            // clear. A stage enabled later starts from a clean history through its own fade.
+            audioConvolverMode_ = targetMode;
+        } else if (convolverModeGain_ <= 0.f) {
+            audioConvolverMode_ = targetMode;
+            clearChainState();
+        }
+        activeConvolverMode_.store(audioConvolverMode_, std::memory_order_release);
     }
+    // While the output dips for a mode switch, the crossover crossfade holds where it is: it
+    // would otherwise mix the band sum (one FIR partition late) with the undelayed full range.
+    // The switch's clearChainState() lands it on its setting.
+    modeSwitchPending_ = targetMode != audioConvolverMode_;
 
     using P = NativeBmwDsp::StageProfiler;
     profiler_.startChunk();
@@ -536,7 +561,7 @@ void NativeBmwDspProcessor::processChunk(float* w, std::size_t frames) {
     // kCrossoverFadeSeconds. Fully bypassed, the bands don't run at all: the output is the input
     // stages' stereo signal itself, with no filter, delay or latency of any kind. They
     // start clean when the split comes back.
-    const float xoverTarget = p_.crossoverBypass ? 1.f : 0.f;
+    const float xoverTarget = crossoverTarget();
     const bool bandsRun = xoverMix_ < 1.f || xoverTarget < 1.f;
     if (bandsRun) {
         if (xoverMix_ == 1.f) {
@@ -588,7 +613,7 @@ void NativeBmwDspProcessor::processChunk(float* w, std::size_t frames) {
             } else if (fadeGain_ < 1.f) {
                 fadeGain_ = std::min(1.f, fadeGain_ + fadeInStep_);
             }
-            if (requestedMode != audioConvolverMode_) {
+            if (modeSwitchPending_) {
                 convolverModeGain_ = std::max(0.f, convolverModeGain_ - 1.f / (0.005f * sampleRate_));
             } else {
                 convolverModeGain_ = std::min(1.f, convolverModeGain_ + 1.f / (0.05f * sampleRate_));
@@ -934,7 +959,7 @@ void NativeBmwDspProcessor::readEngineStatus(float* v, std::size_t n) const {
     if (count > 1) {
         // The convolver counts only while a kernel is installed on the audio side.
         auto mask = static_cast<std::uint32_t>(v[1]);
-        const bool loaded = convolverMode() == 1
+        const bool loaded = activeConvolverMode() == 1
             ? bandConvolvers_[0].kernelActive() && bandConvolvers_[1].kernelActive() && bandConvolvers_[2].kernelActive()
             : convolver_.kernelActive();
         if (!loaded) {

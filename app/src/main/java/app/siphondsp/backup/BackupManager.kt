@@ -191,6 +191,10 @@ class BackupManager(private val context: Context): KoinComponent {
 
             if (File(targetFolder, "shared_prefs/convolver_modes.xml").isFile) {
                 ConvolverIrStore.refreshModePreferencesAfterRestore(context)
+            } else if (!dirty) {
+                // The XML was deleted on disk above, but Android's cached copy still holds the old
+                // mode and trims and would write them back: clear them through the editor too.
+                ConvolverIrStore.resetModePreferences(context)
             }
             targetFolder.deleteRecursively()
 

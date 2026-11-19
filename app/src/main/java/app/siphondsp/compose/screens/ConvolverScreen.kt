@@ -46,6 +46,7 @@ import app.siphondsp.compose.state.BmwDspState
 import app.siphondsp.compose.state.rememberBmwDspState
 import app.siphondsp.compose.theme.BmwDspTheme
 import app.siphondsp.interop.ConvolverStatus
+import app.siphondsp.model.BandIrManifest
 import app.siphondsp.model.ConvolverIrStore
 import app.siphondsp.model.NativeBmwDspValues
 import app.siphondsp.service.RootlessAudioProcessorService
@@ -84,6 +85,8 @@ private class ConvolverIrUiState(private val context: Context) {
     var slot by mutableStateOf(-1)
     var mode by mutableStateOf(ConvolverIrStore.mode(context))
     var runningMode by mutableStateOf<Int?>(null)
+    var activeMode by mutableStateOf<Int?>(null)
+    var loadError by mutableStateOf<String?>(null)
     var name by mutableStateOf<String?>(null)
     var status by mutableStateOf<ConvolverStatus?>(null)
     var message by mutableStateOf<String?>(null)
@@ -98,6 +101,8 @@ private class ConvolverIrUiState(private val context: Context) {
         name = ConvolverIrStore.displayName(context, selectedSlot)
         status = RootlessAudioProcessorService.convolverStatus(selectedSlot)
         runningMode = RootlessAudioProcessorService.convolverMode()
+        activeMode = RootlessAudioProcessorService.activeConvolverMode()
+        loadError = RootlessAudioProcessorService.convolverLoadError()
         mode = ConvolverIrStore.mode(context)
         serviceRunning = runningMode != null
         allBandsStored = ConvolverIrStore.allBandsStored(context)
@@ -117,17 +122,8 @@ private class ConvolverIrUiState(private val context: Context) {
     }
 
     suspend fun importPackage(uri: android.net.Uri, dsp: BmwDspState, allowMismatch: Boolean = false) = runAction {
-        // Use the actual per-output corners, not the retired legacy Low/Mid indices.
-        val corners = (0..1).flatMap { side ->
-            val mid = NativeBmwDspValues.OUTPUT_MID_LEFT + side
-            val upper = if (dsp.isOn(NativeBmwDspValues.midUpperXoIndex(mid, NativeBmwDspValues.MID_UPPER_XO_FIELD_ENABLED)))
-                dsp.get(NativeBmwDspValues.midUpperXoIndex(mid, NativeBmwDspValues.MID_UPPER_XO_FIELD_FREQ)) else Float.NaN
-            listOf(
-                dsp.get(NativeBmwDspValues.outputIndex(side, NativeBmwDspValues.FIELD_CROSSOVER_FREQ)) to upper,
-                dsp.get(NativeBmwDspValues.outputIndex(mid, NativeBmwDspValues.FIELD_CROSSOVER_FREQ)) to
-                    dsp.get(NativeBmwDspValues.highOutputIndex(NativeBmwDspValues.OUTPUT_HIGH_LEFT + side, NativeBmwDspValues.FIELD_CROSSOVER_FREQ)),
-            )
-        }
+        // The actual per-output corners, not the retired legacy Low/Mid indices.
+        val corners = BandIrManifest.appCorners(dsp::get)
         val result = ConvolverIrStore.importBandPackage(
             context, uri, corners.first().first, corners.first().second, allowMismatch, corners,
         )
@@ -155,9 +151,6 @@ private class ConvolverIrUiState(private val context: Context) {
         val currentGain = dsp.get(NativeBmwDspValues.INDEX_CONVOLVER_GAIN)
         var targetGain = currentGain
         runAction {
-            if (target == ConvolverIrStore.MODE_BANDS && dsp.isOn(NativeBmwDspValues.INDEX_CROSSOVER_BYPASS)) {
-                return@runAction "Enable the existing crossovers before selecting per-band convolution"
-            }
             if (target == ConvolverIrStore.MODE_BANDS && !ConvolverIrStore.allBandsStored(context)) {
                 return@runAction "Load Low, Mid and High IRs before selecting per-band mode"
             }
@@ -243,14 +236,20 @@ private fun ConvolverGroup(dsp: BmwDspState, ir: ConvolverIrUiState, row: Convol
         enabled = !ir.busy, modifier = row(104, 48), labelWidth = 110.dp,
     )
     InfoLine(if (ir.mode == 0) "Stereo IR after the band sum" else "Low / Mid / High IRs before the band sum", row(164, 28))
-    InfoLine(if (dsp.isOn(NativeBmwDspValues.INDEX_CROSSOVER_BYPASS)) "Crossovers bypassed: band FIRs cannot run" else "Existing crossover settings are retained", row(196, 28))
+    val bypassed = dsp.isOn(NativeBmwDspValues.INDEX_CROSSOVER_BYPASS)
+    InfoLine(when {
+        bypassed && ir.mode == 1 -> "Crossovers bypassed: the stereo IR runs until they're back"
+        bypassed -> "Crossovers bypassed: band FIRs cannot run"
+        else -> "Existing crossover settings are retained"
+    }, row(196, 28))
     InfoLine(if (ir.mode == 0) "Stereo and band files are stored separately" else "All three bands switch together; no extra crossovers", row(228, 28))
-    val error = ir.message ?: RootlessAudioProcessorService.convolverLoadError()
+    val error = ir.message ?: ir.loadError
     when {
         error != null -> InfoLine(error, row(268, 56), color = ErrorColor)
         ir.serviceRunning && ir.runningMode != ir.mode -> InfoLine("Requested mode is not active — check the loaded IRs", row(268, 56), ErrorColor)
         !ir.serviceRunning -> InfoLine("Saved; loads when the DSP engine starts", row(268, 28))
-        else -> InfoLine("Active: ${if (ir.runningMode == 1) "per-band" else "stereo"} convolution", row(268, 28), Color.White)
+        ir.runningMode == 1 && ir.activeMode == 0 -> InfoLine("Per-band paused while the crossovers are bypassed", row(268, 28), Color.White)
+        else -> InfoLine("Active: ${if (ir.activeMode == 1) "per-band" else "stereo"} convolution", row(268, 28), Color.White)
     }
 }
 

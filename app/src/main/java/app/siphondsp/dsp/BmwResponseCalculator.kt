@@ -413,6 +413,7 @@ class BmwResponseCalculator(private val pointCount: Int = 192) {
             values[NativeBmwDspValues.INDEX_CONVOLVER_ENABLED] >= .5f && it.matches(frequencies)
         }
         val bandIr = selected?.bands
+        val bandPeakDb = bandIr?.maxOf { it.peakGainDb } ?: 0.0
         val conv = selected?.takeIf { bandIr == null }
         val convGain = conv?.let {
             val trim = values[NativeBmwDspValues.INDEX_CONVOLVER_GAIN].toDouble().coerceIn(
@@ -508,8 +509,9 @@ class BmwResponseCalculator(private val pointCount: Int = 192) {
                 if (lowMuted) branchAcc.setZero()
                 bandIr?.getOrNull(0)?.let { ir ->
                     branchAcc.mul(ir.re[ch][i], ir.im[ch][i])
+                    // One cap for the set, the loudest IR's, as native's shared band cap.
                     branchAcc.scale(dbToLinear(ConvolverResponse.appliedGainDb(
-                        values[NativeBmwDspValues.INDEX_CONVOLVER_GAIN].coerceAtMost(0f).toDouble(), ir.peakGainDb)))
+                        values[NativeBmwDspValues.INDEX_CONVOLVER_GAIN].coerceAtMost(0f).toDouble(), bandPeakDb)))
                     // Snapshots remove each IR's bulk delay. Restore relative delays before
                     // summing; removing them independently would draw false crossover phase.
                     val common = bandIr.minOf { it.latencyFrames }
@@ -529,8 +531,9 @@ class BmwResponseCalculator(private val pointCount: Int = 192) {
                 if (midMuted) branchAcc.setZero()
                 bandIr?.getOrNull(1)?.let { ir ->
                     branchAcc.mul(ir.re[ch][i], ir.im[ch][i])
+                    // One cap for the set, the loudest IR's, as native's shared band cap.
                     branchAcc.scale(dbToLinear(ConvolverResponse.appliedGainDb(
-                        values[NativeBmwDspValues.INDEX_CONVOLVER_GAIN].coerceAtMost(0f).toDouble(), ir.peakGainDb)))
+                        values[NativeBmwDspValues.INDEX_CONVOLVER_GAIN].coerceAtMost(0f).toDouble(), bandPeakDb)))
                     // Snapshots remove each IR's bulk delay. Restore relative delays before
                     // summing; removing them independently would draw false crossover phase.
                     val common = bandIr.minOf { it.latencyFrames }
@@ -550,8 +553,9 @@ class BmwResponseCalculator(private val pointCount: Int = 192) {
                 if (highMuted) branchAcc.setZero()
                 bandIr?.getOrNull(2)?.let { ir ->
                     branchAcc.mul(ir.re[ch][i], ir.im[ch][i])
+                    // One cap for the set, the loudest IR's, as native's shared band cap.
                     branchAcc.scale(dbToLinear(ConvolverResponse.appliedGainDb(
-                        values[NativeBmwDspValues.INDEX_CONVOLVER_GAIN].coerceAtMost(0f).toDouble(), ir.peakGainDb)))
+                        values[NativeBmwDspValues.INDEX_CONVOLVER_GAIN].coerceAtMost(0f).toDouble(), bandPeakDb)))
                     // Snapshots remove each IR's bulk delay. Restore relative delays before
                     // summing; removing them independently would draw false crossover phase.
                     val common = bandIr.minOf { it.latencyFrames }
