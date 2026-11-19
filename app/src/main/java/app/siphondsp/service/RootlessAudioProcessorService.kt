@@ -467,21 +467,122 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         // Through the same pusher as the broadcasts, so a drag preview still queued there can't
         // land after (and overwrite) the restored config.
         submitNativeBmwDspValues(NativeBmwDspValues.load(this))
+        // Only when the stored IRs or mode changed: rebuilding four kernels (and crossfading every
+        // band) on each preset switch is wasted work.
+        dspConfigHandler.post { loadStoredConvolverIrIfChanged() }
         if (!engine.configureNativeBmwPeq(BmwPeqState.loadPersisted(this), persistOnSuccess = false, source = "preset-restore")) {
             Timber.e("Failed to apply native BMW PEQ configuration after preset/profile load")
         }
     }
 
-    /** Loads the stored IR into the engine, or unloads it when none is stored. Null on success. */
-    private fun loadStoredConvolverIr(): String? {
-        val file = ConvolverIrStore.irFile(this)
-        if (!file.isFile) {
-            engine.clearConvolverIr()
-            return null
+    private val convolverControlLock = Any()
+    // Why each slot (-1 stereo, 0..2 bands) and the mode last failed; null entries are fine.
+    // Kept per slot so reloading one slot can't erase another's error.
+    private val convolverSlotErrors = arrayOfNulls<String>(4)
+    @Volatile private var convolverModeError: String? = null
+    @Volatile private var convolverLoadError: String? = null
+    // ConvolverIrStore.fingerprint() as of the last full load; null forces the next one.
+    @Volatile private var loadedConvolverFingerprint: String? = null
+
+    private fun publishConvolverErrors() {
+        val all = convolverSlotErrors.filterNotNull() + listOfNotNull(convolverModeError)
+        convolverLoadError = all.takeIf { it.isNotEmpty() }?.joinToString("; ")
+        convolverLoadError?.also { Timber.e("Convolver configuration: $it") }
+    }
+
+    /**
+     * All slots load before the persisted mode is applied; native rejects an incomplete band
+     * set. With the crossovers bypassed, per-band stays selected and native runs the stereo slot
+     * until the split is back.
+     */
+    private fun loadStoredConvolverIr(): String? = synchronized(convolverControlLock) {
+        val fingerprint = ConvolverIrStore.fingerprint(this)
+        for (band in -1..2) convolverSlotErrors[band + 1] = loadStoredConvolverSlot(band)
+        convolverModeError = engine.setConvolverMode(ConvolverIrStore.mode(this))
+        if (convolverModeError != null) engine.setConvolverMode(ConvolverIrStore.MODE_STEREO)
+        // Recorded even when a file was rejected: the same bad file is not retried on every
+        // preset switch (its error stays shown); changing the files or mode retries it.
+        loadedConvolverFingerprint = fingerprint
+        publishConvolverErrors()
+        convolverLoadError
+    }
+
+    /**
+     * A preset or restore load: reloads the IRs only when the stored files or mode changed, or
+     * the engine lost a slot that had loaded fine (a failed sample-rate rebuild, say), so a
+     * preset switch still recovers what a full reload would. A file that was rejected isn't
+     * retried until it changes, and a slot whose state can't be read counts as fine.
+     */
+    private fun loadStoredConvolverIrIfChanged() {
+        val lostSlot = (-1..2).any { band ->
+            ConvolverIrStore.hasIr(this, band) && convolverSlotErrors[band + 1] == null &&
+                (if (band == -1) engine.convolverStatus() else engine.bandConvolverStatus(band))
+                    ?.let { !it.loaded || it.streamFrames == 0 } == true
         }
-        return engine.loadConvolverIr(file.absolutePath)?.also {
-            Timber.e("Convolver IR rejected by the engine: $it")
+        if (lostSlot || ConvolverIrStore.fingerprint(this) != loadedConvolverFingerprint) loadStoredConvolverIr()
+    }
+
+    // The store's file lock covers the existence check and the read, so an import swapping the
+    // band folder can't make a slot look missing (and clear it) mid-swap. Lock order: this
+    // service's convolverControlLock, then the store's.
+    private fun loadStoredConvolverSlot(band: Int): String? = synchronized(convolverControlLock) {
+        require(band in -1..2)
+        ConvolverIrStore.withFilesLocked {
+            val file = ConvolverIrStore.irFile(this, band)
+            if (!file.isFile) {
+                if (band == -1) engine.clearConvolverIr() else engine.clearBandConvolverIr(band)
+                null
+            } else if (band == -1) engine.loadConvolverIr(file.absolutePath)
+            else engine.loadBandConvolverIr(band, file.absolutePath)
         }
+    }
+
+    private fun reloadConvolverSlot(band: Int): String? = synchronized(convolverControlLock) {
+        loadedConvolverFingerprint = null
+        val error = loadStoredConvolverSlot(band)
+        convolverSlotErrors[band + 1] = error
+        // A slot loading can make the stored mode applicable again (per-band waiting on its last
+        // IR); a cleared band slot drops native to stereo. Reapply it so the mode error reflects now.
+        val stored = ConvolverIrStore.mode(this)
+        convolverModeError = if (engine.convolverMode() != stored) engine.setConvolverMode(stored) else null
+        publishConvolverErrors()
+        error
+    }
+
+    private fun reloadBandConvolverSet(): String? = synchronized(convolverControlLock) {
+        loadedConvolverFingerprint = null
+        // Back to the stored mode afterwards (the source of truth), not the engine's: an earlier
+        // failure can have left the engine on stereo while per-band is what's selected.
+        val stored = ConvolverIrStore.mode(this)
+        engine.setConvolverMode(ConvolverIrStore.MODE_STEREO)?.let { return@synchronized it }
+        var error: String? = null
+        for (band in 0..2) {
+            val slotError = loadStoredConvolverSlot(band)
+            convolverSlotErrors[band + 1] = slotError
+            if (error == null) error = slotError
+        }
+        // Either the mode applies again, or the set fell back to stereo: no older mode error stands.
+        convolverModeError = null
+        if (error == null) {
+            error = engine.setConvolverMode(stored)
+            convolverModeError = error
+        }
+        if (error != null) ConvolverIrStore.setMode(this, ConvolverIrStore.MODE_STEREO)
+        publishConvolverErrors()
+        error
+    }
+
+    private fun applyConvolverMode(mode: Int): String? = synchronized(convolverControlLock) {
+        val old = engine.convolverMode() ?: ConvolverIrStore.mode(this)
+        engine.setConvolverMode(mode)?.let { return@synchronized it }
+        if (!ConvolverIrStore.setMode(this, mode)) {
+            engine.setConvolverMode(old)
+            return@synchronized "Could not save the convolution mode"
+        }
+        loadedConvolverFingerprint = null
+        convolverModeError = null
+        publishConvolverErrors()
+        null
     }
 
     private fun submitNativeBmwDspValues(values: FloatArray) {
@@ -1635,17 +1736,27 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
          * engine. Blocking: call off the main thread. Null on success or with no service running
          * (the next start loads it); otherwise why the engine rejected it.
          */
-        fun reloadConvolverIr(): String? = activeInstance?.loadStoredConvolverIr()
+        fun reloadConvolverIr(band: Int = -1): String? = activeInstance?.reloadConvolverSlot(band)
+
+        /** Applies first, then persists. Offline selection is saved by the screen after validation. */
+        fun setConvolverMode(mode: Int): String? = activeInstance?.applyConvolverMode(mode)
+        fun reloadBandConvolverSet(): String? = activeInstance?.reloadBandConvolverSet()
+        fun convolverMode(): Int? = activeInstance?.engine?.convolverMode()
+        /** The mode the audio runs: stereo while per-band is selected but the crossovers are bypassed. */
+        fun activeConvolverMode(): Int? = activeInstance?.engine?.activeConvolverMode()
+        fun convolverLoadError(): String? = activeInstance?.convolverLoadError
 
         /** What the running engine's convolver holds, or null with no service. */
-        fun convolverStatus(): ConvolverStatus? = activeInstance?.engine?.convolverStatus()
+        fun convolverStatus(band: Int = -1): ConvolverStatus? = activeInstance?.engine?.let {
+            if (band == -1) it.convolverStatus() else it.bandConvolverStatus(band)
+        }
 
         /** The running engine's convolver generation, or null with no service. */
         fun convolverGeneration(): Long? = activeInstance?.engine?.convolverGeneration()
 
         /** The running IR's response on [frequencies], or null. Blocking: off the main thread. */
-        fun convolverResponse(frequencies: DoubleArray): app.siphondsp.dsp.ConvolverResponse? =
-            activeInstance?.engine?.convolverResponse(frequencies)
+        fun convolverResponse(frequencies: DoubleArray, band: Int = -1): app.siphondsp.dsp.ConvolverResponse? =
+            activeInstance?.engine?.convolverResponse(frequencies, band)
 
         /**
          * Live rootless-pipeline runtime state for the native-truth debug screen. Every field is

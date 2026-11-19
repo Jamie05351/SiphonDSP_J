@@ -16,7 +16,9 @@ import android.os.SystemClock
 import androidx.annotation.CallSuper
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.getSystemService
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
@@ -64,6 +66,9 @@ abstract class BaseSessionManager(protected val context: Context) : DumpManager.
     private val pollingScope = CoroutineScope(Dispatchers.Main)
     private var continuousPollingJob: Job? = null
     private val dumpRequests = CoalescingDumpRequests(pollingScope) { pollSessionDump() }
+    // The burst of dumps after a player starts (see startFastLookup). Main thread.
+    private var fastLookupJob: Job? = null
+    private var fastLookupUntilMs = 0L
 
     // Each player's last state, by interface id, to tell a player starting from any other
     // playback change. Main thread (the callback's handler).
@@ -108,15 +113,37 @@ abstract class BaseSessionManager(protected val context: Context) : DumpManager.
                 super.onPlaybackConfigChanged(configs)
 
                 val now = SystemClock.elapsedRealtime()
+                val t0 = System.nanoTime()
                 val started = startedPlayers(configs)
+                val readNs = System.nanoTime() - t0
                 Timber.d("Playback config changed (started: ${started?.size ?: "?"})")
                 // Only a player starting can play unmuted: a pause or a stop doesn't start the
                 // clock. A change that can't be read is taken as a start, to be safe.
                 if (started == null || started.isNotEmpty()) {
                     SessionMuteLog.notePlaybackChange(now)
-                    onPlayersStarted(started.orEmpty())
+                    // The fast path: the session ids straight off these configurations, if
+                    // they're visible to us (they're anonymized without MODIFY_AUDIO_ROUTING).
+                    val visible = started.orEmpty().count { it.sessionId > 0 && it.uid > 0 }
+                    SessionMuteLog.noteConfigLookup(SessionMuteLog.ConfigLookup(
+                        atMs = now,
+                        started = started?.size ?: 0,
+                        visible = visible,
+                        micros = readNs / 1_000,
+                        detail = when {
+                            started == null -> "states unreadable"
+                            visible == started.size -> "session ids visible"
+                            else -> "session ids anonymized"
+                        },
+                    ))
+                    SessionMuteLog.beginLookup(SessionMuteLog.Lookup(
+                        path = PATH_CONFIG, startedAtMs = now, endedAtMs = now + readNs / 1_000_000,
+                    ))
+                    try { onPlayersStarted(started.orEmpty()) } finally { SessionMuteLog.endLookup() }
+                    // Then the dump at once, repeated until it has answered this start.
+                    startFastLookup(now)
+                } else {
+                    requestDump()
                 }
-                requestDump()
             }
         }
         audioManager.registerAudioPlaybackCallback(audioPlaybackCallback!!, Handler(Looper.getMainLooper()))
@@ -221,13 +248,59 @@ abstract class BaseSessionManager(protected val context: Context) : DumpManager.
         }
     }
 
-    private suspend fun pollSessionDump()
-    {
-        pollingMutex.withLock {
+    /** What the last [dumpOnWorker] did, for the mute timings: which dump answered and how long each took. */
+    protected open fun lookupDetail(): String = dumpManager.lastDumpReport
+
+    /**
+     * Takes and applies one dump; whether it produced one. Never throws but for cancellation:
+     * it runs on the main scope, which has no exception handler, so anything thrown here would
+     * take the service down.
+     */
+    private suspend fun pollSessionDump(): Boolean = pollingMutex.withLock {
+        try {
             val startedAtMs = SystemClock.elapsedRealtime()
             val dump = withContext(Dispatchers.IO) { dumpOnWorker() }
-            handleSessionDump(dump)
+            SessionMuteLog.beginLookup(SessionMuteLog.Lookup(
+                path = PATH_DUMP, startedAtMs = startedAtMs,
+                endedAtMs = SystemClock.elapsedRealtime(), detail = lookupDetail(),
+            ))
+            try { handleSessionDump(dump) } finally { SessionMuteLog.endLookup() }
             if (dump != null) SessionMuteLog.noteDumpApplied(startedAtMs)
+            dump != null
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Timber.e(e, "pollSessionDump failed")
+            false
+        }
+    }
+
+    /**
+     * A player has just started (at [startedAtMs]): dump now, from inside the callback rather
+     * than after a main-thread hop, and again every [FAST_LOOKUP_INTERVAL_MS] until a dump begun
+     * after the start has been applied (its session muted) or [FAST_LOOKUP_WINDOW_MS] has gone.
+     * Then back to the normal interval. A start during a burst extends it, and keeps it going
+     * until a dump begun after that start too has been applied. A failed dump backs off to
+     * [FAST_LOOKUP_BACKOFF_MS] rather than dumping back to back, and after
+     * [FAST_LOOKUP_MAX_FAILED] failures in a row the burst gives up: a start no dump can answer
+     * is left to the normal interval rather than dumped at for the whole window. Main thread.
+     */
+    private fun startFastLookup(startedAtMs: Long) {
+        fastLookupUntilMs = startedAtMs + FAST_LOOKUP_WINDOW_MS
+        if (fastLookupJob?.isActive == true) return
+        fastLookupJob = pollingScope.launch(start = CoroutineStart.UNDISPATCHED) {
+            var failedInARow = 0
+            while (isActive) {
+                val gotDump = pollSessionDump()
+                failedInARow = if (gotDump) 0 else failedInARow + 1
+                val now = SystemClock.elapsedRealtime()
+                if (!SessionMuteLog.hasPendingStart(now) || now >= fastLookupUntilMs) break
+                if (failedInARow >= FAST_LOOKUP_MAX_FAILED) {
+                    Timber.w("Fast lookup: $failedInARow dumps in a row failed; back to the normal interval")
+                    break
+                }
+                delay(if (gotDump) FAST_LOOKUP_INTERVAL_MS else FAST_LOOKUP_BACKOFF_MS)
+            }
         }
     }
 
@@ -256,8 +329,8 @@ abstract class BaseSessionManager(protected val context: Context) : DumpManager.
                 if (state == PLAYER_STATE_STARTED && playerStates[piid] != PLAYER_STATE_STARTED &&
                     c.audioAttributes.usage in RECORDABLE_USAGES) {
                     started += StartedPlayer(
-                        sessionId = runCatching { h.sessionId }.getOrDefault(0),
-                        uid = runCatching { h.clientUid }.getOrDefault(-1),
+                        sessionId = configInt(c, SESSION_ID_FIELD) { h.sessionId }.takeIf { it > 0 } ?: 0,
+                        uid = configInt(c, CLIENT_UID_FIELD) { h.clientUid }.takeIf { it > 0 } ?: -1,
                         attributes = c.audioAttributes,
                     )
                 }
@@ -269,6 +342,17 @@ abstract class BaseSessionManager(protected val context: Context) : DumpManager.
             Timber.w(t, "startedPlayers: playback states unreadable")
             null
         }
+    }
+
+    /**
+     * A value off a playback configuration: the hidden getter, else the field itself by
+     * reflection; 0 if neither can be read. Both read the copy we were handed, so an anonymized
+     * copy reads 0/-1 either way -- the field is only a second way in where a getter is missing.
+     */
+    private inline fun configInt(c: AudioPlaybackConfiguration, field: java.lang.reflect.Field?, getter: () -> Int): Int {
+        val viaGetter = runCatching(getter).getOrDefault(0)
+        if (viaGetter > 0) return viaGetter
+        return field?.let { runCatching { it.getInt(c) }.getOrNull() } ?: viaGetter
     }
 
     /** Current metadata only: never guess a session's usage from its previous owner. */
@@ -310,6 +394,17 @@ abstract class BaseSessionManager(protected val context: Context) : DumpManager.
 
     private companion object {
         const val MIN_POLLING_INTERVAL_MS = 100L
+        const val FAST_LOOKUP_INTERVAL_MS = 10L
+        const val FAST_LOOKUP_WINDOW_MS = 1_000L
+        const val FAST_LOOKUP_BACKOFF_MS = 100L
+        const val FAST_LOOKUP_MAX_FAILED = 3
+        const val PATH_CONFIG = "playback config"
+        const val PATH_DUMP = "dump"
+        private fun configField(name: String) = runCatching {
+            AudioPlaybackConfiguration::class.java.getDeclaredField(name).apply { isAccessible = true }
+        }.getOrNull()
+        val SESSION_ID_FIELD = configField("mSessionId")
+        val CLIENT_UID_FIELD = configField("mClientUid")
         // AudioPlaybackConfiguration.PLAYER_STATE_STARTED (hidden).
         const val PLAYER_STATE_STARTED = 2
         // What the dumps accept (AudioSessionDumpEntry.isUsageRecordable).

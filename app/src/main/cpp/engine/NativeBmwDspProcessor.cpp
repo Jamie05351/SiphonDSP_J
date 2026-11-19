@@ -61,6 +61,7 @@ void NativeBmwDspProcessor::setSampleRate(float sr) {
     // on a phone), so convolverInfo() and loads never wait on it. The old kernel keeps running
     // until the new one lands.
     rebuildConvolverForRate();
+    rebuildBandConvolversForRate();
 }
 
 void NativeBmwDspProcessor::applySampleRate(float sr) {
@@ -78,6 +79,7 @@ void NativeBmwDspProcessor::applySampleRate(float sr) {
         fadeInStep_ = 1.f / (kFadeInSeconds * sr);
         fadeOutStep_ = 1.f / (kFadeOutSeconds * sr);
         convolver_.setSampleRate(sr);
+        for (auto& stage : bandConvolvers_) stage.setSampleRate(sr);
         rebuildAll();
         publishStatus();
     }
@@ -332,6 +334,30 @@ void NativeBmwDspProcessor::processBandStages(std::size_t frames) {
         }
     }
     profiler_.lap(P::DelayGain);
+    // All three correction FIRs have the same partition latency. Even silent bands consume
+    // their kernel handoff and zero input, so re-enabling one cannot resurrect stale history.
+    // One unity cap for the set (the loudest IR's): capping each band at its own peak would
+    // shift the Low/Mid/High balance the correction was designed around.
+    double bandCap = std::numeric_limits<double>::infinity();
+    for (auto& stage : bandConvolvers_) {
+        stage.takePending();
+        bandCap = std::min(bandCap, stage.kernelCap());
+    }
+    for (auto& stage : bandConvolvers_) {
+        stage.setSharedCap(std::isfinite(bandCap) ? bandCap : 0.0);
+    }
+    for (Band band : kBands) {
+        float *xl, *xr;
+        lanes(band, xl, xr);
+        if (silent(band)) {
+            std::fill_n(xl, frames, 0.f);
+            std::fill_n(xr, frames, 0.f);
+        }
+        bandConvolvers_[static_cast<std::size_t>(band)].process(
+            xl, xr, frames, audioConvolverMode_ == 1 && p_.convolverEnabled,
+            std::min(0.f, p_.convolverGainDb), /*takeUpdate=*/false);
+    }
+    profiler_.lap(P::Convolver);
     // Per-bus brick-wall limiter (stereo-linked), right after the driver gain so its threshold
     // bounds the actual level reaching the driver regardless of how much gain is dialed in.
     // Disabled, it still delays the band by its lookahead so every band keeps the same latency.
@@ -372,6 +398,10 @@ void NativeBmwDspProcessor::clearBandState() {
 
 void NativeBmwDspProcessor::clearBandState(NativeBmwRouting::Band band) {
     using Band = NativeBmwRouting::Band;
+    // Lands on the path its setting asks for, not only with clean history: while the bands
+    // weren't running it couldn't finish a dip, and convolverStagesIdle() doesn't wait on it.
+    bandConvolvers_[static_cast<std::size_t>(band)].snap(
+        audioConvolverMode_ == 1 && p_.convolverEnabled, std::min(0.f, p_.convolverGainDb));
     const BandOutputs ids = bandOutputs(band);
     output(ids.left).clearState();
     output(ids.right).clearState();
@@ -387,7 +417,7 @@ void NativeBmwDspProcessor::processOutputStages(std::size_t frames, bool bandsRu
     // OutputRuntime::outputGain, so per-output polarity/mute always
     // apply), or the full-range path (crossover bypass), crossfaded between
     // the two over kCrossoverFadeSeconds.
-    const float xoverTarget = p_.crossoverBypass ? 1.f : 0.f;
+    const float xoverTarget = crossoverTarget();
     for (std::size_t i = 0; i < frames; ++i) {
         float oL = chunkFullL_[i], oR = chunkFullR_[i];
         if (bandsRun) {
@@ -491,6 +521,29 @@ void NativeBmwDspProcessor::processBackStages(std::size_t frames) {
 }
 
 void NativeBmwDspProcessor::processChunk(float* w, std::size_t frames) {
+    // Change architecture only at silence. No old/new paths with different latency are mixed.
+    // Per-band correction runs inside the band split, so with the crossovers bypassed it has
+    // nowhere to run: the full-range stereo slot takes over meanwhile (or nothing, if it has no
+    // IR), and per-band comes back with the split.
+    const int requestedMode = requestedConvolverMode_.load(std::memory_order_acquire);
+    const int targetMode = requestedMode == 1 && p_.crossoverBypass ? 0 : requestedMode;
+    if (targetMode != audioConvolverMode_) {
+        if (!p_.convolverEnabled && convolverStagesIdle()) {
+            // Neither path convolves and none is still dipping out (one partition late): both
+            // are a true bypass, so there's nothing to fade out or clear. A stage enabled later
+            // starts from a clean history through its own fade.
+            audioConvolverMode_ = targetMode;
+        } else if (convolverModeGain_ <= 0.f) {
+            audioConvolverMode_ = targetMode;
+            clearChainState();
+        }
+        activeConvolverMode_.store(audioConvolverMode_, std::memory_order_release);
+    }
+    // While the output dips for a mode switch, the crossover crossfade holds where it is: it
+    // would otherwise mix the band sum (one FIR partition late) with the undelayed full range.
+    // The switch's clearChainState() lands it on its setting.
+    modeSwitchPending_ = targetMode != audioConvolverMode_;
+
     using P = NativeBmwDsp::StageProfiler;
     profiler_.startChunk();
     // Input: the measurement generator, and the raw input the capture records in pairs with the
@@ -512,7 +565,7 @@ void NativeBmwDspProcessor::processChunk(float* w, std::size_t frames) {
     // kCrossoverFadeSeconds. Fully bypassed, the bands don't run at all: the output is the input
     // stages' stereo signal itself, with no filter, delay or latency of any kind. They
     // start clean when the split comes back.
-    const float xoverTarget = p_.crossoverBypass ? 1.f : 0.f;
+    const float xoverTarget = crossoverTarget();
     const bool bandsRun = xoverMix_ < 1.f || xoverTarget < 1.f;
     if (bandsRun) {
         if (xoverMix_ == 1.f) {
@@ -529,7 +582,7 @@ void NativeBmwDspProcessor::processChunk(float* w, std::size_t frames) {
     // off or with no IR loaded.
     // (Its own dip / crossfade covers switching it, loading and swapping IRs: see
     // ConvolverStage::process().)
-    convolver_.process(chunkConvL_.data(), chunkConvR_.data(), frames, p_.convolverEnabled,
+    convolver_.process(chunkConvL_.data(), chunkConvR_.data(), frames, audioConvolverMode_ == 0 && p_.convolverEnabled,
                        p_.convolverGainDb);
     profiler_.lap(P::Convolver);
     // The master limiter, volume, Deep bass and the hardware swap.
@@ -564,8 +617,13 @@ void NativeBmwDspProcessor::processChunk(float* w, std::size_t frames) {
             } else if (fadeGain_ < 1.f) {
                 fadeGain_ = std::min(1.f, fadeGain_ + fadeInStep_);
             }
-            l *= fadeGain_;
-            r *= fadeGain_;
+            if (modeSwitchPending_) {
+                convolverModeGain_ = std::max(0.f, convolverModeGain_ - 1.f / (0.005f * sampleRate_));
+            } else {
+                convolverModeGain_ = std::min(1.f, convolverModeGain_ + 1.f / (0.05f * sampleRate_));
+            }
+            l *= fadeGain_ * convolverModeGain_;
+            r *= fadeGain_ * convolverModeGain_;
             clipped += (std::fabs(l) > 1.f) + (std::fabs(r) > 1.f);
         }
         l = NativeBmwDsp::outputGuard(l);
@@ -633,7 +691,11 @@ void NativeBmwDspProcessor::clearChainState() {
     monoBassMix_ = p_.monoBassEnabled ? 1.f : 0.f;
     snapMixes();
     mbc_.snapMix();
-    convolver_.snap(p_.convolverEnabled, p_.convolverGainDb);
+    convolver_.snap(audioConvolverMode_ == 0 && p_.convolverEnabled, p_.convolverGainDb);
+    for (auto& stage : bandConvolvers_) {
+        stage.snap(audioConvolverMode_ == 1 && p_.convolverEnabled, std::min(0.f, p_.convolverGainDb));
+        stage.clearHistory();
+    }
     // Every stage that keeps history, front to back. Coefficients, settings and the convolver's
     // kernel stay as they are: only what the audio left behind goes. Nothing here allocates.
     inputDcL_.clear();
@@ -901,7 +963,10 @@ void NativeBmwDspProcessor::readEngineStatus(float* v, std::size_t n) const {
     if (count > 1) {
         // The convolver counts only while a kernel is installed on the audio side.
         auto mask = static_cast<std::uint32_t>(v[1]);
-        if (!convolver_.kernelActive()) {
+        const bool loaded = activeConvolverMode() == 1
+            ? bandConvolvers_[0].kernelActive() && bandConvolvers_[1].kernelActive() && bandConvolvers_[2].kernelActive()
+            : convolver_.kernelActive();
+        if (!loaded) {
             mask &= ~(1u << nbschema::kStageConvolver);
         }
         v[1] = static_cast<float>(mask);
@@ -921,7 +986,12 @@ bool NativeBmwDspProcessor::selfTestSource(SelfTestSource& out) {
         out.peqBanks = rawPeq_.banks;
         out.sampleRate = configSampleRate_.load(std::memory_order_relaxed);
     }
-    out.ir = convolverSnapshot().ir;
+    {
+        std::lock_guard<std::mutex> lock(convolverMutex_);
+        out.convolverMode = convolverMode();
+        out.ir = convolverStreamIr_;
+        out.bandIrs = bandConvolverStreamIrs_;
+    }
     return true;
 }
 
@@ -1387,4 +1457,133 @@ void NativeBmwDspProcessor::runControlRequest() {
         servedSeq_.store(seq, std::memory_order_relaxed);
     }
     ownership_.store(kOwnerFree, std::memory_order_release);
+}
+
+// ---- Independent correction FIRs for the existing software bands ---------------------------
+void NativeBmwDspProcessor::commitBandConvolverLocked(
+    int band, std::unique_ptr<NativeBmwDsp::ConvolverKernel> kernel,
+    std::shared_ptr<const NativeBmwDsp::ConvolverIr> streamIr, float rate,
+    std::size_t frames, const std::string& error) {
+    ++convolverGeneration_;
+    auto& info = bandConvolverInfos_[band];
+    info.streamRate = rate;
+    info.streamFrames = kernel ? frames : 0;
+    info.partitions = kernel ? kernel->partitions() : 0;
+    info.peakGainDb = kernel ? kernel->peakGainDb() : -200.0;
+    info.latencyFrames = kernel ? kernel->latencyFrames() : 0;
+    info.latencyMs = rate > 0 ? info.latencyFrames * 1000.0 / rate : 0;
+    info.error = error;
+    bandConvolverStreamIrs_[band] = kernel ? std::move(streamIr) : nullptr;
+    if (!kernel) requestedConvolverMode_.store(0, std::memory_order_release);
+    bandConvolvers_[band].publish(std::move(kernel));
+}
+
+bool NativeBmwDspProcessor::loadBandConvolverIr(int band, const char* path, std::string& error) {
+    if (band < 0 || band >= 3 || !path) { error = "Invalid band or path"; return false; }
+    NativeBmwDsp::ConvolverIr ir;
+    if (!NativeBmwDsp::loadConvolverIrWav(path, ir, error)) return false;
+    return loadBandConvolverIr(band, std::move(ir), error);
+}
+
+bool NativeBmwDspProcessor::loadBandConvolverIr(int band, NativeBmwDsp::ConvolverIr ir,
+                                               std::string& error) {
+    if (band < 0 || band >= 3 || ir.frames() == 0 || ir.sampleRate < 8000 ||
+        !std::isfinite(ir.sampleRate) || (ir.stereo() && ir.right.size() != ir.frames())) {
+        error = "No usable band IR"; return false;
+    }
+    if (ir.channels == 0) ir.channels = ir.stereo() ? 2 : 1;
+    float rate = configSampleRate_.load(std::memory_order_relaxed);
+    std::size_t frames = 0;
+    std::shared_ptr<const NativeBmwDsp::ConvolverIr> streamIr;
+    auto kernel = buildConvolverKernel(ir, rate, frames, streamIr, error);
+    if (!kernel) return false;  // previous slot survives a rejected file
+    std::lock_guard<std::mutex> lock(convolverMutex_);
+    const float now = configSampleRate_.load(std::memory_order_relaxed);
+    if (std::fabs(now - rate) > .5f) {
+        rate = now;
+        kernel = buildConvolverKernel(ir, rate, frames, streamIr, error);
+        if (!kernel) return false;
+    }
+    auto& info = bandConvolverInfos_[band];
+    info = ConvolverInfo{};
+    info.loaded = true;
+    info.channels = ir.channels;
+    info.sourceRate = ir.sampleRate;
+    info.sourceFrames = ir.frames();
+    bandConvolverSources_[band] = std::move(ir);
+    commitBandConvolverLocked(band, std::move(kernel), std::move(streamIr), rate, frames, "");
+    error.clear();
+    return true;
+}
+
+void NativeBmwDspProcessor::clearBandConvolverIr(int band) {
+    if (band < 0 || band >= 3) return;
+    std::lock_guard<std::mutex> lock(convolverMutex_);
+    // Retain the other files, but never run a partially corrected set.
+    requestedConvolverMode_.store(0, std::memory_order_release);
+    ++convolverGeneration_;
+    bandConvolverInfos_[band] = ConvolverInfo{};
+    bandConvolverSources_[band] = NativeBmwDsp::ConvolverIr{};
+    bandConvolverStreamIrs_[band].reset();
+    bandConvolvers_[band].publish(nullptr);
+}
+
+NativeBmwDspProcessor::ConvolverInfo NativeBmwDspProcessor::bandConvolverInfo(int band) {
+    std::lock_guard<std::mutex> lock(convolverMutex_);
+    return band >= 0 && band < 3 ? bandConvolverInfos_[band] : ConvolverInfo{};
+}
+
+bool NativeBmwDspProcessor::setConvolverMode(int mode, std::string& error) {
+    std::lock_guard<std::mutex> lock(convolverMutex_);
+    if (mode != 0 && mode != 1) { error = "Unknown convolver mode"; return false; }
+    if (mode == 1) {
+        for (const auto& info : bandConvolverInfos_) {
+            if (!info.loaded || info.streamFrames == 0 || !info.error.empty()) {
+                error = "Load valid Low, Mid and High IRs before selecting per-band mode";
+                return false;
+            }
+        }
+    }
+    if (requestedConvolverMode_.exchange(mode, std::memory_order_acq_rel) != mode) ++convolverGeneration_;
+    error.clear();
+    return true;
+}
+
+NativeBmwDspProcessor::ConvolverSnapshot NativeBmwDspProcessor::bandConvolverSnapshot(int band) {
+    std::lock_guard<std::mutex> lock(convolverMutex_);
+    ConvolverSnapshot s;
+    s.generation = convolverGeneration_;
+    if (band >= 0 && band < 3) {
+        s.ir = bandConvolverStreamIrs_[band];
+        s.latencyFrames = bandConvolverInfos_[band].latencyFrames;
+        s.peakGainDb = bandConvolverInfos_[band].peakGainDb;
+    }
+    return s;
+}
+
+void NativeBmwDspProcessor::rebuildBandConvolversForRate() {
+    for (int band = 0; band < 3; ++band) {
+        for (;;) {
+            NativeBmwDsp::ConvolverIr source;
+            std::uint64_t generation;
+            float rate;
+            {
+                std::lock_guard<std::mutex> lock(convolverMutex_);
+                rate = configSampleRate_.load(std::memory_order_relaxed);
+                const auto& info = bandConvolverInfos_[band];
+                if (!info.loaded || std::fabs(info.streamRate - rate) <= .5f) break;
+                source = bandConvolverSources_[band];
+                generation = convolverGeneration_;
+            }
+            std::string error;
+            std::size_t frames = 0;
+            std::shared_ptr<const NativeBmwDsp::ConvolverIr> streamIr;
+            auto kernel = buildConvolverKernel(source, rate, frames, streamIr, error);
+            std::lock_guard<std::mutex> lock(convolverMutex_);
+            if (generation != convolverGeneration_ ||
+                std::fabs(configSampleRate_.load(std::memory_order_relaxed) - rate) > .5f) continue;
+            commitBandConvolverLocked(band, std::move(kernel), std::move(streamIr), rate, frames, error);
+            break;
+        }
+    }
 }

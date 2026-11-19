@@ -5,6 +5,7 @@ import android.net.Uri
 import com.hippo.unifile.UniFile
 import kotlinx.coroutines.Job
 import app.siphondsp.compose.controls.SpeakerGeometryState
+import app.siphondsp.model.ConvolverIrStore
 import app.siphondsp.BuildConfig
 import app.siphondsp.R
 import app.siphondsp.utils.AppEvent
@@ -91,6 +92,12 @@ class BackupManager(private val context: Context): KoinComponent {
                     ?.filter { it.name in BMW_NO_BACKUP_STATE_FILES }
                     ?.forEach { c.add(it, "no_backup/${it.name}") }
 
+                val convolverRoot = File(context.filesDir, "convolver")
+                convolverRoot.walkTopDown().filter { it.isFile }.forEach {
+                    val name = "convolver/${it.relativeTo(convolverRoot).invariantSeparatorsPath}"
+                    if (name in CONVOLVER_BACKUP_FILES) c.add(it, name)
+                }
+
                 if(preferences.get<Boolean>(R.string.key_device_profiles_enable)) {
                     c.metadata[META_HAS_DEVICE_PROFILES] = true.toString()
                     File(context.applicationInfo.dataDir + "/files/profiles").let { root ->
@@ -141,6 +148,8 @@ class BackupManager(private val context: Context): KoinComponent {
 
             // Clean restore
             if(!dirty) {
+                // An archive with no IR files represents an empty set, too.
+                File(context.filesDir, "convolver").deleteRecursively()
                 // Remove profiles
                 File(context.applicationInfo.dataDir + "/files/profiles").deleteRecursively()
 
@@ -167,6 +176,10 @@ class BackupManager(private val context: Context): KoinComponent {
                     file.copyRecursively(File(context.applicationInfo.dataDir + "/shared_prefs"), true)
                 else if(file.isDirectory && file.name == "no_backup")
                     file.copyRecursively(context.noBackupFilesDir, true)
+                else if (file.isDirectory && file.name == "convolver") {
+                    val destination = File(context.filesDir, "convolver")
+                    file.copyRecursively(destination, true)
+                }
                 else if(file.isDirectory && file.name == "profiles") {
                     enableDeviceProfiles = true
                     file.copyRecursively(
@@ -176,6 +189,13 @@ class BackupManager(private val context: Context): KoinComponent {
                 }
             }
 
+            if (File(targetFolder, "shared_prefs/convolver_modes.xml").isFile) {
+                ConvolverIrStore.refreshModePreferencesAfterRestore(context)
+            } else if (!dirty) {
+                // The XML was deleted on disk above, but Android's cached copy still holds the old
+                // mode and trims and would write them back: clear them through the editor too.
+                ConvolverIrStore.resetModePreferences(context)
+            }
             targetFolder.deleteRecursively()
 
             // Last, once everything else is in place. Written through SharedPreferences so an open
@@ -200,14 +220,21 @@ class BackupManager(private val context: Context): KoinComponent {
         // BMW-specific state that lives outside the generic dsp_* convention. speaker_geometry.xml
         // holds the Delay page's alignment target and measured seat-to-driver paths.
         private const val GEOMETRY_PREFS_FILE = SpeakerGeometryState.PREFS + ".xml"
-        private val BMW_SHARED_PREFS_FILES = setOf("native_bmw_dsp.xml", "native_bmw_peq.xml", GEOMETRY_PREFS_FILE)
+        private val BMW_SHARED_PREFS_FILES = setOf("native_bmw_dsp.xml", "native_bmw_peq.xml", "convolver_modes.xml", GEOMETRY_PREFS_FILE)
         private val BMW_NO_BACKUP_STATE_FILES = setOf(
             "native_bmw_peq_state.txt", "native_bmw_peq_state.recovery",
             "native_bmw_dsp_state.txt", "native_bmw_dsp_state.recovery",
         )
 
+        private val CONVOLVER_BACKUP_FILES = setOf(
+            "convolver/ir.wav", "convolver/ir.name", "convolver/bands/manifest.json",
+            "convolver/bands/low/ir.wav", "convolver/bands/low/ir.name",
+            "convolver/bands/mid/ir.wav", "convolver/bands/mid/ir.name",
+            "convolver/bands/high/ir.wav", "convolver/bands/high/ir.name",
+        )
+
         private fun isKnownFile(name: String): Boolean {
-            return (name.contains("dsp_") && name.endsWith(".xml")) ||
+            return name in CONVOLVER_BACKUP_FILES || (name.contains("dsp_") && name.endsWith(".xml")) ||
                     name.startsWith("profiles/") ||
                     name.startsWith("no_backup/") ||
                     BMW_SHARED_PREFS_FILES.any { name.endsWith(it) }
