@@ -248,6 +248,8 @@ public:
         std::array<std::vector<double>, 4> peqBanks;
         float sampleRate = 48000.f;
         std::shared_ptr<const NativeBmwDsp::ConvolverIr> ir;
+        std::array<std::shared_ptr<const NativeBmwDsp::ConvolverIr>, 3> bandIrs;
+        int convolverMode = 0;
     };
     bool selfTestSource(SelfTestSource& out);
 
@@ -291,6 +293,17 @@ public:
     bool loadConvolverIr(NativeBmwDsp::ConvolverIr ir, std::string& error);
     void clearConvolverIr();
     ConvolverInfo convolverInfo();
+    // Correction-only FIRs in the existing Low/Mid/High branches (0/1/2). All three
+    // must be loaded before mode 1 can be selected. Mode 0 is the legacy stereo FIR.
+    bool loadBandConvolverIr(int band, const char* wavPath, std::string& error);
+    bool loadBandConvolverIr(int band, NativeBmwDsp::ConvolverIr ir, std::string& error);
+    void clearBandConvolverIr(int band);
+    ConvolverInfo bandConvolverInfo(int band);
+    bool setConvolverMode(int mode, std::string& error);
+    int convolverMode() const { return requestedConvolverMode_.load(std::memory_order_acquire); }
+    bool bandConvolverKernelActive(int band) const {
+        return band >= 0 && band < 3 && bandConvolvers_[band].kernelActive();
+    }
     // The running IR's complex response, for the app's graphs. generation is the convolver's
     // generation (bumped by every load, rebuild and clear), so the app refetches only when it
     // moves. left / right: re, im per frequency, the IR's bulk latency taken out (see
@@ -313,6 +326,7 @@ public:
         double peakGainDb = -200.0;
     };
     ConvolverSnapshot convolverSnapshot();
+    ConvolverSnapshot bandConvolverSnapshot(int band);
     // Evaluates a snapshot at freqs. Any thread but the audio thread (allocates; O(IR length x
     // count)); needs no processor. False when the snapshot holds no IR (out.generation still set).
     static bool convolverResponse(const ConvolverSnapshot& snapshot, const double* freqs,
@@ -651,6 +665,13 @@ private:
 
     // Convolver: the stage is the owner's; the source IR and info are the control side's.
     NativeBmwDsp::ConvolverStage convolver_;
+    std::array<NativeBmwDsp::ConvolverStage, 3> bandConvolvers_;
+    std::array<NativeBmwDsp::ConvolverIr, 3> bandConvolverSources_;
+    std::array<ConvolverInfo, 3> bandConvolverInfos_;
+    std::array<std::shared_ptr<const NativeBmwDsp::ConvolverIr>, 3> bandConvolverStreamIrs_;
+    std::atomic<int> requestedConvolverMode_{0};
+    int audioConvolverMode_ = 0;  // audio owner only
+    float convolverModeGain_ = 1.f;
     std::mutex convolverMutex_;
     NativeBmwDsp::ConvolverIr convolverSource_;
     ConvolverInfo convolverInfo_;
@@ -665,6 +686,10 @@ private:
                                std::size_t streamFrames, const std::string& error);
     // After a sample-rate change: rebuilds the kernel from convolverSource_ outside the lock.
     void rebuildConvolverForRate();
+    void rebuildBandConvolversForRate();
+    void commitBandConvolverLocked(int band, std::unique_ptr<NativeBmwDsp::ConvolverKernel> kernel,
+                                  std::shared_ptr<const NativeBmwDsp::ConvolverIr> streamIr,
+                                  float rate, std::size_t frames, const std::string& error);
 
     // ---- Ownership and control requests (see the threading comment above the constructor) ----
     enum : std::uint32_t { kOwnerFree = 0, kOwnerAudio = 1, kOwnerControl = 2 };

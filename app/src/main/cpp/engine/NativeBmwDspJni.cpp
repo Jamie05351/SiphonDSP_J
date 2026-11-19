@@ -707,3 +707,66 @@ Java_app_siphondsp_interop_NativeDsp_getStageProfile(JNIEnv* env, jobject, jlong
     }
     return result;
 }
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_app_siphondsp_interop_NativeDsp_loadBandConvolverIr(JNIEnv* env, jobject, jlong self,
+                                                       jint band, jstring pathObj) {
+    if (!self || !pathObj) return toJava(env, "Engine or path unavailable");
+    const char* path = env->GetStringUTFChars(pathObj, nullptr);
+    if (!path) return toJava(env, "Bad path");
+    std::string error;
+    bool ok = false;
+    try { ok = fromHandle(self)->processor.loadBandConvolverIr(band, path, error); }
+    catch (const std::bad_alloc&) { error = "Out of memory loading band IR"; }
+    env->ReleaseStringUTFChars(pathObj, path);
+    return ok ? nullptr : toJava(env, error);
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_app_siphondsp_interop_NativeDsp_clearBandConvolverIr(JNIEnv*, jobject, jlong self, jint band) {
+    if (self) fromHandle(self)->processor.clearBandConvolverIr(band);
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_app_siphondsp_interop_NativeDsp_setConvolverMode(JNIEnv* env, jobject, jlong self, jint mode) {
+    if (!self) return toJava(env, "Engine unavailable");
+    std::string error;
+    return fromHandle(self)->processor.setConvolverMode(mode, error) ? nullptr : toJava(env, error);
+}
+
+extern "C" JNIEXPORT jint JNICALL
+Java_app_siphondsp_interop_NativeDsp_getConvolverMode(JNIEnv*, jobject, jlong self) {
+    return self ? fromHandle(self)->processor.convolverMode() : 0;
+}
+
+extern "C" JNIEXPORT jdoubleArray JNICALL
+Java_app_siphondsp_interop_NativeDsp_getBandConvolverInfo(JNIEnv* env, jobject, jlong self, jint band) {
+    if (!self || band < 0 || band >= 3) return nullptr;
+    auto& p = fromHandle(self)->processor;
+    const auto info = p.bandConvolverInfo(band);
+    const jdouble values[] = { info.loaded ? 1.0 : 0.0, static_cast<double>(info.channels),
+        info.sourceRate, static_cast<double>(info.sourceFrames), info.streamRate,
+        static_cast<double>(info.streamFrames), static_cast<double>(info.partitions), info.peakGainDb,
+        p.bandConvolverKernelActive(band) ? 1.0 : 0.0,
+        static_cast<double>(info.latencyFrames), info.latencyMs };
+    jdoubleArray result = env->NewDoubleArray(11);
+    if (result) env->SetDoubleArrayRegion(result, 0, 11, values);
+    return result;
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_app_siphondsp_interop_NativeDsp_getBandConvolverError(JNIEnv* env, jobject, jlong self, jint band) {
+    if (!self) return toJava(env, "Engine unavailable");
+    const auto info = fromHandle(self)->processor.bandConvolverInfo(band);
+    return info.error.empty() ? nullptr : toJava(env, info.error);
+}
+
+extern "C" JNIEXPORT jlong JNICALL
+Java_app_siphondsp_interop_NativeDsp_takeBandConvolverSnapshot(JNIEnv*, jobject, jlong self, jint band) {
+    if (!self || band < 0 || band >= 3) return 0;
+    try {
+        auto s = std::make_unique<NativeBmwDspProcessor::ConvolverSnapshot>(
+            fromHandle(self)->processor.bandConvolverSnapshot(band));
+        return reinterpret_cast<jlong>(s.release());
+    } catch (const std::bad_alloc&) { return 0; }
+}

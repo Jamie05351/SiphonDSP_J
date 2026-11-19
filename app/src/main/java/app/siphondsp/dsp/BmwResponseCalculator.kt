@@ -409,9 +409,11 @@ class BmwResponseCalculator(private val pointCount: Int = 192) {
         // The convolver, after the band sum and ahead of the master limiter as in native
         // processChunk(): the IR's response for the logical channel times the gain the stage
         // applies. Off, no IR, or computed on another grid: nothing, as native's true bypass.
-        val conv = convolver?.takeIf {
+        val selected = convolver?.takeIf {
             values[NativeBmwDspValues.INDEX_CONVOLVER_ENABLED] >= .5f && it.matches(frequencies)
         }
+        val bandIr = selected?.bands
+        val conv = selected?.takeIf { bandIr == null }
         val convGain = conv?.let {
             val trim = values[NativeBmwDspValues.INDEX_CONVOLVER_GAIN].toDouble().coerceIn(
                 NativeBmwDspValues.CONVOLVER_MIN_GAIN_DB.toDouble(), NativeBmwDspValues.CONVOLVER_MAX_GAIN_DB.toDouble(),
@@ -504,6 +506,15 @@ class BmwResponseCalculator(private val pointCount: Int = 192) {
                 branchAcc.scale(dbToLinear(lowGainDb.toDouble()))
                 if (lowInvert) branchAcc.scale(-1.0)
                 if (lowMuted) branchAcc.setZero()
+                bandIr?.getOrNull(0)?.let { ir ->
+                    branchAcc.mul(ir.re[ch][i], ir.im[ch][i])
+                    branchAcc.scale(dbToLinear(ConvolverResponse.appliedGainDb(
+                        values[NativeBmwDspValues.INDEX_CONVOLVER_GAIN].coerceAtMost(0f).toDouble(), ir.peakGainDb)))
+                    // Snapshots remove each IR's bulk delay. Restore relative delays before
+                    // summing; removing them independently would draw false crossover phase.
+                    val common = bandIr.minOf { it.latencyFrames }
+                    applyDelay(branchAcc, frequencies[i], (ir.latencyFrames - common) * 1000.0 / ir.sampleRate)
+                }
                 out.lowBranchDb[ch][i] = branchAcc.magnitudeDb()
                 out.lowBranchPhase[ch][i] = branchAcc.phase()
                 val lowRe = branchAcc.re
@@ -516,6 +527,15 @@ class BmwResponseCalculator(private val pointCount: Int = 192) {
                 branchAcc.scale(dbToLinear(midGainDb.toDouble()))
                 if (midInvert) branchAcc.scale(-1.0)
                 if (midMuted) branchAcc.setZero()
+                bandIr?.getOrNull(1)?.let { ir ->
+                    branchAcc.mul(ir.re[ch][i], ir.im[ch][i])
+                    branchAcc.scale(dbToLinear(ConvolverResponse.appliedGainDb(
+                        values[NativeBmwDspValues.INDEX_CONVOLVER_GAIN].coerceAtMost(0f).toDouble(), ir.peakGainDb)))
+                    // Snapshots remove each IR's bulk delay. Restore relative delays before
+                    // summing; removing them independently would draw false crossover phase.
+                    val common = bandIr.minOf { it.latencyFrames }
+                    applyDelay(branchAcc, frequencies[i], (ir.latencyFrames - common) * 1000.0 / ir.sampleRate)
+                }
                 out.midBranchDb[ch][i] = branchAcc.magnitudeDb()
                 out.midBranchPhase[ch][i] = branchAcc.phase()
                 val midRe = branchAcc.re
@@ -528,6 +548,15 @@ class BmwResponseCalculator(private val pointCount: Int = 192) {
                 branchAcc.scale(dbToLinear(highGainDb.toDouble()))
                 if (highInvert) branchAcc.scale(-1.0)
                 if (highMuted) branchAcc.setZero()
+                bandIr?.getOrNull(2)?.let { ir ->
+                    branchAcc.mul(ir.re[ch][i], ir.im[ch][i])
+                    branchAcc.scale(dbToLinear(ConvolverResponse.appliedGainDb(
+                        values[NativeBmwDspValues.INDEX_CONVOLVER_GAIN].coerceAtMost(0f).toDouble(), ir.peakGainDb)))
+                    // Snapshots remove each IR's bulk delay. Restore relative delays before
+                    // summing; removing them independently would draw false crossover phase.
+                    val common = bandIr.minOf { it.latencyFrames }
+                    applyDelay(branchAcc, frequencies[i], (ir.latencyFrames - common) * 1000.0 / ir.sampleRate)
+                }
                 out.highBranchDb[ch][i] = branchAcc.magnitudeDb()
                 out.highBranchPhase[ch][i] = branchAcc.phase()
 

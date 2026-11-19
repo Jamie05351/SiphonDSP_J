@@ -68,6 +68,7 @@ add_executable(native_tests
     ramps_test.cpp
     output_guard_test.cpp
     convolver_test.cpp
+    band_convolver_test.cpp
     stream_start_guard_test.cpp
     measurement_neutral_test.cpp
     profiler_test.cpp

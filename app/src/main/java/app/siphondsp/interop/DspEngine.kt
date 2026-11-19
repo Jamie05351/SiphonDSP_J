@@ -481,6 +481,19 @@ class DspEngine(val context: Context) : AutoCloseable {
 
     fun clearConvolverIr() = withSharedHandle { NativeDsp.clearConvolverIr(it) }
 
+    fun loadBandConvolverIr(band: Int, path: String): String? =
+        withSharedHandle<String?>("DSP engine unavailable") { NativeDsp.loadBandConvolverIr(it, band, path) }
+    fun clearBandConvolverIr(band: Int) = withSharedHandle { NativeDsp.clearBandConvolverIr(it, band) }
+    fun bandConvolverStatus(band: Int): ConvolverStatus? = withSharedHandle<ConvolverStatus?>(null) { handle ->
+        NativeDsp.getBandConvolverInfo(handle, band)?.let {
+            ConvolverStatus.fromNative(it, NativeDsp.getBandConvolverError(handle, band))
+        }
+    }
+    fun setConvolverMode(mode: Int): String? =
+        withSharedHandle<String?>("DSP engine unavailable") { NativeDsp.setConvolverMode(it, mode) }
+    fun convolverMode(): Int? = withSharedHandle<Int?>(null) { NativeDsp.getConvolverMode(it) }
+
+
     /** What the convolver is running; null with no native handle. */
     fun convolverStatus(): ConvolverStatus? = withSharedHandle<ConvolverStatus?>(null) { handle ->
         NativeDsp.getConvolverInfo(handle)?.let { ConvolverStatus.fromNative(it, NativeDsp.getConvolverError(handle)) }
@@ -496,8 +509,10 @@ class DspEngine(val context: Context) : AutoCloseable {
      * Only the O(1) snapshot is taken under the handle lock; the DTFT runs after it is released,
      * so it never holds up teardown or other control calls.
      */
-    fun convolverResponse(frequencies: DoubleArray): app.siphondsp.dsp.ConvolverResponse? {
-        val snapshot = withSharedHandle(0L) { NativeDsp.takeConvolverSnapshot(it) }
+    fun convolverResponse(frequencies: DoubleArray, band: Int = -1): app.siphondsp.dsp.ConvolverResponse? {
+        val snapshot = withSharedHandle(0L) {
+            if (band < 0) NativeDsp.takeConvolverSnapshot(it) else NativeDsp.takeBandConvolverSnapshot(it, band)
+        }
         if (snapshot == 0L) return null
         return try {
             NativeDsp.getConvolverSnapshotResponse(snapshot, frequencies)?.let {

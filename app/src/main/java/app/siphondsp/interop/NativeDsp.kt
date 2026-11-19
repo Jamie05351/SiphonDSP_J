@@ -117,6 +117,14 @@ object NativeDsp {
     // crossfades to it. Null on success, else why it was rejected (the previous IR keeps running).
     external fun loadConvolverIr(self: NativeDspHandle, path: String): String?
     external fun clearConvolverIr(self: NativeDspHandle)
+    // band: 0 Low, 1 Mid, 2 High. Existing crossover filters remain in place.
+    external fun loadBandConvolverIr(self: NativeDspHandle, band: Int, path: String): String?
+    external fun clearBandConvolverIr(self: NativeDspHandle, band: Int)
+    external fun getBandConvolverInfo(self: NativeDspHandle, band: Int): DoubleArray?
+    external fun getBandConvolverError(self: NativeDspHandle, band: Int): String?
+    external fun setConvolverMode(self: NativeDspHandle, mode: Int): String?
+    external fun getConvolverMode(self: NativeDspHandle): Int
+
     // CONVOLVER_COUNT doubles indexed by CONVOLVER_*; null for a gone handle.
     external fun getConvolverInfo(self: NativeDspHandle): DoubleArray?
     // The last load / sample-rate rebuild failure, or null.
@@ -128,6 +136,7 @@ object NativeDsp {
     // An O(1) snapshot of the running IR (0 with none): take it under the handle lock, evaluate it
     // with getConvolverSnapshotResponse() after releasing the lock, then freeConvolverSnapshot().
     external fun takeConvolverSnapshot(self: NativeDspHandle): Long
+    external fun takeBandConvolverSnapshot(self: NativeDspHandle, band: Int): Long
     external fun freeConvolverSnapshot(snapshot: Long)
     // The snapshot IR's complex response at [frequencies] (Hz), bulk latency taken out:
     // CONVOLVER_RESPONSE_HEADER doubles, then left re/im per frequency, then right re/im. Needs no

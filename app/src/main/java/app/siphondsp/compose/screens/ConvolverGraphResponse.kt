@@ -61,7 +61,16 @@ fun rememberConvolverResponse(show: Boolean, grid: DoubleArray): ConvolverRespon
                 val next = if (generation == null) {
                     null
                 } else {
-                    withContext(Dispatchers.IO) { RootlessAudioProcessorService.convolverResponse(grid) }
+                    withContext(Dispatchers.IO) {
+                        if (RootlessAudioProcessorService.convolverMode() == 1) {
+                            val slots = (0..2).map { RootlessAudioProcessorService.convolverResponse(grid, it) }
+                            val complete = slots.filterNotNull()
+                            val after = RootlessAudioProcessorService.convolverGeneration()
+                            if (complete.size == 3 && after == generation &&
+                                complete.all { it.generation == generation && it.sampleRate == complete.first().sampleRate }
+                            ) ConvolverResponse.bandSet(complete) else null
+                        } else RootlessAudioProcessorService.convolverResponse(grid)
+                    }
                 }
                 // A null response is final only when there's nothing to fetch (no service, or no
                 // IR running); otherwise it failed (handle swap, allocation) and the next poll
