@@ -101,6 +101,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -265,6 +266,13 @@ fun LauncherHome(
     // again (a rebuilt view) starts from the current count, so focus is never taken without a
     // knob press.
     var handledKnobRequests by remember { mutableIntStateOf(knobFocusRequests) }
+    LaunchedEffect(overlay) {
+        if (overlay != LauncherOverlay.None) {
+            // A tile focused before the menu opened must not keep handling Enter while hidden.
+            focusManager.clearFocus()
+            if (!view.isInTouchMode) runCatching { overlayEntry.requestFocus() }
+        }
+    }
     LaunchedEffect(knobFocusRequests) {
         if (knobFocusRequests > handledKnobRequests) {
             handledKnobRequests = knobFocusRequests
@@ -311,11 +319,11 @@ fun LauncherHome(
                     true
                 },
         ) {
-            val k = minOf(1f, maxWidth.value / DesignW, maxHeight.value / DesignH)
-            val scale = HomeScale(k)
-            // Keep the vertical design scale, but use all available horizontal space. A fixed
-            // 1280-unit canvas becomes letterboxed when the system banner reduces the height.
-            val designWidth = ((maxWidth - HomeEdgePadding * 2).coerceAtLeast(0.dp)).value / k
+            // Do not compose fixed-size controls during a transient zero-size layout.
+            if (maxWidth <= HomeEdgePadding * 2 || maxHeight <= 0.dp) return@BoxWithConstraints
+            val geometry = launcherGeometry(maxWidth.value, maxHeight.value)
+            val scale = HomeScale(geometry.scale)
+            val designWidth = geometry.designWidth
             val g = animateActive(powered, "launcher power")
             val covered = overlay != LauncherOverlay.None
             val blur by animateDpAsState(if (covered) 16.dp else 0.dp, tween(PanelMs), label = "home blur")
@@ -357,10 +365,10 @@ fun LauncherHome(
                 if (dim > 0f) {
                     Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = dim)))
                 }
-                if (!covered) {
-                    Design(designWidth, Modifier.align(Alignment.Center)) {
-                        Dock(designWidth, engine, powered, g, readout, openingStage, animateTiles, actions, knobEntry)
-                    }
+                // Retain animation state and the requester node while a menu is open. An
+                // unplaced dock is neither drawn nor a target for touch or focus navigation.
+                Design(designWidth, Modifier.align(Alignment.Center).dockVisibility(covered)) {
+                    Dock(designWidth, engine, powered, g, readout, openingStage, animateTiles, actions, knobEntry)
                 }
             }
             // Menus use the space below the head unit's top banner, including the dock area.
@@ -380,6 +388,26 @@ fun LauncherHome(
         }
     }
 }
+
+internal data class LauncherGeometry(val scale: Float, val designWidth: Float)
+
+/** Fit the original design inside the padded width, then expand it when height limits scale. */
+internal fun launcherGeometry(widthDp: Float, heightDp: Float): LauncherGeometry {
+    val availableWidth = widthDp - HomeEdgePadding.value * 2
+    require(availableWidth > 0f && heightDp > 0f)
+    val scale = minOf(1f, availableWidth / DesignW, heightDp / DesignH)
+    return LauncherGeometry(scale, maxOf(DesignW, availableWidth / scale))
+}
+
+/** Keep the dock alive without placing its subtree while a launcher menu covers it. */
+internal fun Modifier.dockVisibility(covered: Boolean): Modifier =
+    this.then(if (covered) Modifier.clearAndSetSemantics { } else Modifier)
+        .layout { measurable, constraints ->
+            val dock = measurable.measure(constraints)
+            layout(dock.width, dock.height) {
+                if (!covered) dock.placeRelative(0, 0)
+            }
+        }
 
 /**
  * Text at its design size, whatever the system font size: the launcher is laid out in fixed
