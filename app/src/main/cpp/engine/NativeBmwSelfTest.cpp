@@ -61,7 +61,11 @@ class Bench {
 public:
     explicit Bench(const NativeBmwDspProcessor::SelfTestSource& source) : source_(source) {
         const double rate = source.sampleRate;
-        const double irFrames = source.ir ? static_cast<double>(source.ir->frames()) : 0.0;
+        double irFrames = source.ir ? static_cast<double>(source.ir->frames()) : 0.0;
+        if (source.convolverMode == 1) {
+            irFrames = 0;
+            for (const auto& ir : source.bandIrs) if (ir) irFrames = std::max(irFrames, double(ir->frames()));
+        }
         const double want = std::max(rate * kSelfTestSeconds, 2.0 * irFrames + 0.25 * rate);
         frames_ = 1;
         while (static_cast<double>(frames_) < want) {
@@ -106,6 +110,13 @@ public:
             std::string error;
             ConvolverIr ir = *source_.ir;
             (void)p->loadConvolverIr(std::move(ir), error);
+        }
+        if (source_.convolverMode == 1) {
+            std::string error;
+            for (int b = 0; b < 3; ++b) {
+                if (!source_.bandIrs[b] || !p->loadBandConvolverIr(b, *source_.bandIrs[b], error)) return false;
+            }
+            if (!p->setConvolverMode(1, error)) return false;
         }
         // Warm-up: installs everything and lets an IR's arrival fade finish.
         std::vector<float> buffer(2 * frames_, 0.f);

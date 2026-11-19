@@ -17,6 +17,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -31,6 +33,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import app.siphondsp.compose.controls.ArtGroupHeader
 import app.siphondsp.compose.controls.ArtLabel
@@ -42,6 +46,7 @@ import app.siphondsp.compose.state.BmwDspState
 import app.siphondsp.compose.state.rememberBmwDspState
 import app.siphondsp.compose.theme.BmwDspTheme
 import app.siphondsp.interop.ConvolverStatus
+import app.siphondsp.model.BandIrManifest
 import app.siphondsp.model.ConvolverIrStore
 import app.siphondsp.model.NativeBmwDspValues
 import app.siphondsp.service.RootlessAudioProcessorService
@@ -52,26 +57,14 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/**
- * The Output workspace's CONVOLVER page: the stereo FIR convolver, after the band sum and ahead
- * of the master limiter.
- *
- * - **Convolver**: the header switch turns it on, or off as a bypass (the engine crossfades over
- *   20 ms either way); Gain trims the IR's level. The engine caps the gain at the IR's peak
- *   response: an IR never lifts any frequency above unity (a boosting IR is brought down to 0 dB
- *   at its loudest frequency). The page shows the gain actually applied.
- * - **Impulse response**: load a mono or stereo WAV (copied into app storage; a mono IR runs on
- *   both channels, a stereo one L on L and R on R), what the engine made of it -- rates, length,
- *   whether it was resampled to the stream, its bulk latency (where its largest sample sits) --
- *   and clear.
- */
+/** Current stereo FIR or three correction-only band FIRs; the two sets stay stored independently. */
 @Composable
 fun ConvolverScreen(modifier: Modifier = Modifier) {
     val dsp = rememberBmwDspState()
     val context = LocalContext.current.applicationContext
     val ir = rememberIrState(context)
     val controls: @Composable (ConvolverRow) -> Unit = { row -> ConvolverGroup(dsp, ir, row) }
-    val impulse: @Composable (ConvolverRow) -> Unit = { row -> IrGroup(ir, row) }
+    val impulse: @Composable (ConvolverRow) -> Unit = { row -> IrGroup(ir, dsp, row) }
     BmwDspTheme {
         if (LocalContext.current.isHeadUnitDisplay()) {
             WorkspaceArtBox(modifier.fillMaxSize()) {
@@ -89,40 +82,109 @@ private typealias ConvolverRow = (y: Int, h: Int) -> Modifier
 
 /** The stored IR's name, the running engine's view of it, and the import/clear actions. */
 private class ConvolverIrUiState(private val context: Context) {
+    var slot by mutableStateOf(-1)
+    var mode by mutableStateOf(ConvolverIrStore.mode(context))
+    var runningMode by mutableStateOf<Int?>(null)
+    var activeMode by mutableStateOf<Int?>(null)
+    var loadError by mutableStateOf<String?>(null)
     var name by mutableStateOf<String?>(null)
     var status by mutableStateOf<ConvolverStatus?>(null)
     var message by mutableStateOf<String?>(null)
     var busy by mutableStateOf(false)
     var serviceRunning by mutableStateOf(false)
+    var allBandsStored by mutableStateOf(false)
+    var stereoStored by mutableStateOf(false)
+    var pendingPackage by mutableStateOf<android.net.Uri?>(null)
 
     /** Blocking (file + native mutex): IO dispatcher only. */
     fun refreshBlocking() {
-        val n = ConvolverIrStore.displayName(context)
-        val s = RootlessAudioProcessorService.convolverStatus()
-        name = n
-        status = s
-        serviceRunning = s != null
+        val selectedSlot = slot
+        name = ConvolverIrStore.displayName(context, selectedSlot)
+        status = RootlessAudioProcessorService.convolverStatus(selectedSlot)
+        runningMode = RootlessAudioProcessorService.convolverMode()
+        activeMode = RootlessAudioProcessorService.activeConvolverMode()
+        loadError = RootlessAudioProcessorService.convolverLoadError()
+        mode = ConvolverIrStore.mode(context)
+        serviceRunning = runningMode != null
+        allBandsStored = ConvolverIrStore.allBandsStored(context)
+        // What the engine runs, not just a file on disk: a stored IR can have been rejected.
+        // With no service, the stored file is all there is to go by.
+        stereoStored = RootlessAudioProcessorService.convolverStatus(ConvolverIrStore.SLOT_STEREO)
+            ?.let { it.loaded && it.streamFrames > 0 && it.error == null }
+            ?: ConvolverIrStore.hasIr(context, ConvolverIrStore.SLOT_STEREO)
     }
 
-    suspend fun importIr(uri: android.net.Uri) = runAction {
-        ConvolverIrStore.importIr(context, uri) ?: RootlessAudioProcessorService.reloadConvolverIr()
+    suspend fun selectSlot(value: Int) {
+        if (busy) return
+        slot = value
+        name = null
+        status = null
+        withContext(Dispatchers.IO) { refreshBlocking() }
     }
 
-    suspend fun clear() = runAction {
-        ConvolverIrStore.clear(context)
-        RootlessAudioProcessorService.reloadConvolverIr()
+    suspend fun importIr(uri: android.net.Uri, selected: Int) = runAction {
+        ConvolverIrStore.importIr(context, uri, selected) ?:
+            RootlessAudioProcessorService.reloadConvolverIr(selected)
+    }
+
+    suspend fun importPackage(uri: android.net.Uri, dsp: BmwDspState, allowMismatch: Boolean = false) = runAction {
+        // The actual per-output corners, not the retired legacy Low/Mid indices.
+        val corners = BandIrManifest.appCorners(dsp::get)
+        val result = ConvolverIrStore.importBandPackage(
+            context, uri, corners.first().first, corners.first().second, allowMismatch, corners,
+        )
+        if (result?.startsWith("Crossover mismatch:") == true) {
+            pendingPackage = uri
+            return@runAction result
+        }
+        pendingPackage = null
+        result ?: RootlessAudioProcessorService.reloadBandConvolverSet()
+    }
+
+    suspend fun clear(dsp: BmwDspState) {
+        if (slot >= 0 && mode == ConvolverIrStore.MODE_BANDS) {
+            switchMode(ConvolverIrStore.MODE_STEREO, dsp)
+            if (mode != ConvolverIrStore.MODE_STEREO || message != null) return
+        }
+        runAction {
+            ConvolverIrStore.clear(context, slot)
+            RootlessAudioProcessorService.reloadConvolverIr(slot)
+        }
+    }
+
+    suspend fun switchMode(target: Int, dsp: BmwDspState) {
+        if (busy || target == mode) return
+        val currentGain = dsp.get(NativeBmwDspValues.INDEX_CONVOLVER_GAIN)
+        var targetGain = currentGain
+        runAction {
+            if (target == ConvolverIrStore.MODE_BANDS && !ConvolverIrStore.allBandsStored(context)) {
+                return@runAction "Load Low, Mid and High IRs before selecting per-band mode"
+            }
+            if (!ConvolverIrStore.saveGain(context, mode, currentGain)) {
+                return@runAction "Could not save the current gain"
+            }
+            targetGain = ConvolverIrStore.savedGain(context, target, if (target == 1) 0f else currentGain)
+                .coerceAtMost(if (target == 1) 0f else NativeBmwDspValues.CONVOLVER_MAX_GAIN_DB)
+            RootlessAudioProcessorService.setConvolverMode(target)?.let { return@runAction it }
+            if (!ConvolverIrStore.setMode(context, target)) return@runAction "Could not save the convolution mode"
+            null
+        }
+        if (message == null) dsp.commit(NativeBmwDspValues.INDEX_CONVOLVER_GAIN, targetGain)
     }
 
     private suspend fun runAction(action: () -> String?) {
+        if (busy) return
         busy = true
         message = null
-        val error = withContext(Dispatchers.IO) {
-            val result = action()
-            refreshBlocking()
-            result
+        try {
+            message = withContext(Dispatchers.IO) {
+                val result = action()
+                refreshBlocking()
+                result
+            }
+        } finally {
+            busy = false
         }
-        message = error
-        busy = false
     }
 }
 
@@ -147,6 +209,8 @@ private fun rememberIrState(context: Context): ConvolverIrUiState {
 
 @Composable
 private fun ConvolverGroup(dsp: BmwDspState, ir: ConvolverIrUiState, row: ConvolverRow) {
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current.applicationContext
     ArtGroupHeader(
         title = "Convolver",
         accent = ConvolverAccent,
@@ -154,74 +218,122 @@ private fun ConvolverGroup(dsp: BmwDspState, ir: ConvolverIrUiState, row: Convol
         checked = dsp.isOn(NativeBmwDspValues.INDEX_CONVOLVER_ENABLED),
         onCheckedChange = { on -> dsp.commit(NativeBmwDspValues.INDEX_CONVOLVER_ENABLED, if (on) 1f else 0f) },
     )
-    DspArtSlider(
-        dsp, "Gain", NativeBmwDspValues.INDEX_CONVOLVER_GAIN,
-        NativeBmwDspValues.CONVOLVER_MIN_GAIN_DB..NativeBmwDspValues.CONVOLVER_MAX_GAIN_DB, 0.5f, "dB",
-        ConvolverAccent, row(52, 48),
-    )
-    val peak = ir.status?.takeIf { it.loaded && it.streamFrames > 0 }?.peakGainDb
-    // What the engine applies: the trim, capped so the IR's loudest frequency stays at or below
-    // unity (NativeBmwDsp::ConvolverStage::process()).
-    val trim = dsp.get(NativeBmwDspValues.INDEX_CONVOLVER_GAIN)
-    InfoLine(
-        when {
-            peak == null -> "Gain is capped so the IR never lifts above unity"
-            trim > -peak -> "Applied: ${formatDb((-peak).toFloat())} (capped at the IR's peak, ${formatDb(peak.toFloat())})"
-            else -> "Applied: ${formatDb(trim)}, the IR's loudest frequency at ${formatDb((peak + trim).toFloat())}"
+    Row(row(46, 48), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        ActionChip(if (ir.mode == 0) "✓ Stereo" else "Stereo", !ir.busy) {
+            scope.launch { ir.switchMode(0, dsp) }
+        }
+        ActionChip(if (ir.mode == 1) "✓ Per band" else "Per band", !ir.busy) {
+            scope.launch { ir.switchMode(1, dsp) }
+        }
+    }
+    ArtSlider(
+        label = "Mode gain",
+        value = dsp.get(NativeBmwDspValues.INDEX_CONVOLVER_GAIN),
+        valueRange = NativeBmwDspValues.CONVOLVER_MIN_GAIN_DB..(if (ir.mode == 1) 0f else NativeBmwDspValues.CONVOLVER_MAX_GAIN_DB),
+        step = .5f, unit = "dB", accentColor = ConvolverAccent,
+        onPreview = { dsp.preview(NativeBmwDspValues.INDEX_CONVOLVER_GAIN, it) },
+        onCommit = { gain ->
+            if (dsp.commit(NativeBmwDspValues.INDEX_CONVOLVER_GAIN, gain)) {
+                scope.launch(Dispatchers.IO) {
+                    if (!ConvolverIrStore.saveGain(context, ir.mode, gain)) ir.message = "Could not save this mode's gain"
+                }
+            }
         },
-        row(112, 28),
-        color = if (peak != null && trim > -peak) CapColor else InfoColor,
+        enabled = !ir.busy, modifier = row(104, 48), labelWidth = 110.dp,
     )
-    InfoLine(
-        when {
-            !dsp.isOn(NativeBmwDspValues.INDEX_CONVOLVER_ENABLED) -> "Off: bypassed, the chain's output untouched"
-            peak == null -> "On, but no IR loaded: passing through"
-            else -> "On: after the band sum, ahead of the limiter"
-        },
-        row(172, 28),
-    )
-    InfoLine("21 ms latency while on (1024-sample partitions); none when off", row(204, 28))
+    InfoLine(if (ir.mode == 0) "Stereo IR after the band sum" else "Low / Mid / High IRs before the band sum", row(164, 28))
+    val bypassed = dsp.isOn(NativeBmwDspValues.INDEX_CROSSOVER_BYPASS)
+    val convolverOn = dsp.isOn(NativeBmwDspValues.INDEX_CONVOLVER_ENABLED)
+    InfoLine(when {
+        bypassed && ir.mode == 1 && convolverOn && ir.stereoStored -> "Bypassed: stereo IR runs until crossovers return"
+        bypassed && ir.mode == 1 && convolverOn -> "Bypassed: no convolution (no stereo IR loaded)"
+        bypassed -> "Crossovers bypassed: band FIRs cannot run"
+        else -> "Existing crossover settings are retained"
+    }, row(196, 28))
+    InfoLine(if (ir.mode == 0) "Stereo and band files are stored separately" else "Bands switch together; no extra crossovers", row(228, 28))
+    val error = ir.message ?: ir.loadError
+    when {
+        error != null -> InfoLine(error, row(268, 56), color = ErrorColor, maxLines = 2)
+        ir.serviceRunning && ir.runningMode != ir.mode -> InfoLine("Requested mode is not active — check the loaded IRs", row(268, 56), ErrorColor, maxLines = 2)
+        !ir.serviceRunning -> InfoLine("Saved; loads when the DSP engine starts", row(268, 28))
+        ir.runningMode == 1 && ir.activeMode == 0 && bypassed ->
+            InfoLine("Per-band paused while the crossovers are bypassed", row(268, 28), Color.White)
+        // Bypass just switched on; per-band stops after the output's short dip.
+        ir.runningMode == 1 && ir.activeMode == 1 && bypassed ->
+            InfoLine("Pausing per-band: crossovers bypassed", row(268, 28), Color.White)
+        // The audio side switches at its next buffer, after a short dip: with nothing playing
+        // that's whenever audio starts.
+        ir.activeMode != null && ir.activeMode != ir.runningMode ->
+            InfoLine("${if (ir.runningMode == 1) "Per-band" else "Stereo"} selected; applies as audio plays", row(268, 28), Color.White)
+        else -> InfoLine("Active: ${if (ir.activeMode == 1) "per-band" else "stereo"} convolution", row(268, 28), Color.White)
+    }
 }
 
 @Composable
-private fun IrGroup(ir: ConvolverIrUiState, row: ConvolverRow) {
+private fun IrGroup(ir: ConvolverIrUiState, dsp: BmwDspState, row: ConvolverRow) {
     val scope = rememberCoroutineScope()
+    // Capture the destination at picker launch, not when an asynchronous picker returns.
+    var pickerSlot by remember { mutableStateOf(-1) }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        uri?.let { scope.launch { ir.importIr(it) } }
+        uri?.let { scope.launch { ir.importIr(it, pickerSlot) } }
     }
-    ArtGroupHeader("Impulse response", Color.White, row(0, HeaderHeight))
-    InfoLine(ir.name ?: "No IR loaded", row(52, 28), color = Color.White)
-    val s = ir.status
-    val lines = when {
-        ir.name == null -> listOf("Mono or stereo WAV, up to ${MaxIrSeconds}s at 48 kHz")
-        s == null || !ir.serviceRunning -> listOf("Loads when the DSP engine starts")
-        !s.loaded -> listOf("Not loaded by the engine")
-        else -> buildList {
-            add("${if (s.channels == 2) "Stereo" else "Mono"}, ${s.sourceRate} Hz, ${s.sourceFrames} samples")
-            if (s.streamFrames > 0) {
-                add(
-                    if (s.resampled) "Resampled to ${s.streamRate} Hz: ${s.streamFrames} samples"
-                    else "At the stream rate: ${s.streamRate} Hz",
-                )
-                add("${"%.0f".format(s.lengthMs)} ms, ${s.partitions} partitions, peak ${formatDb(s.peakGainDb.toFloat())}")
-                add("Latency ${"%.1f".format(s.latencyMs)} ms (${s.latencyFrames} samples)")
+    val packagePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri?.let { scope.launch { ir.importPackage(it, dsp) } }
+    }
+    ir.pendingPackage?.let { uri ->
+        AlertDialog(
+            // The prompt text lives in message; clear it with the dialog, or it stays as an error.
+            onDismissRequest = { ir.pendingPackage = null; ir.message = null },
+            title = { Text("Different crossover settings") },
+            text = { Text(ir.message ?: "The package was designed for different crossovers. Import without changing your app settings?") },
+            confirmButton = { TextButton(onClick = { scope.launch { ir.importPackage(uri, dsp, allowMismatch = true) } }) { Text("Import anyway") } },
+            dismissButton = { TextButton(onClick = { ir.pendingPackage = null; ir.message = null }) { Text("Cancel") } },
+        )
+    }
+    ArtGroupHeader("Impulse responses", Color.White, row(0, HeaderHeight))
+    Row(row(44, 48), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+        listOf("Stereo", "Low", "Mid", "High").forEachIndexed { index, label ->
+            val slot = index - 1
+            ActionChip(if (ir.slot == slot) "• $label" else label, !ir.busy) {
+                scope.launch { ir.selectSlot(slot) }
             }
         }
     }
-    lines.forEachIndexed { i, text -> InfoLine(text, row(84 + 30 * i, 28)) }
-    val error = ir.message ?: ir.status?.error
-    if (error != null) InfoLine(error, row(206, 28), color = ErrorColor)
-    Row(row(242, 48), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        ActionChip(if (ir.busy) "Loading…" else "Load IR…", enabled = !ir.busy) {
+    InfoLine(ir.name ?: "No IR in this slot", row(100, 28), color = Color.White)
+    val s = ir.status
+    val bufferMs = if (s != null && s.streamRate > 0) 1024_000.0 / s.streamRate else 0.0
+    val lines = when {
+        ir.name == null -> listOf("Load a mono or stereo correction WAV")
+        s == null || !ir.serviceRunning -> listOf("Stored; loads when the DSP engine starts")
+        !s.loaded -> listOf("Not loaded by the engine")
+        else -> listOf(
+            "${if (s.channels == 2) "Stereo" else "Mono"}, ${s.sourceRate} Hz, ${s.sourceFrames} samples",
+            "${"%.0f".format(s.lengthMs)} ms at ${s.streamRate} Hz; peak ${formatDb(s.peakGainDb.toFloat())}",
+            "IR bulk ${"%.1f".format(s.latencyMs)} + buffer ${"%.1f".format(bufferMs)} = ${"%.1f".format(s.latencyMs + bufferMs)} ms",
+        )
+    }
+    lines.forEachIndexed { i, text -> InfoLine(text, row(132 + 30 * i, 28)) }
+    Row(row(230, 48), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        ActionChip(if (ir.busy) "Loading…" else "Load WAV…", enabled = !ir.busy) {
+            pickerSlot = ir.slot
             picker.launch(arrayOf("audio/wav", "audio/x-wav", "audio/wave", "audio/*", "application/octet-stream"))
         }
-        ActionChip("Clear", enabled = !ir.busy && ir.name != null) { scope.launch { ir.clear() } }
+        ActionChip("Clear", enabled = !ir.busy && ir.name != null) { scope.launch { ir.clear(dsp) } }
+        ActionChip("Load set…", enabled = !ir.busy) {
+            packagePicker.launch(arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream"))
+        }
     }
+    InfoLine(if (ir.allBandsStored) "Bands run in parallel: buffer delay not tripled" else "Load all 3 slots to enable per-band mode", row(282, 28))
+    s?.error?.let { InfoLine(it, row(314, 28), ErrorColor) }
 }
 
 @Composable
-private fun InfoLine(text: String, modifier: Modifier, color: Color = InfoColor) {
-    Box(modifier, contentAlignment = Alignment.CenterStart) { ArtLabel(text, color = color) }
+private fun InfoLine(text: String, modifier: Modifier, color: Color = InfoColor, maxLines: Int = 1) {
+    // One line by default: the head unit's rows are absolutely placed ~30dp apart, so a second
+    // line would overlap the next row. Rows given 56dp pass maxLines = 2.
+    Box(modifier, contentAlignment = Alignment.CenterStart) {
+        Text(text, color = color, fontSize = 13.sp, maxLines = maxLines, overflow = TextOverflow.Ellipsis)
+    }
 }
 
 @Composable
@@ -273,9 +385,9 @@ private const val MaxIrSeconds = "1.36"
 
 // Head-unit layout, in the 1280x480 editor's dp: the Output page's two 333dp columns, starting
 // under the 69dp toolbar line (status strip + OUTPUT/CONVOLVER finder).
-private const val GroupWidth = 333
+private const val GroupWidth = 370
 private const val LeftX = 317
-private const val RightX = 770
+private const val RightX = 760
 private const val GroupTop = 76
 private const val HeaderHeight = 40
 private val PhoneGroupGap = 60.dp
