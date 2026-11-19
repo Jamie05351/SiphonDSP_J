@@ -310,8 +310,8 @@ internal fun HiddenApps(
 
 /**
  * A full-screen panel over the blurred home screen: a title row with Close, then [content]. It
- * starts [start] in from the left, clear of the volume column, [top] down, clear of the head unit's
- * top banner, and stops [bottom] above the bottom edge, clear of the DSP bar. The iDrive knob's
+ * starts [start] in from the left, [top] down, clear of the head unit's top banner, and stops
+ * [bottom] above the bottom edge. The home controls and DSP bar are hidden. The iDrive knob's
  * focus enters at its Close button ([knobEntry]).
  */
 @Composable
@@ -328,8 +328,7 @@ private fun OverlayFrame(
     Column(
         Modifier
             .fillMaxSize()
-            // Clear of the volume column on the left and the DSP bar along the bottom, which both
-            // stay in use underneath.
+            // The menu includes the space normally occupied by the DSP bar.
             .padding(start = start, top = top, bottom = bottom)
             // Swallows the rest of the taps so nothing reaches the home screen underneath.
             .clickable(remember { MutableInteractionSource() }, null) {}

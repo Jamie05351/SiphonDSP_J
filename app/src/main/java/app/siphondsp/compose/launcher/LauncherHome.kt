@@ -313,6 +313,9 @@ fun LauncherHome(
         ) {
             val k = minOf(1f, maxWidth.value / DesignW, maxHeight.value / DesignH)
             val scale = HomeScale(k)
+            // Keep the vertical design scale, but use all available horizontal space. A fixed
+            // 1280-unit canvas becomes letterboxed when the system banner reduces the height.
+            val designWidth = ((maxWidth - HomeEdgePadding * 2).coerceAtLeast(0.dp)).value / k
             val g = animateActive(powered, "launcher power")
             val covered = overlay != LauncherOverlay.None
             val blur by animateDpAsState(if (covered) 16.dp else 0.dp, tween(PanelMs), label = "home blur")
@@ -340,28 +343,29 @@ fun LauncherHome(
                     // The volume and tiles fade away while a drawer or menu is up, so what's
                     // over the blurred background isn't competing with them.
                     if (homeAlpha > 0f) {
-                        Design(Modifier.align(Alignment.Center).graphicsLayer { alpha = homeAlpha }) {
+                        Design(designWidth, Modifier.align(Alignment.Center).graphicsLayer { alpha = homeAlpha }) {
                             VolumePod(
                                 engine.masterVolumeDb, engine.masterMuted, g, actions::volumeStep, actions::toggleMute,
                                 Modifier.at(PodX, TilesTop, PodWidth, TileHeight),
                             )
                             TileRow(apps, slots, look.hidden, track, lastPlayer, onOverlayChange, actions)
-                            CornerButton(DrawerX, stringResource(R.string.launcher_drawer), { onOverlayChange(LauncherOverlay.Drawer()) }) { drawDrawerGlyph() }
-                            CornerButton(CarX, stringResource(R.string.launcher_car_menu), { onOverlayChange(LauncherOverlay.CarMenu()) }) { drawSettingsGlyph() }
+                            CornerButton(designWidth - 2 * CornerSize - 12f, stringResource(R.string.launcher_drawer), { onOverlayChange(LauncherOverlay.Drawer()) }) { drawDrawerGlyph() }
+                            CornerButton(designWidth - CornerSize, stringResource(R.string.launcher_car_menu), { onOverlayChange(LauncherOverlay.CarMenu()) }) { drawSettingsGlyph() }
                         }
                     }
                 }
                 if (dim > 0f) {
                     Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = dim)))
                 }
-                Design(Modifier.align(Alignment.Center)) {
-                    Dock(engine, powered, g, readout, openingStage, animateTiles, actions, knobEntry)
+                if (!covered) {
+                    Design(designWidth, Modifier.align(Alignment.Center)) {
+                        Dock(designWidth, engine, powered, g, readout, openingStage, animateTiles, actions, knobEntry)
+                    }
                 }
             }
-            // Drawers start under the head unit's top banner and stop above the dock, which stays
-            // usable under them.
+            // Menus use the space below the head unit's top banner, including the dock area.
             val letterbox = ((maxHeight - scale.dp(DesignH)) / 2).coerceAtLeast(0.dp)
-            val overlayBottom = scale.dp(DesignH - DockTop + 12f) + letterbox
+            val overlayBottom = HomeEdgePadding
             val overlayTop = scale.dp(TopMargin) + letterbox
             Box(Modifier.fillMaxSize().onFocusChanged { overlayHasFocus = it.hasFocus }) {
             when (overlay) {
@@ -388,11 +392,11 @@ internal fun DesignFontScale(content: @Composable () -> Unit) {
     CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale = 1f), content = content)
 }
 
-/** The 1280 x 480 design area, at the current scale. */
+/** The full available width at the current vertical design scale, with 15 dp screen edges. */
 @Composable
-private fun Design(modifier: Modifier, content: @Composable BoxScope.() -> Unit) {
+private fun Design(width: Float, modifier: Modifier, content: @Composable BoxScope.() -> Unit) {
     val s = LocalHomeScale.current
-    Box(modifier.size(s.dp(DesignW), s.dp(DesignH)), content = content)
+    Box(modifier.size(s.dp(width), s.dp(DesignH)), content = content)
 }
 
 /** A design-unit rectangle inside [Design]. */
@@ -699,13 +703,15 @@ private fun MenuItem(label: Int, onClick: () -> Unit) {
 // --- The dock ---
 
 /**
- * The DSP along the bottom of the home screen, a panel [DockInset] in from the sides and bottom:
+ * The DSP along the bottom of the home screen, inside the 15 dp screen edges, with a
+ * [DockInset] bottom inset:
  * the front page's own chain (power, the five tiles and the headroom at OUT) at [DockScale] of its
  * size, then More and Settings. A tile opens its stage's page; power works straight from the dock.
  * The panel's edge is lit purple while the DSP is on.
  */
 @Composable
 private fun Dock(
+    width: Float,
     engine: HomeEngineState,
     powered: Boolean,
     g: Float,
@@ -716,6 +722,7 @@ private fun Dock(
     knobEntry: FocusRequester,
 ) {
     val s = LocalHomeScale.current
+    val chainWidth = width - DockButtonsWidth
     val signal = BmwTheme.colors.sliderHeadroom
     val sweep = animateFloatAsState(
         if (powered) 1f else 0f,
@@ -728,13 +735,13 @@ private fun Dock(
     // The wallpaper darkens a little towards the panel, so it sits into the page.
     Box(
         Modifier
-            .at(0f, DockTop - DockFade, DesignW, DockFade)
+            .at(0f, DockTop - DockFade, width, DockFade)
             .background(Brush.verticalGradient(listOf(Color.Transparent, HomePalette.Panel.copy(alpha = 0.35f)))),
     )
     // The panel: its edge solid purple all the way round while on, as the chain tiles' edges are.
     Box(
         Modifier
-            .at(DockInset, DockTop, DesignW - 2 * DockInset, DockHeight)
+            .at(0f, DockTop, width, DockHeight)
             .neonEdge(DockCorner, lerp(HomePalette.PanelEdge, signal, g), glow = g)
             .clip(shape)
             .background(
@@ -744,11 +751,11 @@ private fun Dock(
             ),
     )
     // The chain over the panel, unclipped so the tiles' halos show in full.
-    Box(Modifier.at(DockInset, DockChainTop, DesignW - 2 * DockInset, DockChainHeight)) {
-        Box(Modifier.size(s.dp(DockChainWidth), s.dp(DockChainHeight))) {
+    Box(Modifier.at(0f, DockChainTop, width, DockChainHeight)) {
+        Box(Modifier.size(s.dp(chainWidth), s.dp(DockChainHeight))) {
             CompositionLocalProvider(LocalHomeScale provides HomeScale(s.k * DockScale)) {
                 val c = LocalHomeScale.current
-                val layout = ChainLayout(DockChainWidth / DockScale, maxCardWidth = CardWidth)
+                val layout = ChainLayout(chainWidth / DockScale, maxCardWidth = CardWidth)
                 SignalPath(g, { sweep.value }, spark = powered, layout = layout)
                 // No caption under the button: the panel is only as tall as the tiles. Its colour says on or off.
                 PowerNode(powered, g, actions::togglePower, Modifier.offset(x = c.dp(layout.powerX - ColumnWidth / 2)), caption = false)
@@ -784,14 +791,14 @@ private fun Dock(
         }
         Box(
             Modifier
-                .offset(x = s.dp(DockChainWidth), y = s.dp(DockTop - DockChainTop))
+                .offset(x = s.dp(chainWidth), y = s.dp(DockTop - DockChainTop))
                 .height(s.dp(DockHeight))
                 .padding(vertical = s.dp(20f))
                 .width(s.dp(2f))
                 .background(HomePalette.PanelEdge),
         )
         Column(
-            Modifier.offset(x = s.dp(DockChainWidth + 2f), y = s.dp(DockTop - DockChainTop)).width(s.dp(DockButtonsWidth - 2f)).height(s.dp(DockHeight)),
+            Modifier.offset(x = s.dp(chainWidth + 2f), y = s.dp(DockTop - DockChainTop)).width(s.dp(DockButtonsWidth - 2f)).height(s.dp(DockHeight)),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(s.dp(8f), Alignment.CenterVertically),
         ) {
@@ -952,12 +959,13 @@ private fun DrawScope.drawSkip(forward: Boolean) {
 // The layout, in design dp at 1280 x 480.
 internal const val DesignW = 1280f
 internal const val DesignH = 480f
-private const val Margin = 14f
+private val HomeEdgePadding = 15.dp
+private const val Margin = 15f
 // Clear of the head unit's own top banner (back, recents, screen off...), which draws over apps;
 // the old front page left the same room.
 private const val TopMargin = 48f
 private const val OverlayLeft = Margin
-// The dock: a panel 6 dp in from the sides and bottom, holding the front page's chain at DockScale.
+// The dock uses the full padded width and keeps a 6 dp bottom inset.
 private const val DockScale = 0.7f
 private const val DockInset = 6f
 private const val DockCorner = 16f
@@ -976,14 +984,11 @@ private const val DockShadeTop = 0.6f
 private const val DockShadeBottom = 0.9f
 // More and Settings at the dock's right end, past the chain.
 private const val DockButtonsWidth = 96f
-private const val DockChainWidth = DesignW - 2 * DockInset - DockButtonsWidth
 private const val DockButtonSize = 60f
 // The headroom ring at OUT, in chain units: as big as the power button, so the figure reads.
 private const val HeadroomSize = 104f
-// All apps and the car menu, in the top right corner as before.
+// All apps and the car menu, at the padded right edge.
 private const val CornerSize = 58f
-private const val CarX = DesignW - Margin - CornerSize
-private const val DrawerX = CarX - 12f - CornerSize
 // The tiles beside the volume strip: the music tile, then the swipe row, one page of two tiles
 // showing, each page as wide as the music tile.
 private const val TileWidth = 165f
@@ -1001,7 +1006,7 @@ private const val MediaButtonGap = 10f
 private const val MediaControlsWidth = 3 * MediaButtonSize + 2 * MediaButtonGap
 // Slim and against the left edge: a fallback for when the steering-wheel buttons fail.
 private const val PodWidth = 64f
-private const val PodX = 20f
+private const val PodX = 0f
 private const val TilesX = PodX + PodWidth + 20f
 private const val TilesTop = 60f
 private const val PagerX = TilesX + MusicWidth + TileGap
