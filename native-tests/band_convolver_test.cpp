@@ -210,3 +210,24 @@ TEST_CASE("disabling the convolver and switching mode together still dips before
     warm(p);
     CHECK(p.activeConvolverMode()==0);
 }
+
+TEST_CASE("a louder band IR never plays above the shared cap while it lowers") {
+    NativeBmwDspProcessor p; std::string error;
+    auto c=defaultConfig(); c[nbschema::kConvolverEnabled]=1;
+    p.configure(c.data(),c.size());
+    for(int b=0;b<3;++b) REQUIRE(p.loadBandConvolverIr(b,bandDelta(),error));
+    REQUIRE(p.setConvolverMode(1,error)); warm(p);
+    // A bass tone, carried by Low. Low swaps from flat to a 2x (+6 dB) IR: capped at 0.5 it
+    // lands back at unity, so the tone must never come out louder than before the swap.
+    constexpr std::size_t kSettle=24000, kTotal=48000, kPeriod=800;  // 60 Hz
+    auto x=stereoSine(60,.05,kTotal);
+    p.process(x.data(),2*kSettle);
+    REQUIRE(p.loadBandConvolverIr(0,bandDelta(2,2),error));
+    p.process(x.data()+2*kSettle,2*(kTotal-kSettle));
+    auto peakOf=[&](std::size_t start){double v=0;for(std::size_t i=start;i<start+kPeriod;++i)v=std::max(v,std::fabs(double(x[2*i])));return v;};
+    const double before=peakOf(kSettle-2*kPeriod);
+    REQUIRE(before>0);
+    double worst=0;
+    for(std::size_t start=kSettle;start+kPeriod<=kTotal;start+=kPeriod/8) worst=std::max(worst,peakOf(start));
+    CHECK(worst<before*1.01);
+}

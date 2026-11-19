@@ -174,7 +174,7 @@ public:
     double kernelCap() const;
     // Audio thread: a cap shared with sibling stages (> 0), replacing this stage's own -peak cap,
     // so several stages that sum together are brought down by one common amount and keep
-    // their relative levels. It ramps (kGainRampSeconds) rather than steps, since a change
+    // their relative levels. It ramps (linearly, over kDipSeconds) rather than steps, since a change
     // made for one stage's kernel moves the level of all of them. 0 restores the stage's own
     // cap.
     void setSharedCap(double cap) { sharedCap_ = cap; }
@@ -218,6 +218,8 @@ private:
     double gain_ = 1.0;         // linear IR gain, one-pole toward the setting
     double sharedCap_ = 0.0;    // see setSharedCap(); 0 = each kernel's own cap
     double capNow_ = 0.0;       // sharedCap_ as ramped; 0 = not yet started (lands directly)
+    double capTarget_ = 0.0;    // the sharedCap_ the current ramp heads for
+    double capStep_ = 0.0;      // that ramp's per-sample step
     double fadeStep_ = 1.0 / (0.02 * 48000.0);
     double dipStep_ = 1.0 / (0.005 * 48000.0);
     double gainCoef_ = 0.0020811617;  // 1 - exp(-1 / (10 ms * 48 kHz))

@@ -398,7 +398,10 @@ void NativeBmwDspProcessor::clearBandState() {
 
 void NativeBmwDspProcessor::clearBandState(NativeBmwRouting::Band band) {
     using Band = NativeBmwRouting::Band;
-    bandConvolvers_[static_cast<std::size_t>(band)].clearHistory();
+    // Lands on the path its setting asks for, not only with clean history: while the bands
+    // weren't running it couldn't finish a dip, and convolverStagesIdle() doesn't wait on it.
+    bandConvolvers_[static_cast<std::size_t>(band)].snap(
+        audioConvolverMode_ == 1 && p_.convolverEnabled, std::min(0.f, p_.convolverGainDb));
     const BandOutputs ids = bandOutputs(band);
     output(ids.left).clearState();
     output(ids.right).clearState();

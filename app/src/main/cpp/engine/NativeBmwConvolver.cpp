@@ -567,7 +567,20 @@ void ConvolverStage::process(float* left, float* right, std::size_t frames, bool
     for (std::size_t i = 0; i < frames; ++i) {
         gain_ += (targetGain - gain_) * gainCoef_;
         if (sharedCap_ > 0.0) {
-            capNow_ = capNow_ > 0.0 ? capNow_ + (sharedCap_ - capNow_) * gainCoef_ : sharedCap_;
+            if (capNow_ <= 0.0) {
+                capNow_ = sharedCap_;
+            } else if (capNow_ != sharedCap_) {
+                // Linear, over kDipSeconds from wherever it was: done well inside the
+                // kConvolverLatencyFrames a new kernel is held silent before it's heard, so the
+                // louder kernel never plays above the cap, while the sibling stages' level still
+                // moves as a short fade rather than a step.
+                if (capTarget_ != sharedCap_) {
+                    capTarget_ = sharedCap_;
+                    capStep_ = std::fabs(sharedCap_ - capNow_) * dipStep_;
+                }
+                capNow_ = capNow_ < sharedCap_ ? std::min(sharedCap_, capNow_ + capStep_)
+                                               : std::max(sharedCap_, capNow_ - capStep_);
+            }
         } else {
             capNow_ = 0.0;
         }

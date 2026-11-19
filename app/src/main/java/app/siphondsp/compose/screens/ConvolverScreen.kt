@@ -107,7 +107,11 @@ private class ConvolverIrUiState(private val context: Context) {
         mode = ConvolverIrStore.mode(context)
         serviceRunning = runningMode != null
         allBandsStored = ConvolverIrStore.allBandsStored(context)
-        stereoStored = ConvolverIrStore.hasIr(context, ConvolverIrStore.SLOT_STEREO)
+        // What the engine runs, not just a file on disk: a stored IR can have been rejected.
+        // With no service, the stored file is all there is to go by.
+        stereoStored = RootlessAudioProcessorService.convolverStatus(ConvolverIrStore.SLOT_STEREO)
+            ?.let { it.loaded && it.streamFrames > 0 && it.error == null }
+            ?: ConvolverIrStore.hasIr(context, ConvolverIrStore.SLOT_STEREO)
     }
 
     suspend fun selectSlot(value: Int) {
@@ -239,9 +243,10 @@ private fun ConvolverGroup(dsp: BmwDspState, ir: ConvolverIrUiState, row: Convol
     )
     InfoLine(if (ir.mode == 0) "Stereo IR after the band sum" else "Low / Mid / High IRs before the band sum", row(164, 28))
     val bypassed = dsp.isOn(NativeBmwDspValues.INDEX_CROSSOVER_BYPASS)
+    val convolverOn = dsp.isOn(NativeBmwDspValues.INDEX_CONVOLVER_ENABLED)
     InfoLine(when {
-        bypassed && ir.mode == 1 && ir.stereoStored -> "Crossovers bypassed: the stereo IR runs until they're back"
-        bypassed && ir.mode == 1 -> "Crossovers bypassed: no convolution until they're back (stereo slot empty)"
+        bypassed && ir.mode == 1 && convolverOn && ir.stereoStored -> "Crossovers bypassed: the stereo IR runs until they're back"
+        bypassed && ir.mode == 1 && convolverOn -> "Crossovers bypassed: no convolution until they're back (no stereo IR loaded)"
         bypassed -> "Crossovers bypassed: band FIRs cannot run"
         else -> "Existing crossover settings are retained"
     }, row(196, 28))
@@ -253,9 +258,12 @@ private fun ConvolverGroup(dsp: BmwDspState, ir: ConvolverIrUiState, row: Convol
         !ir.serviceRunning -> InfoLine("Saved; loads when the DSP engine starts", row(268, 28))
         ir.runningMode == 1 && ir.activeMode == 0 && bypassed ->
             InfoLine("Per-band paused while the crossovers are bypassed", row(268, 28), Color.White)
+        // Bypass just switched on; per-band stops after the output's short dip.
+        ir.runningMode == 1 && ir.activeMode == 1 && bypassed ->
+            InfoLine("Pausing per-band: crossovers bypassed", row(268, 28), Color.White)
         // The audio side switches at its next buffer, after a short dip: with nothing playing
         // that's whenever audio starts.
-        ir.activeMode != ir.runningMode ->
+        ir.activeMode != null && ir.activeMode != ir.runningMode ->
             InfoLine("${if (ir.runningMode == 1) "Per-band" else "Stereo"} selected; applies as audio plays", row(268, 28), Color.White)
         else -> InfoLine("Active: ${if (ir.activeMode == 1) "per-band" else "stereo"} convolution", row(268, 28), Color.White)
     }

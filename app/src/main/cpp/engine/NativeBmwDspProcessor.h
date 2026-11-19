@@ -677,9 +677,12 @@ private:
     bool modeSwitchPending_ = false;  // audio owner only: dipping for a mode switch
     // audioConvolverMode_ as last published by the audio side (status / UI).
     std::atomic<int> activeConvolverMode_{0};
+    // Band stages count only while the bands are in the output: fully bypassed they don't run
+    // (so can't finish a dip), aren't heard, and are snapped when the bands come back.
     bool convolverStagesIdle() const {
-        return convolver_.idle() && bandConvolvers_[0].idle() && bandConvolvers_[1].idle() &&
-               bandConvolvers_[2].idle();
+        return convolver_.idle() &&
+               (xoverMix_ >= 1.f || (bandConvolvers_[0].idle() && bandConvolvers_[1].idle() &&
+                                     bandConvolvers_[2].idle()));
     }
     float crossoverTarget() const {
         return modeSwitchPending_ ? xoverMix_ : (p_.crossoverBypass ? 1.f : 0.f);

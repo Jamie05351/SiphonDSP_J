@@ -500,25 +500,26 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         for (band in -1..2) convolverSlotErrors[band + 1] = loadStoredConvolverSlot(band)
         convolverModeError = engine.setConvolverMode(ConvolverIrStore.mode(this))
         if (convolverModeError != null) engine.setConvolverMode(ConvolverIrStore.MODE_STEREO)
-        loadedConvolverFingerprint = fingerprint.takeIf { convolverSlotErrors.all { it == null } && convolverModeError == null }
+        // Recorded even when a file was rejected: the same bad file is not retried on every
+        // preset switch (its error stays shown); changing the files or mode retries it.
+        loadedConvolverFingerprint = fingerprint
         publishConvolverErrors()
         convolverLoadError
     }
 
     /**
-     * A preset or restore load: reloads the IRs only when the stored files or mode changed, the
-     * last load reported an error, or the engine has lost a stored slot (a failed sample-rate
-     * rebuild, say), so a preset switch still recovers what a full reload would.
+     * A preset or restore load: reloads the IRs only when the stored files or mode changed, or
+     * the engine lost a slot that had loaded fine (a failed sample-rate rebuild, say), so a
+     * preset switch still recovers what a full reload would. A file that was rejected isn't
+     * retried until it changes, and a slot whose state can't be read counts as fine.
      */
     private fun loadStoredConvolverIrIfChanged() {
-        val engineHasAll = (-1..2).all { band ->
-            !ConvolverIrStore.hasIr(this, band) ||
+        val lostSlot = (-1..2).any { band ->
+            ConvolverIrStore.hasIr(this, band) && convolverSlotErrors[band + 1] == null &&
                 (if (band == -1) engine.convolverStatus() else engine.bandConvolverStatus(band))
-                    ?.let { it.loaded && it.streamFrames > 0 && it.error == null } == true
+                    ?.let { !it.loaded || it.streamFrames == 0 } == true
         }
-        if (!engineHasAll || convolverLoadError != null ||
-            ConvolverIrStore.fingerprint(this) != loadedConvolverFingerprint
-        ) loadStoredConvolverIr()
+        if (lostSlot || ConvolverIrStore.fingerprint(this) != loadedConvolverFingerprint) loadStoredConvolverIr()
     }
 
     // The store's file lock covers the existence check and the read, so an import swapping the
@@ -543,18 +544,16 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         // A slot loading can make the stored mode applicable again (per-band waiting on its last
         // IR); a cleared band slot drops native to stereo. Reapply it so the mode error reflects now.
         val stored = ConvolverIrStore.mode(this)
-        if (engine.convolverMode() != stored) {
-            convolverModeError = engine.setConvolverMode(stored)
-        } else if (error == null) {
-            convolverModeError = null
-        }
+        convolverModeError = if (engine.convolverMode() != stored) engine.setConvolverMode(stored) else null
         publishConvolverErrors()
         error
     }
 
     private fun reloadBandConvolverSet(): String? = synchronized(convolverControlLock) {
         loadedConvolverFingerprint = null
-        val previous = engine.convolverMode() ?: ConvolverIrStore.MODE_STEREO
+        // Back to the stored mode afterwards (the source of truth), not the engine's: an earlier
+        // failure can have left the engine on stereo while per-band is what's selected.
+        val stored = ConvolverIrStore.mode(this)
         engine.setConvolverMode(ConvolverIrStore.MODE_STEREO)?.let { return@synchronized it }
         var error: String? = null
         for (band in 0..2) {
@@ -565,7 +564,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         // Either the mode applies again, or the set fell back to stereo: no older mode error stands.
         convolverModeError = null
         if (error == null) {
-            error = engine.setConvolverMode(previous)
+            error = engine.setConvolverMode(stored)
             convolverModeError = error
         }
         if (error != null) ConvolverIrStore.setMode(this, ConvolverIrStore.MODE_STEREO)
