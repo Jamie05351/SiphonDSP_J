@@ -16,6 +16,7 @@ import android.os.SystemClock
 import androidx.annotation.CallSuper
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.getSystemService
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
@@ -250,9 +251,13 @@ abstract class BaseSessionManager(protected val context: Context) : DumpManager.
     /** What the last [dumpOnWorker] did, for the mute timings: which dump answered and how long each took. */
     protected open fun lookupDetail(): String = dumpManager.lastDumpReport
 
-    private suspend fun pollSessionDump()
-    {
-        pollingMutex.withLock {
+    /**
+     * Takes and applies one dump; whether it produced one. Never throws but for cancellation:
+     * it runs on the main scope, which has no exception handler, so anything thrown here would
+     * take the service down.
+     */
+    private suspend fun pollSessionDump(): Boolean = pollingMutex.withLock {
+        try {
             val startedAtMs = SystemClock.elapsedRealtime()
             val dump = withContext(Dispatchers.IO) { dumpOnWorker() }
             SessionMuteLog.beginLookup(SessionMuteLog.Lookup(
@@ -261,6 +266,12 @@ abstract class BaseSessionManager(protected val context: Context) : DumpManager.
             ))
             try { handleSessionDump(dump) } finally { SessionMuteLog.endLookup() }
             if (dump != null) SessionMuteLog.noteDumpApplied(startedAtMs)
+            dump != null
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Timber.e(e, "pollSessionDump failed")
+            false
         }
     }
 
@@ -268,17 +279,19 @@ abstract class BaseSessionManager(protected val context: Context) : DumpManager.
      * A player has just started (at [startedAtMs]): dump now, from inside the callback rather
      * than after a main-thread hop, and again every [FAST_LOOKUP_INTERVAL_MS] until a dump begun
      * after the start has been applied (its session muted) or [FAST_LOOKUP_WINDOW_MS] has gone.
-     * Then back to the normal interval. A start during a burst extends it. Main thread.
+     * Then back to the normal interval. A start during a burst extends it, and keeps it going
+     * until a dump begun after that start too has been applied. A failed dump backs off to
+     * [FAST_LOOKUP_BACKOFF_MS] rather than dumping back to back. Main thread.
      */
     private fun startFastLookup(startedAtMs: Long) {
         fastLookupUntilMs = startedAtMs + FAST_LOOKUP_WINDOW_MS
         if (fastLookupJob?.isActive == true) return
         fastLookupJob = pollingScope.launch(start = CoroutineStart.UNDISPATCHED) {
             while (isActive) {
-                pollSessionDump()
+                val gotDump = pollSessionDump()
                 val now = SystemClock.elapsedRealtime()
                 if (!SessionMuteLog.hasPendingStart(now) || now >= fastLookupUntilMs) break
-                delay(FAST_LOOKUP_INTERVAL_MS)
+                delay(if (gotDump) FAST_LOOKUP_INTERVAL_MS else FAST_LOOKUP_BACKOFF_MS)
             }
         }
     }
@@ -375,6 +388,7 @@ abstract class BaseSessionManager(protected val context: Context) : DumpManager.
         const val MIN_POLLING_INTERVAL_MS = 100L
         const val FAST_LOOKUP_INTERVAL_MS = 10L
         const val FAST_LOOKUP_WINDOW_MS = 1_000L
+        const val FAST_LOOKUP_BACKOFF_MS = 100L
         const val PATH_CONFIG = "playback config"
         const val PATH_DUMP = "dump"
         private fun configField(name: String) = runCatching {

@@ -18,6 +18,7 @@ object SessionMuteLog {
     const val EVENTS = 16
     private const val SEEN_IDS = 64
     private const val MAX_PENDING_START_AGE_MS = 3_000L
+    private const val MAX_PENDING_STARTS = 16
 
     /** The unmuted window this aims for. */
     const val TARGET_UNMUTED_MS = 20L
@@ -121,7 +122,11 @@ object SessionMuteLog {
     @Volatile var lastConfigLookup: ConfigLookup? = null
         private set
     private val seen = LinkedHashSet<Int>()
-    private var pendingSinceMs = 0L
+    // Player starts not yet answered by a dump begun after them, oldest first. Every one is kept,
+    // not just the oldest: a dump begun between two starts answers only the first, and the
+    // second still needs a dump (and its own window timed from its own start).
+    private val pendingStarts = ArrayDeque<Long>()
+    private val pendingSinceMs: Long get() = pendingStarts.firstOrNull() ?: 0L
 
     /**
      * The playback callback reported a player starting at [nowMs] (or a change it couldn't
@@ -129,9 +134,11 @@ object SessionMuteLog {
      */
     @Synchronized
     fun notePlaybackChange(nowMs: Long) {
-        if (pendingSinceMs == 0L || nowMs - pendingSinceMs > MAX_PENDING_START_AGE_MS) {
-            pendingSinceMs = nowMs
+        while (pendingStarts.isNotEmpty() && nowMs - pendingStarts.first() > MAX_PENDING_START_AGE_MS) {
+            pendingStarts.removeFirst()
         }
+        pendingStarts.addLast(nowMs)
+        while (pendingStarts.size > MAX_PENDING_STARTS) pendingStarts.removeFirst()
     }
 
     /**
@@ -140,13 +147,13 @@ object SessionMuteLog {
      */
     @Synchronized
     fun noteDumpApplied(dumpStartedAtMs: Long) {
-        if (pendingSinceMs != 0L && pendingSinceMs <= dumpStartedAtMs) pendingSinceMs = 0L
+        while (pendingStarts.isNotEmpty() && pendingStarts.first() <= dumpStartedAtMs) pendingStarts.removeFirst()
     }
 
     /** A player start not yet answered by a dump begun after it, as of [nowMs]. */
     @Synchronized
     fun hasPendingStart(nowMs: Long): Boolean =
-        pendingSinceMs != 0L && nowMs - pendingSinceMs <= MAX_PENDING_START_AGE_MS
+        pendingStarts.any { nowMs - it <= MAX_PENDING_START_AGE_MS }
 
     /** Mutes recorded until [endLookup] were attached by [lookup]. */
     @Synchronized
@@ -223,7 +230,7 @@ object SessionMuteLog {
     fun clear() {
         events.clear()
         seen.clear()
-        pendingSinceMs = 0L
+        pendingStarts.clear()
         lookup = null
         lastConfigLookup = null
     }

@@ -172,4 +172,17 @@ class SessionMuteLogTest {
         assertEquals(10L, t.callbackToLookupMs)
         assertNull(t.lookupToMuteMs)
     }
+
+    @Test fun aStartDuringADumpStillNeedsADumpAndKeepsItsOwnWindow() {
+        SessionMuteLog.notePlaybackChange(100) // A
+        SessionMuteLog.notePlaybackChange(120) // B, while A's dump (begun at 101) runs
+        SessionMuteLog.record(170, 7, "a", Kind.NEW, held = 0)
+        SessionMuteLog.noteDumpApplied(dumpStartedAtMs = 101)
+        assertEquals(70L, SessionMuteLog.snapshot().first().unmutedMs)
+        assertTrue("B is not answered by a dump begun before it", SessionMuteLog.hasPendingStart(175))
+        SessionMuteLog.record(240, 8, "b", Kind.NEW, held = 0)
+        SessionMuteLog.noteDumpApplied(dumpStartedAtMs = 180)
+        assertEquals(120L, SessionMuteLog.snapshot().first().unmutedMs) // timed from B, not A
+        assertFalse(SessionMuteLog.hasPendingStart(245))
+    }
 }
