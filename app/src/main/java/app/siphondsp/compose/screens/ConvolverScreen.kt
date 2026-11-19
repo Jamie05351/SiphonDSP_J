@@ -245,16 +245,16 @@ private fun ConvolverGroup(dsp: BmwDspState, ir: ConvolverIrUiState, row: Convol
     val bypassed = dsp.isOn(NativeBmwDspValues.INDEX_CROSSOVER_BYPASS)
     val convolverOn = dsp.isOn(NativeBmwDspValues.INDEX_CONVOLVER_ENABLED)
     InfoLine(when {
-        bypassed && ir.mode == 1 && convolverOn && ir.stereoStored -> "Crossovers bypassed: the stereo IR runs until they're back"
-        bypassed && ir.mode == 1 && convolverOn -> "Crossovers bypassed: no convolution until they're back (no stereo IR loaded)"
+        bypassed && ir.mode == 1 && convolverOn && ir.stereoStored -> "Bypassed: stereo IR runs until crossovers return"
+        bypassed && ir.mode == 1 && convolverOn -> "Bypassed: no convolution (no stereo IR loaded)"
         bypassed -> "Crossovers bypassed: band FIRs cannot run"
         else -> "Existing crossover settings are retained"
     }, row(196, 28))
-    InfoLine(if (ir.mode == 0) "Stereo and band files are stored separately" else "All three bands switch together; no extra crossovers", row(228, 28))
+    InfoLine(if (ir.mode == 0) "Stereo and band files are stored separately" else "Bands switch together; no extra crossovers", row(228, 28))
     val error = ir.message ?: ir.loadError
     when {
-        error != null -> InfoLine(error, row(268, 56), color = ErrorColor)
-        ir.serviceRunning && ir.runningMode != ir.mode -> InfoLine("Requested mode is not active — check the loaded IRs", row(268, 56), ErrorColor)
+        error != null -> InfoLine(error, row(268, 56), color = ErrorColor, maxLines = 2)
+        ir.serviceRunning && ir.runningMode != ir.mode -> InfoLine("Requested mode is not active — check the loaded IRs", row(268, 56), ErrorColor, maxLines = 2)
         !ir.serviceRunning -> InfoLine("Saved; loads when the DSP engine starts", row(268, 28))
         ir.runningMode == 1 && ir.activeMode == 0 && bypassed ->
             InfoLine("Per-band paused while the crossovers are bypassed", row(268, 28), Color.White)
@@ -282,11 +282,12 @@ private fun IrGroup(ir: ConvolverIrUiState, dsp: BmwDspState, row: ConvolverRow)
     }
     ir.pendingPackage?.let { uri ->
         AlertDialog(
-            onDismissRequest = { ir.pendingPackage = null },
+            // The prompt text lives in message; clear it with the dialog, or it stays as an error.
+            onDismissRequest = { ir.pendingPackage = null; ir.message = null },
             title = { Text("Different crossover settings") },
             text = { Text(ir.message ?: "The package was designed for different crossovers. Import without changing your app settings?") },
             confirmButton = { TextButton(onClick = { scope.launch { ir.importPackage(uri, dsp, allowMismatch = true) } }) { Text("Import anyway") } },
-            dismissButton = { TextButton(onClick = { ir.pendingPackage = null }) { Text("Cancel") } },
+            dismissButton = { TextButton(onClick = { ir.pendingPackage = null; ir.message = null }) { Text("Cancel") } },
         )
     }
     ArtGroupHeader("Impulse responses", Color.White, row(0, HeaderHeight))
@@ -322,14 +323,16 @@ private fun IrGroup(ir: ConvolverIrUiState, dsp: BmwDspState, row: ConvolverRow)
             packagePicker.launch(arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream"))
         }
     }
-    InfoLine(if (ir.allBandsStored) "3 bands run in parallel: buffer delay is not tripled" else "Load all 3 slots to enable per-band mode", row(282, 28))
+    InfoLine(if (ir.allBandsStored) "Bands run in parallel: buffer delay not tripled" else "Load all 3 slots to enable per-band mode", row(282, 28))
     s?.error?.let { InfoLine(it, row(314, 28), ErrorColor) }
 }
 
 @Composable
-private fun InfoLine(text: String, modifier: Modifier, color: Color = InfoColor) {
+private fun InfoLine(text: String, modifier: Modifier, color: Color = InfoColor, maxLines: Int = 1) {
+    // One line by default: the head unit's rows are absolutely placed ~30dp apart, so a second
+    // line would overlap the next row. Rows given 56dp pass maxLines = 2.
     Box(modifier, contentAlignment = Alignment.CenterStart) {
-        Text(text, color = color, fontSize = 13.sp, maxLines = 3, overflow = TextOverflow.Ellipsis)
+        Text(text, color = color, fontSize = 13.sp, maxLines = maxLines, overflow = TextOverflow.Ellipsis)
     }
 }
 
