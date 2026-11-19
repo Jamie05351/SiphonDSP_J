@@ -149,12 +149,9 @@ jobs:
       - name: Build APKs
         run: ./gradlew "${{ env.GRADLE_TASK }}"
 
-      # Run the shared JVM/Robolectric suite against the variant packaged above. Preview
-      # uses Pluto's no-op libraries and excludes LeakCanary; debug's extra diagnostic
-      # dependencies must not block validation of the shipped Preview APK.
       - name: Run Android unit tests and lint
         if: github.event_name == 'pull_request'
-        run: ./gradlew :app:testPreviewUnitTest :app:lintPreview
+        run: ./gradlew :app:testDebugUnitTest :app:lintPreview
 
       # The flat-config layout is generated from app/src/main/schema/native_bmw_dsp.schema; fails
       # if a generated file (C++ header, Kotlin indices/defaults, default_config.txt, the schema
