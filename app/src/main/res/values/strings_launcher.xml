@@ -12,8 +12,6 @@
     <string name="launcher_tile_files">File Explorer</string>
     <string name="launcher_tile_drive">Drive</string>
     <string name="launcher_tile_toolkit">KSW Toolkit</string>
-    <string name="launcher_tile_settings">Settings</string>
-    <string name="launcher_tile_dsp">DSP</string>
     <string name="launcher_tile_choose">Hold to choose an app</string>
     <string name="launcher_tile_hide">Hide tile</string>
     <string name="launcher_show_tiles">Show hidden tiles</string>
