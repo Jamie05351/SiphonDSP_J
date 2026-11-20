@@ -120,6 +120,11 @@ class LauncherHomeRenderTest {
     @Config(qualifiers = "w800dp-h400dp-land-mdpi")
     fun scaledDown() = render("scaled-down", overlay = LauncherOverlay.None, minWidth = 800)
 
+    /** The car menu on the smaller screen: every section on the rail stays reachable (it scrolls). */
+    @Test
+    @Config(qualifiers = "w800dp-h400dp-land-mdpi")
+    fun carMenuScaledDown() = render("car-menu-scaled-down", overlay = LauncherOverlay.CarMenu(), minWidth = 800)
+
     /** Every home tile side by side, for checking their pictures. */
     @Test
     @Config(qualifiers = "w1100dp-h600dp-land-mdpi")
