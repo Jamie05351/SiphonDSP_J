@@ -16,9 +16,6 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -39,9 +36,13 @@ import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import app.siphondsp.R
-import app.siphondsp.compose.launcher.GlassDivider
-import app.siphondsp.compose.launcher.GlassItem
-import app.siphondsp.compose.launcher.GlassMenu
+import app.siphondsp.compose.controls.GlassButton
+import app.siphondsp.compose.controls.GlassButtonKind
+import app.siphondsp.compose.controls.GlassDialog
+import app.siphondsp.compose.controls.GlassDialogText
+import app.siphondsp.compose.controls.GlassDivider
+import app.siphondsp.compose.controls.GlassItem
+import app.siphondsp.compose.controls.GlassMenu
 import app.siphondsp.compose.launcher.HomeTile
 import app.siphondsp.compose.launcher.LauncherActions
 import app.siphondsp.compose.launcher.LauncherHome
@@ -275,10 +276,11 @@ fun HomeRoute(powered: Boolean, onTogglePower: () -> Unit, launcherHost: Launche
                         GlassItem(R.string.launcher_dsp_settings, R.drawable.ic_tune_vertical_variant_24dp) { moreAnchor = null; if (openingTile == null) navigator.open(Routes.SETTINGS) }
                         GlassDivider()
                     }
-                    GlassItem(R.string.action_measurement, R.drawable.ic_twotone_mic_24dp) { moreAnchor = null; navigator.open(Routes.MEASUREMENT_CAPTURE) }
-                    GlassItem(R.string.action_signal_generator, R.drawable.ic_baseline_waveform_24dp) { moreAnchor = null; navigator.open(Routes.SIGNAL_GENERATOR) }
-                    GlassItem(R.string.action_native_truth, R.drawable.ic_twotone_troubleshoot_24dp) { moreAnchor = null; navigator.open(Routes.NATIVE_TRUTH) }
-                    GlassItem(R.string.action_blocked_apps, R.drawable.ic_twotone_app_blocking_24dp) { moreAnchor = null; navigator.open(Routes.BLOCKLIST) }
+                    // Each page waits out a tile that's still opening, as the dock's own buttons do.
+                    GlassItem(R.string.action_measurement, R.drawable.ic_twotone_mic_24dp) { moreAnchor = null; if (openingTile == null) navigator.open(Routes.MEASUREMENT_CAPTURE) }
+                    GlassItem(R.string.action_signal_generator, R.drawable.ic_baseline_waveform_24dp) { moreAnchor = null; if (openingTile == null) navigator.open(Routes.SIGNAL_GENERATOR) }
+                    GlassItem(R.string.action_native_truth, R.drawable.ic_twotone_troubleshoot_24dp) { moreAnchor = null; if (openingTile == null) navigator.open(Routes.NATIVE_TRUTH) }
+                    GlassItem(R.string.action_blocked_apps, R.drawable.ic_twotone_app_blocking_24dp) { moreAnchor = null; if (openingTile == null) navigator.open(Routes.BLOCKLIST) }
                     GlassDivider()
                     GlassItem(R.string.action_revert, R.drawable.ic_twotone_history_24dp, danger = true) { moreAnchor = null; confirmRevert = true }
                 }
@@ -297,18 +299,19 @@ fun HomeRoute(powered: Boolean, onTogglePower: () -> Unit, launcherHost: Launche
     }
 
     if (confirmRevert) {
-        AlertDialog(
+        GlassDialog(
+            title = stringResource(R.string.revert_confirmation_title),
+            icon = R.drawable.ic_twotone_history_24dp,
+            danger = true,
             onDismissRequest = { confirmRevert = false },
-            title = { Text(stringResource(R.string.revert_confirmation_title)) },
-            text = { Text(stringResource(R.string.revert_confirmation)) },
-            confirmButton = {
-                TextButton(onClick = {
+            buttons = listOf(
+                GlassButton(stringResource(android.R.string.cancel), GlassButtonKind.Cancel) { confirmRevert = false },
+                GlassButton(stringResource(R.string.revert_confirm_button), GlassButtonKind.Danger) {
                     confirmRevert = false
                     context.restoreDspSettings()
-                }) { Text(stringResource(android.R.string.ok)) }
-            },
-            dismissButton = { TextButton(onClick = { confirmRevert = false }) { Text(stringResource(android.R.string.cancel)) } },
-        )
+                },
+            ),
+        ) { GlassDialogText(stringResource(R.string.revert_confirmation)) }
     }
 }
 

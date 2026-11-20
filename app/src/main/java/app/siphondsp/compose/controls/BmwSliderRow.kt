@@ -1,7 +1,6 @@
 package app.siphondsp.compose.controls
 
 import androidx.compose.foundation.LocalIndication
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
@@ -14,8 +13,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -40,7 +37,6 @@ private const val DisabledRowAlpha = 0.4f
 private val DropdownTitleTextSize = 14.sp
 private val DropdownChevronSize = 18.sp
 private val DropdownTitlePadding = 18.dp
-private val DropdownMenuBackground = Color(0xFF14181F)
 
 /**
  * Turns a [BmwSliderRow]'s title into a dropdown: the one bordered box reads
@@ -177,20 +173,12 @@ private fun BoxedDropdownTitle(
             Spacer(Modifier.width(8.dp))
             Text(text = "\u25BE", color = accentColor, fontSize = DropdownChevronSize)
         }
-        DropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false },
-            modifier = Modifier.background(DropdownMenuBackground),
-        ) {
+        GlassMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             dropdown.options.forEachIndexed { index, option ->
-                DropdownMenuItem(
-                    text = {
-                        Text(
-                            text = option,
-                            color = if (index == dropdown.selectedIndex) accentColor else Color.White,
-                            fontWeight = FontWeight.Bold,
-                        )
-                    },
+                GlassItem(
+                    text = option,
+                    checked = index == dropdown.selectedIndex,
+                    colour = if (index == dropdown.selectedIndex) accentColor else null,
                     onClick = {
                         expanded = false
                         dropdown.onSelect(index)

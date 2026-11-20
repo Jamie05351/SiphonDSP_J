@@ -1,11 +1,19 @@
 package app.siphondsp.compose.screens
 
+import app.siphondsp.R
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import android.content.Context
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,15 +27,7 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.AssistChip
-import androidx.compose.material3.AssistChipDefaults
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -51,7 +51,15 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
-import app.siphondsp.compose.controls.bmwFocusRing
+import app.siphondsp.compose.controls.GlassButton
+import app.siphondsp.compose.controls.GlassButtonKind
+import app.siphondsp.compose.controls.GlassChip
+import app.siphondsp.compose.controls.GlassDialog
+import app.siphondsp.compose.controls.GlassDialogText
+import app.siphondsp.compose.controls.GlassDivider
+import app.siphondsp.compose.controls.GlassItem
+import app.siphondsp.compose.controls.GlassMenu
+import app.siphondsp.compose.controls.GlassNote
 import app.siphondsp.compose.state.PeqStateHolder
 import app.siphondsp.fragment.CarBaselineStore
 import app.siphondsp.fragment.PeqApoImport
@@ -361,66 +369,78 @@ fun PeqToolbarActions(holder: PeqStateHolder, modifier: Modifier = Modifier) {
 
     copyWholeScopeTarget?.let { target ->
         val from = holder.selectedScope
-        AlertDialog(
+        // Replace throws the target's filters away, so it's the red one; Append is the go-ahead.
+        GlassDialog(
+            title = "Copy ${from.label} to ${target.label}",
+            icon = R.drawable.ic_twotone_add_24dp,
             onDismissRequest = { copyWholeScopeTarget = null },
-            title = { Text("Copy ${from.label} to ${target.label}") },
-            text = { Text("Append keeps ${target.label}'s existing filters. Replace removes them first.") },
-            confirmButton = {
-                Row {
-                    TextButton(onClick = {
-                        copyWholeScopeTarget = null
-                        holder.apply(PeqBandEditor.copyWholeScope(holder.peqState, from, target, append = false))
-                    }) { Text("Replace") }
-                    TextButton(onClick = {
-                        copyWholeScopeTarget = null
-                        holder.apply(PeqBandEditor.copyWholeScope(holder.peqState, from, target, append = true))
-                    }) { Text("Append") }
-                }
-            },
-            dismissButton = { TextButton(onClick = { copyWholeScopeTarget = null }) { Text("Cancel") } },
-        )
+            buttons = listOf(
+                GlassButton("Cancel", GlassButtonKind.Cancel) { copyWholeScopeTarget = null },
+                GlassButton("Replace", GlassButtonKind.Danger) {
+                    copyWholeScopeTarget = null
+                    holder.apply(PeqBandEditor.copyWholeScope(holder.peqState, from, target, append = false))
+                },
+                GlassButton("Append", GlassButtonKind.Primary) {
+                    copyWholeScopeTarget = null
+                    holder.apply(PeqBandEditor.copyWholeScope(holder.peqState, from, target, append = true))
+                },
+            ),
+        ) { GlassDialogText("Append keeps ${target.label}'s existing filters. Replace removes them first.") }
     }
 
     diagnosticReport?.let { report ->
-        AlertDialog(
+        GlassDialog(
+            title = "DSP diagnostic report",
+            icon = R.drawable.ic_twotone_troubleshoot_24dp,
             onDismissRequest = { diagnosticReport = null },
-            title = { Text("DSP diagnostic report") },
-            text = {
-                Text(
-                    report,
-                    modifier = Modifier
-                        .heightIn(max = 320.dp)
-                        .verticalScroll(rememberScrollState()),
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
+            buttons = listOf(
+                GlassButton("Close", GlassButtonKind.Cancel) { diagnosticReport = null },
+                GlassButton("Export", GlassButtonKind.Primary, icon = R.drawable.ic_twotone_download_24) {
                     pendingDiagnostic = report
                     diagnosticReport = null
                     diagnosticExportLauncher.launch("siphondsp-peq-diagnostic.txt")
-                }) { Text("Export") }
-            },
-            dismissButton = { TextButton(onClick = { diagnosticReport = null }) { Text("Close") } },
-        )
+                },
+            ),
+        ) {
+            // The report in a sunken well, monospace so its columns line up, scrolling inside it. Up
+            // to 260 dp tall, less on a short screen: the dialog gives it only what its buttons leave.
+            Text(
+                report,
+                color = Color(0xFFD1D5DB),
+                fontSize = 13.sp,
+                lineHeight = 18.sp,
+                fontFamily = FontFamily.Monospace,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 260.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Color(0xFF111216))
+                    .border(1.dp, Color(0xFF353840), RoundedCornerShape(12.dp))
+                    .verticalScroll(rememberScrollState())
+                    .padding(14.dp),
+            )
+        }
     }
 
     pendingBackup?.let { prompt ->
-        AlertDialog(
+        // Red: a restore replaces the whole current DSP setup.
+        GlassDialog(
+            title = "Restore complete private BMW DSP backup?",
+            icon = R.drawable.ic_twotone_settings_backup_restore_24dp,
+            danger = true,
             onDismissRequest = { pendingBackup = null },
-            title = { Text("Restore complete private BMW DSP backup?") },
-            text = { Text(prompt.message) },
-            confirmButton = {
-                TextButton(onClick = {
+            buttons = listOf(
+                GlassButton("Cancel", GlassButtonKind.Cancel) { pendingBackup = null },
+                GlassButton("Restore", GlassButtonKind.Danger) {
                     val toRestore = prompt
                     pendingBackup = null
                     // Just applies + broadcasts; no local systemValues to update here (this
                     // composable doesn't render the graph) -- ParametricEqScreen's own
                     // event collector picks up the event this sends.
                     applyBackupRestore(context, holder, PeqGraphPreferences(context), toRestore) {}
-                }) { Text("Restore") }
-            },
-            dismissButton = { TextButton(onClick = { pendingBackup = null }) { Text("Cancel") } },
-        )
+                },
+            ),
+        ) { GlassDialogText(prompt.message) }
     }
 }
 
@@ -428,13 +448,7 @@ fun PeqToolbarActions(holder: PeqStateHolder, modifier: Modifier = Modifier) {
 
 @Composable
 private fun Chip(label: String, onClick: () -> Unit) {
-    val interactionSource = remember { MutableInteractionSource() }
-    AssistChip(
-        onClick = onClick,
-        label = { Text(label) },
-        interactionSource = interactionSource,
-        modifier = Modifier.bmwFocusRing(interactionSource),
-    )
+    GlassChip(label, onClick = onClick, arrow = false)
 }
 
 @Composable
@@ -457,58 +471,50 @@ private fun FilterToolsChip(
     }
 
     Box {
-        val interactionSource = remember { MutableInteractionSource() }
-        AssistChip(
-            onClick = { expanded = true },
-            label = { Text("Filter tools") },
-            trailingIcon = { Text("▾") },
-            colors = AssistChipDefaults.assistChipColors(),
-            interactionSource = interactionSource,
-            modifier = Modifier.bmwFocusRing(interactionSource),
-        )
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            DropdownMenuItem(
-                text = { Text("Duplicate selected filter") },
+        GlassChip("Filter tools", onClick = { expanded = true })
+        GlassMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            GlassItem(
+                text = "Duplicate selected filter",
                 enabled = selectedIndex >= 0,
                 onClick = { run(PeqBandEditor.duplicateFilter(holder.peqState, scope, selectedIndex)) },
             )
-            DropdownMenuItem(
-                text = { Text("Move up") },
+            GlassItem(
+                text = "Move up",
                 enabled = selectedIndex > 0,
                 onClick = { run(PeqBandEditor.moveFilter(holder.peqState, scope, selectedIndex, selectedIndex - 1)) },
             )
-            DropdownMenuItem(
-                text = { Text("Move down") },
+            GlassItem(
+                text = "Move down",
                 enabled = selectedIndex in 0 until bands.lastIndex,
                 onClick = { run(PeqBandEditor.moveFilter(holder.peqState, scope, selectedIndex, selectedIndex + 1)) },
             )
-            HorizontalDivider()
+            GlassDivider()
             PeqScope.entries.filter { it != scope }.forEach { target ->
-                DropdownMenuItem(
-                    text = { Text("Copy selected to ${target.label}") },
+                GlassItem(
+                    text = "Copy selected to ${target.label}",
                     enabled = selectedIndex >= 0,
                     onClick = { run(PeqBandEditor.copyFilter(holder.peqState, scope, selectedIndex, target)) },
                 )
-                DropdownMenuItem(
-                    text = { Text("Copy all to ${target.label}…") },
+                GlassItem(
+                    text = "Copy all to ${target.label}…",
                     onClick = { expanded = false; onCopyWholeScope(target) },
                 )
             }
-            HorizontalDivider()
-            DropdownMenuItem(
-                text = { Text("Copy all Left filters to Right") },
+            GlassDivider()
+            GlassItem(
+                text = "Copy all Left filters to Right",
                 onClick = {
                     run(PeqBandEditor.copyChannelFilters(holder.peqState, scope, ParametricEqChannel.LEFT, ParametricEqChannel.RIGHT, replaceBoth = false))
                 },
             )
-            DropdownMenuItem(
-                text = { Text("Copy all Right filters to Left") },
+            GlassItem(
+                text = "Copy all Right filters to Left",
                 onClick = {
                     run(PeqBandEditor.copyChannelFilters(holder.peqState, scope, ParametricEqChannel.RIGHT, ParametricEqChannel.LEFT, replaceBoth = false))
                 },
             )
-            DropdownMenuItem(
-                text = { Text("Split Both filters into Left + Right") },
+            GlassItem(
+                text = "Split Both filters into Left + Right",
                 onClick = {
                     run(PeqBandEditor.copyChannelFilters(holder.peqState, scope, ParametricEqChannel.LEFT_RIGHT, ParametricEqChannel.LEFT, replaceBoth = true))
                 },
@@ -539,31 +545,25 @@ private fun CarBaselineChip(holder: PeqStateHolder) {
     }
 
     Box {
-        val interactionSource = remember { MutableInteractionSource() }
-        AssistChip(
-            onClick = { expanded = true },
-            label = { Text(if (holder.graphBaseline != null) "Car baseline ✓" else "Car baseline") },
-            trailingIcon = { Text("▾") },
-            interactionSource = interactionSource,
-            modifier = Modifier.bmwFocusRing(interactionSource),
-        )
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+        GlassChip(if (holder.graphBaseline != null) "Car baseline ✓" else "Car baseline", onClick = { expanded = true })
+        GlassMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             val leftName = holder.carBaselineSource(CarBaselineStore.Side.LEFT)
             val rightName = holder.carBaselineSource(CarBaselineStore.Side.RIGHT)
-            MenuNote("Left: ${leftName ?: "none"}")
-            MenuNote("Right: ${rightName ?: "none"}")
-            HorizontalDivider()
-            DropdownMenuItem(text = { Text("Load for Left + Right…") }, onClick = { load(CarBaselineStore.Side.BOTH) })
-            DropdownMenuItem(text = { Text("Load for Left…") }, onClick = { load(CarBaselineStore.Side.LEFT) })
-            DropdownMenuItem(text = { Text("Load for Right…") }, onClick = { load(CarBaselineStore.Side.RIGHT) })
-            HorizontalDivider()
-            DropdownMenuItem(
-                text = { Text("Show on graph" + if (holder.showCarBaseline) "  ✓" else "") },
+            GlassNote("Left: ${leftName ?: "none"}")
+            GlassNote("Right: ${rightName ?: "none"}")
+            GlassDivider()
+            GlassItem("Load for Left + Right…", onClick = { load(CarBaselineStore.Side.BOTH) })
+            GlassItem("Load for Left…", onClick = { load(CarBaselineStore.Side.LEFT) })
+            GlassItem("Load for Right…", onClick = { load(CarBaselineStore.Side.RIGHT) })
+            GlassDivider()
+            GlassItem(
+                text = "Show on graph",
+                checked = holder.showCarBaseline,
                 enabled = holder.carBaseline != null,
                 onClick = { expanded = false; holder.showCarBaselineOnGraph(!holder.showCarBaseline) },
             )
-            DropdownMenuItem(
-                text = { Text("Clear baseline…") },
+            GlassItem(
+                text = "Clear baseline…",
                 enabled = holder.carBaseline != null,
                 onClick = { expanded = false; showClearConfirm = true },
             )
@@ -595,19 +595,12 @@ private fun HouseCurveChip(holder: PeqStateHolder) {
     }
 
     Box {
-        val interactionSource = remember { MutableInteractionSource() }
-        AssistChip(
-            onClick = { expanded = true },
-            label = { Text(if (holder.houseCurve != null) "House curve ✓" else "House curve") },
-            trailingIcon = { Text("▾") },
-            interactionSource = interactionSource,
-            modifier = Modifier.bmwFocusRing(interactionSource),
-        )
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            MenuNote("Current: ${holder.houseCurveSource ?: "none"}")
-            HorizontalDivider()
-            DropdownMenuItem(
-                text = { Text("Load house curve…") },
+        GlassChip(if (holder.houseCurve != null) "House curve ✓" else "House curve", onClick = { expanded = true })
+        GlassMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            GlassNote("Current: ${holder.houseCurveSource ?: "none"}")
+            GlassDivider()
+            GlassItem(
+                text = "Load house curve…",
                 onClick = {
                     expanded = false
                     launcher.launch(arrayOf("text/plain", "text/*", "application/octet-stream"))
@@ -615,13 +608,14 @@ private fun HouseCurveChip(holder: PeqStateHolder) {
             )
             // The same toggle as the graph legend's item, here too so rotary / D-pad navigation
             // (which can't reach a tap on the graph) can hide or show it without clearing it.
-            DropdownMenuItem(
-                text = { Text("Show on graph" + if (holder.showHouseCurve) "  ✓" else "") },
+            GlassItem(
+                text = "Show on graph",
+                checked = holder.showHouseCurve,
                 enabled = holder.houseCurve != null,
                 onClick = { expanded = false; holder.setHouseCurveShown(!holder.showHouseCurve) },
             )
-            DropdownMenuItem(
-                text = { Text("Clear") },
+            GlassItem(
+                text = "Clear",
                 enabled = holder.houseCurve != null,
                 onClick = { expanded = false; showClearConfirm = true },
             )
@@ -640,16 +634,6 @@ private fun HouseCurveChip(holder: PeqStateHolder) {
 }
 
 @Composable
-private fun MenuNote(text: String) {
-    Text(
-        text,
-        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
-}
-
-@Composable
 private fun ConfirmDialog(
     title: String,
     message: String,
@@ -657,13 +641,17 @@ private fun ConfirmDialog(
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    AlertDialog(
+    // Red: each one clears something stored (a baseline, a house curve).
+    GlassDialog(
+        title = title,
+        icon = R.drawable.ic_twotone_delete_24dp,
+        danger = true,
         onDismissRequest = onDismiss,
-        title = { Text(title) },
-        text = { Text(message) },
-        confirmButton = { TextButton(onClick = onConfirm) { Text(confirmLabel) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
-    )
+        buttons = listOf(
+            GlassButton("Cancel", GlassButtonKind.Cancel, onClick = onDismiss),
+            GlassButton(confirmLabel, GlassButtonKind.Danger, onClick = onConfirm),
+        ),
+    ) { GlassDialogText(message) }
 }
 
 // --- private-backup export / restore ---------------------------------------------------------
