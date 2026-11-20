@@ -191,7 +191,12 @@ class RootlessSessionDatabase(
         val held = synchronized(heldLock) {
             heldMutes.filter { captureBlocked(it.value.session.uid) }.onEach { heldMutes.remove(it.key) }
         }
-        held.forEach { (sid, h) -> releaseHeld(h); log(sid, h.session.packageName, Kind.RELEASED, "blocks capture") }
+        held.forEach { (sid, h) ->
+            // Faded too: an early (armed) mute may sit on a player that is already playing.
+            cancelConfirmationTimeout(h)
+            fadeOutAndRelease(h.session)
+            log(sid, h.session.packageName, Kind.RELEASED, "blocks capture (faded)")
+        }
     }
 
     override fun createSession(id: Int, uid: Int, packageName: String): MutedEffectSession? {

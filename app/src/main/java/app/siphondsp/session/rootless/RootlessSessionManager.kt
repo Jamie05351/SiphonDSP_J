@@ -39,6 +39,9 @@ class RootlessSessionManager(context: Context) : BaseSessionManager(context)
     // say how fresh that cache is, so the check only runs when it has something to add.
     private val policyCheckedPackages = HashSet<String>()
     private var policyCheckedAtMs = 0L
+    // A failed check's packages, and when they may be tried again: without this, every session
+    // dump would find them still unknown and queue another 50-65 ms dump straight away.
+    private val policyRetryAtMs = HashMap<String, Long>()
     private var allowlistQueued = false
     private var allowlistRequeue: String? = null
     private val allowlistRequeuePackages = HashSet<String>()
@@ -129,7 +132,7 @@ class RootlessSessionManager(context: Context) : BaseSessionManager(context)
         if (sessionDump != null && sessionDump !is ISessionPolicyInfoDump) {
             val now = SystemClock.elapsedRealtime()
             val packages = sessionDump.sessions.values.map { it.packageName }.distinct()
-            val unknown = packages.filter { it !in policyCheckedPackages }
+            val unknown = packages.filter { it !in policyCheckedPackages && (policyRetryAtMs[it] ?: 0L) <= now }
             when {
                 unknown.isNotEmpty() -> requestAllowlistCheck("new app: ${unknown.joinToString()}", unknown)
                 packages.isNotEmpty() && now - policyCheckedAtMs > POLICY_REFRESH_MS ->
@@ -183,7 +186,11 @@ class RootlessSessionManager(context: Context) : BaseSessionManager(context)
             atMs = SystemClock.elapsedRealtime(), reason = reason,
             waitedMs = SystemClock.elapsedRealtime() - requestedAt - tookMs, tookMs = tookMs, ok = dump != null,
         ))
-        if (dump != null) {
+        if (dump == null) {
+            val retryAt = SystemClock.elapsedRealtime() + POLICY_RETRY_MS
+            playing.forEach { policyRetryAtMs[it] = retryAt }
+        } else {
+            playing.forEach { policyRetryAtMs.remove(it) }
             sessionPolicyDatabase.update(dump)
             markPolicyChecked(dump, playing)
             // Verify after the mute: an app found to block capture can't be recorded, so its
@@ -203,6 +210,7 @@ class RootlessSessionManager(context: Context) : BaseSessionManager(context)
         sessionDatabase.clearSessions()
         sessionPolicyDatabase.clearSessions()
         policyCheckedPackages.clear()
+        policyRetryAtMs.clear()
         policyCheckedAtMs = 0L
         super.onDumpMethodChange(method)
     }
@@ -212,5 +220,7 @@ class RootlessSessionManager(context: Context) : BaseSessionManager(context)
         // How stale the cached allowlist may get while something plays before it's refreshed
         // (in the background).
         const val POLICY_REFRESH_MS = 60_000L
+        // After a failed check, how long before the same app's check is tried again.
+        const val POLICY_RETRY_MS = 5_000L
     }
 }
