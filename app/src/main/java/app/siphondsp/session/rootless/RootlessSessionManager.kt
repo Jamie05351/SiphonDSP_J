@@ -42,6 +42,8 @@ class RootlessSessionManager(context: Context) : BaseSessionManager(context)
     // A failed check's packages, and when they may be tried again: without this, every session
     // dump would find them still unknown and queue another 50-65 ms dump straight away.
     private val policyRetryAtMs = HashMap<String, Long>()
+    // The same for the periodic refresh, which a failed check doesn't move policyCheckedAtMs for.
+    private var policyRefreshRetryAtMs = 0L
     private var allowlistQueued = false
     private var allowlistRequeue: String? = null
     private val allowlistRequeuePackages = HashSet<String>()
@@ -135,7 +137,7 @@ class RootlessSessionManager(context: Context) : BaseSessionManager(context)
             val unknown = packages.filter { it !in policyCheckedPackages && (policyRetryAtMs[it] ?: 0L) <= now }
             when {
                 unknown.isNotEmpty() -> requestAllowlistCheck("new app: ${unknown.joinToString()}", unknown)
-                packages.isNotEmpty() && now - policyCheckedAtMs > POLICY_REFRESH_MS ->
+                packages.isNotEmpty() && now - policyCheckedAtMs > POLICY_REFRESH_MS && now >= policyRefreshRetryAtMs ->
                     requestAllowlistCheck("periodic refresh", packages)
             }
         }
@@ -189,6 +191,7 @@ class RootlessSessionManager(context: Context) : BaseSessionManager(context)
         if (dump == null) {
             val retryAt = SystemClock.elapsedRealtime() + POLICY_RETRY_MS
             playing.forEach { policyRetryAtMs[it] = retryAt }
+            policyRefreshRetryAtMs = retryAt
         } else {
             playing.forEach { policyRetryAtMs.remove(it) }
             sessionPolicyDatabase.update(dump)
@@ -211,6 +214,7 @@ class RootlessSessionManager(context: Context) : BaseSessionManager(context)
         sessionPolicyDatabase.clearSessions()
         policyCheckedPackages.clear()
         policyRetryAtMs.clear()
+        policyRefreshRetryAtMs = 0L
         policyCheckedAtMs = 0L
         super.onDumpMethodChange(method)
     }

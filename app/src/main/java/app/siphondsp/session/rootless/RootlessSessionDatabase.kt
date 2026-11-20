@@ -166,6 +166,10 @@ class RootlessSessionDatabase(
 
     // Sessions to release with a fade rather than at once (see releaseCaptureBlocked). Main thread.
     private val fadeOnRelease = java.util.Collections.newSetFromMap(java.util.IdentityHashMap<MutedEffectSession, Boolean>())
+    // Fades in progress, and their own handler, so clearing the sessions (a dump-method change,
+    // or the service stopping) can cancel every pending step and release them at once.
+    private val fading = java.util.Collections.newSetFromMap(java.util.IdentityHashMap<MutedEffectSession, Boolean>())
+    private val fadeHandler = Handler(Looper.getMainLooper())
 
     override fun shouldAddSession(id: Int, uid: Int, packageName: String): Boolean {
         if (captureBlocked(uid)) {
@@ -242,12 +246,16 @@ class RootlessSessionDatabase(
             effect.setEnableStatusListener(null)
             effect.setControlStatusListener(null)
         }
+        if (!fading.add(session)) return // already fading
+        // release() nulls audioMuteEffect, so a step that lands after it touches nothing.
         FADE_STEPS_DB.forEachIndexed { i, db ->
-            confirmationHandler.postDelayed({
+            fadeHandler.postDelayed({
                 if (session.audioMuteEffect === effect) runCatching { effect.setInputGainAllChannelsTo(db) }
             }, i * FADE_STEP_MS)
         }
-        confirmationHandler.postDelayed({ release(session) }, FADE_STEPS_DB.size * FADE_STEP_MS)
+        fadeHandler.postDelayed({
+            if (fading.remove(session)) release(session)
+        }, FADE_STEPS_DB.size * FADE_STEP_MS)
     }
 
     override fun onSessionGone(sid: Int, item: IEffectSession) {
@@ -284,6 +292,9 @@ class RootlessSessionDatabase(
     }
 
     override fun onSessionsCleared() {
+        fadeHandler.removeCallbacksAndMessages(null)
+        fading.toList().also { fading.clear() }.forEach(::release)
+        fadeOnRelease.clear()
         val all = synchronized(heldLock) {
             lastSuccessfulArmMs.clear()
             heldMutes.values.toList().also { heldMutes.clear() }
