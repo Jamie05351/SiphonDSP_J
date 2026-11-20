@@ -588,6 +588,9 @@ private fun StreamStartSection(starts: List<StreamStartLog.Start>, nowMs: Long) 
  * callback to lookup start, the lookup itself (the dump, with each method's time, or reading the
  * playback configurations), and lookup to mute attached. "Fast lookup" is what reading session
  * ids straight off the playback callback saw: anonymized ids mean the dump has to do it.
+ * "Allowlist check" is the capture-policy dump, now taken after the mute, in the background,
+ * and only when the cached result is missing or stale; an app it finds blocking capture shows
+ * as released "blocks capture (faded)".
  */
 @Composable
 private fun SessionMuteSection(events: List<SessionMuteLog.Event>, nowMs: Long) {
@@ -604,6 +607,15 @@ private fun SessionMuteSection(events: List<SessionMuteLog.Event>, nowMs: Long) 
                     "Fast lookup (playback config)",
                     "${c.visible}/${c.started} visible · ${c.micros} µs · ${c.detail} · ${formatAgo(nowMs - c.atMs)}",
                     if (c.started > 0 && c.visible == c.started) BmwGreen else BmwYellow,
+                )
+            }
+            SessionMuteLog.lastAllowlistCheck?.let { c ->
+                // Off the mute's critical path: it runs after the mute, in the background.
+                KeyValueRow(
+                    "Allowlist check (after mute)",
+                    (if (c.ok) "${c.tookMs} ms" else "failed after ${c.tookMs} ms") +
+                        " · waited ${c.waitedMs} ms · ${c.reason} · ${formatAgo(nowMs - c.atMs)}",
+                    if (c.ok) Color.White else BmwYellow,
                 )
             }
             // Which path attached the newest new session's mute, and how fast.
