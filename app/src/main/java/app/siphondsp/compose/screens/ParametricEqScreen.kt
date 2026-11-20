@@ -402,7 +402,8 @@ fun PeqToolbarActions(holder: PeqStateHolder, modifier: Modifier = Modifier) {
                 },
             ),
         ) {
-            // The report in a sunken well, monospace so its columns line up, scrolling inside it.
+            // The report in a sunken well, monospace so its columns line up, scrolling inside it. Up
+            // to 260 dp tall, less on a short screen: the dialog gives it only what its buttons leave.
             Text(
                 report,
                 color = Color(0xFFD1D5DB),

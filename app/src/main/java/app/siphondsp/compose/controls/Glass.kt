@@ -21,7 +21,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
@@ -211,9 +213,11 @@ private fun GlassDialogPanel(
 ) {
     val edge = if (danger) HomePalette.Ceiling else glassAccent()
     val shape = RoundedCornerShape(GlassDialogCorner)
+    // The body takes only the height the title and buttons leave (it scrolls inside that), so the
+    // buttons stay on screen and in the knob's reach on the 480 dp head unit.
     Column(
         Modifier
-            .padding(24.dp)
+            .padding(horizontal = 24.dp, vertical = 12.dp)
             .widthIn(max = GlassDialogWidth)
             .fillMaxWidth()
             .neonEdge(GlassDialogCorner.value, edge, glow = 0.8f)
@@ -227,9 +231,9 @@ private fun GlassDialogPanel(
             Text(title, color = Color.White, fontSize = 21.sp, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
         Box(Modifier.padding(vertical = 14.dp).fillMaxWidth().height(2.dp).background(edge.copy(alpha = 0.8f)))
-        content()
+        Column(Modifier.weight(1f, fill = false), content = content)
         Row(
-            Modifier.fillMaxWidth().padding(top = 22.dp),
+            Modifier.fillMaxWidth().padding(top = 18.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.End),
         ) {
             buttons.forEachIndexed { i, button ->
@@ -239,10 +243,10 @@ private fun GlassDialogPanel(
     }
 }
 
-/** A [GlassDialog]'s body text. */
+/** A [GlassDialog]'s body text, scrolling when it's longer than the space the dialog leaves it. */
 @Composable
 internal fun GlassDialogText(text: String) {
-    Text(text, color = HomePalette.Subtitle, fontSize = 17.sp, lineHeight = 24.sp)
+    Text(text, color = HomePalette.Subtitle, fontSize = 17.sp, lineHeight = 24.sp, modifier = Modifier.verticalScroll(rememberScrollState()))
 }
 
 @Composable
