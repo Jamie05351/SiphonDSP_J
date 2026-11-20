@@ -1,5 +1,20 @@
 package app.siphondsp.compose.screens
 
+import app.siphondsp.R
+import app.siphondsp.compose.controls.BmwSegmentedControl
+import app.siphondsp.compose.controls.GlassButton
+import app.siphondsp.compose.controls.GlassButtonKind
+import app.siphondsp.compose.controls.GlassChip
+import app.siphondsp.compose.controls.GlassDialog
+import app.siphondsp.compose.controls.GlassDialogText
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.foundation.layout.fillMaxHeight
 import android.content.Context
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -17,9 +32,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -88,6 +100,8 @@ private class ConvolverIrUiState(private val context: Context) {
     var activeMode by mutableStateOf<Int?>(null)
     var loadError by mutableStateOf<String?>(null)
     var name by mutableStateOf<String?>(null)
+    /** Every slot's stored file (Stereo, Low, Mid, High), for the slot tiles. */
+    var slotNames by mutableStateOf<Map<Int, String?>>(emptyMap())
     var status by mutableStateOf<ConvolverStatus?>(null)
     var message by mutableStateOf<String?>(null)
     var busy by mutableStateOf(false)
@@ -100,6 +114,7 @@ private class ConvolverIrUiState(private val context: Context) {
     fun refreshBlocking() {
         val selectedSlot = slot
         name = ConvolverIrStore.displayName(context, selectedSlot)
+        slotNames = Slots.associateWith { ConvolverIrStore.displayName(context, it) }
         status = RootlessAudioProcessorService.convolverStatus(selectedSlot)
         runningMode = RootlessAudioProcessorService.convolverMode()
         activeMode = RootlessAudioProcessorService.activeConvolverMode()
@@ -218,14 +233,14 @@ private fun ConvolverGroup(dsp: BmwDspState, ir: ConvolverIrUiState, row: Convol
         checked = dsp.isOn(NativeBmwDspValues.INDEX_CONVOLVER_ENABLED),
         onCheckedChange = { on -> dsp.commit(NativeBmwDspValues.INDEX_CONVOLVER_ENABLED, if (on) 1f else 0f) },
     )
-    Row(row(46, 48), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-        ActionChip(if (ir.mode == 0) "✓ Stereo" else "Stereo", !ir.busy) {
-            scope.launch { ir.switchMode(0, dsp) }
-        }
-        ActionChip(if (ir.mode == 1) "✓ Per band" else "Per band", !ir.busy) {
-            scope.launch { ir.switchMode(1, dsp) }
-        }
-    }
+    // The mode as a switch, like the other pages' HIGH / MID / LOW.
+    BmwSegmentedControl(
+        options = listOf("STEREO", "PER BAND"),
+        selectedIndex = ir.mode,
+        onSelect = { if (!ir.busy) scope.launch { ir.switchMode(it, dsp) } },
+        modifier = row(48, 44),
+        segmentHeight = 36.dp,
+    )
     ArtSlider(
         label = "Mode gain",
         value = dsp.get(NativeBmwDspValues.INDEX_CONVOLVER_GAIN),
@@ -250,22 +265,21 @@ private fun ConvolverGroup(dsp: BmwDspState, ir: ConvolverIrUiState, row: Convol
         bypassed -> "Crossovers bypassed: band FIRs cannot run"
         else -> "Existing crossover settings are retained"
     }, row(196, 28))
-    InfoLine(if (ir.mode == 0) "Stereo and band files are stored separately" else "Bands switch together; no extra crossovers", row(228, 28))
     val error = ir.message ?: ir.loadError
     when {
-        error != null -> InfoLine(error, row(268, 56), color = ErrorColor, maxLines = 2)
-        ir.serviceRunning && ir.runningMode != ir.mode -> InfoLine("Requested mode is not active — check the loaded IRs", row(268, 56), ErrorColor, maxLines = 2)
-        !ir.serviceRunning -> InfoLine("Saved; loads when the DSP engine starts", row(268, 28))
+        error != null -> InfoLine(error, row(236, 56), color = ErrorColor, maxLines = 2)
+        ir.serviceRunning && ir.runningMode != ir.mode -> InfoLine("Requested mode is not active — check the loaded IRs", row(236, 56), ErrorColor, maxLines = 2)
+        !ir.serviceRunning -> InfoLine("Saved; loads when the DSP engine starts", row(236, 28))
         ir.runningMode == 1 && ir.activeMode == 0 && bypassed ->
-            InfoLine("Per-band paused while the crossovers are bypassed", row(268, 28), Color.White)
+            InfoLine("Per-band paused while the crossovers are bypassed", row(236, 28), Color.White)
         // Bypass just switched on; per-band stops after the output's short dip.
         ir.runningMode == 1 && ir.activeMode == 1 && bypassed ->
-            InfoLine("Pausing per-band: crossovers bypassed", row(268, 28), Color.White)
+            InfoLine("Pausing per-band: crossovers bypassed", row(236, 28), Color.White)
         // The audio side switches at its next buffer, after a short dip: with nothing playing
         // that's whenever audio starts.
         ir.activeMode != null && ir.activeMode != ir.runningMode ->
-            InfoLine("${if (ir.runningMode == 1) "Per-band" else "Stereo"} selected; applies as audio plays", row(268, 28), Color.White)
-        else -> InfoLine("Active: ${if (ir.activeMode == 1) "per-band" else "stereo"} convolution", row(268, 28), Color.White)
+            InfoLine("${if (ir.runningMode == 1) "Per-band" else "Stereo"} selected; applies as audio plays", row(236, 28), Color.White)
+        else -> InfoLine("Active: ${if (ir.activeMode == 1) "per-band" else "stereo"} convolution", row(236, 28), Color.White)
     }
 }
 
@@ -281,25 +295,32 @@ private fun IrGroup(ir: ConvolverIrUiState, dsp: BmwDspState, row: ConvolverRow)
         uri?.let { scope.launch { ir.importPackage(it, dsp) } }
     }
     ir.pendingPackage?.let { uri ->
-        AlertDialog(
-            // The prompt text lives in message; clear it with the dialog, or it stays as an error.
-            onDismissRequest = { ir.pendingPackage = null; ir.message = null },
-            title = { Text("Different crossover settings") },
-            text = { Text(ir.message ?: "The package was designed for different crossovers. Import without changing your app settings?") },
-            confirmButton = { TextButton(onClick = { scope.launch { ir.importPackage(uri, dsp, allowMismatch = true) } }) { Text("Import anyway") } },
-            dismissButton = { TextButton(onClick = { ir.pendingPackage = null; ir.message = null }) { Text("Cancel") } },
-        )
+        // The prompt text lives in message; clear it with the dialog, or it stays as an error.
+        val dismiss = { ir.pendingPackage = null; ir.message = null }
+        GlassDialog(
+            title = "Different crossover settings",
+            icon = R.drawable.ic_twotone_warning_24dp,
+            onDismissRequest = dismiss,
+            buttons = listOf(
+                GlassButton("Cancel", GlassButtonKind.Cancel, onClick = dismiss),
+                GlassButton("Import anyway", GlassButtonKind.Primary) { scope.launch { ir.importPackage(uri, dsp, allowMismatch = true) } },
+            ),
+        ) { GlassDialogText(ir.message ?: "The package was designed for different crossovers. Import without changing your app settings?") }
     }
     ArtGroupHeader("Impulse responses", Color.White, row(0, HeaderHeight))
-    Row(row(44, 48), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-        listOf("Stereo", "Low", "Mid", "High").forEachIndexed { index, label ->
-            val slot = index - 1
-            ActionChip(if (ir.slot == slot) "• $label" else label, !ir.busy) {
-                scope.launch { ir.selectSlot(slot) }
+    // A tile per slot with its stored file, so all four read at a glance; tap one to work on it.
+    Column(row(48, SlotGridHeight), verticalArrangement = Arrangement.spacedBy(SlotGap)) {
+        for (pair in Slots.chunked(2)) {
+            Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(SlotGap)) {
+                for (slot in pair) {
+                    SlotTile(
+                        label = SlotLabels.getValue(slot), file = ir.slotNames[slot], selected = ir.slot == slot,
+                        enabled = !ir.busy, modifier = Modifier.weight(1f).fillMaxHeight(),
+                    ) { scope.launch { ir.selectSlot(slot) } }
+                }
             }
         }
     }
-    InfoLine(ir.name ?: "No IR in this slot", row(100, 28), color = Color.White)
     val s = ir.status
     val bufferMs = if (s != null && s.streamRate > 0) 1024_000.0 / s.streamRate else 0.0
     val lines = when {
@@ -312,19 +333,20 @@ private fun IrGroup(ir: ConvolverIrUiState, dsp: BmwDspState, row: ConvolverRow)
             "IR bulk ${"%.1f".format(s.latencyMs)} + buffer ${"%.1f".format(bufferMs)} = ${"%.1f".format(s.latencyMs + bufferMs)} ms",
         )
     }
-    lines.forEachIndexed { i, text -> InfoLine(text, row(132 + 30 * i, 28)) }
-    Row(row(230, 48), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        ActionChip(if (ir.busy) "Loading…" else "Load WAV…", enabled = !ir.busy) {
+    lines.forEachIndexed { i, text -> InfoLine(text, row(164 + 26 * i, 26)) }
+    Row(row(248, 48), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        GlassChip(if (ir.busy) "Loading…" else "Load WAV…", arrow = false, enabled = !ir.busy, onClick = {
             pickerSlot = ir.slot
             picker.launch(arrayOf("audio/wav", "audio/x-wav", "audio/wave", "audio/*", "application/octet-stream"))
-        }
-        ActionChip("Clear", enabled = !ir.busy && ir.name != null) { scope.launch { ir.clear(dsp) } }
-        ActionChip("Load set…", enabled = !ir.busy) {
+        })
+        GlassChip("Load set…", arrow = false, enabled = !ir.busy, onClick = {
             packagePicker.launch(arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream"))
-        }
+        })
+        // Red, apart at the end: it throws the slot's file away.
+        GlassChip("Clear", arrow = false, enabled = !ir.busy && ir.name != null, accent = ErrorColor, onClick = { scope.launch { ir.clear(dsp) } })
     }
-    InfoLine(if (ir.allBandsStored) "Bands run in parallel: buffer delay not tripled" else "Load all 3 slots to enable per-band mode", row(282, 28))
-    s?.error?.let { InfoLine(it, row(314, 28), ErrorColor) }
+    InfoLine(if (ir.allBandsStored) "Bands run in parallel: buffer delay not tripled" else "Load all 3 slots to enable per-band mode", row(302, 28))
+    s?.error?.let { InfoLine(it, row(330, 28), ErrorColor) }
 }
 
 @Composable
@@ -336,16 +358,24 @@ private fun InfoLine(text: String, modifier: Modifier, color: Color = InfoColor,
     }
 }
 
+/** An IR slot: its name and the file in it, edged in the convolver's blue while it's the one being worked on. */
 @Composable
-private fun ActionChip(text: String, enabled: Boolean = true, onClick: () -> Unit) {
-    val interactionSource = remember { MutableInteractionSource() }
-    AssistChip(
-        onClick = onClick,
-        enabled = enabled,
-        label = { Text(text) },
-        interactionSource = interactionSource,
-        modifier = Modifier.bmwFocusRing(interactionSource),
-    )
+private fun SlotTile(label: String, file: String?, selected: Boolean, enabled: Boolean, modifier: Modifier, onClick: () -> Unit) {
+    val shape = RoundedCornerShape(12.dp)
+    val source = remember { MutableInteractionSource() }
+    Column(
+        modifier
+            .clip(shape)
+            .background(Color(0xFF111216))
+            .border(if (selected) 2.dp else 1.dp, if (selected) ConvolverAccent else Color(0xFF353840), shape)
+            .clickable(interactionSource = source, indication = null, enabled = enabled, role = Role.Tab, onClick = onClick)
+            .bmwFocusRing(source, cornerRadius = 12.dp)
+            .padding(horizontal = 12.dp),
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Text(label, color = if (selected) Color.White else Color(0xFFB4B8C2), fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+        Text(file ?: "No IR", color = if (file != null) InfoColor else Color(0xFF5A5F6A), fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
 }
 
 /** Phone: the two groups side by side when they fit, else stacked; scrolls if too tall. */
@@ -390,4 +420,9 @@ private const val LeftX = 317
 private const val RightX = 760
 private const val GroupTop = 76
 private const val HeaderHeight = 40
+// The four slot tiles, two by two.
+private const val SlotGridHeight = 108
+private val SlotGap = 8.dp
+private val Slots = listOf(ConvolverIrStore.SLOT_STEREO, 0, 1, 2)
+private val SlotLabels = mapOf(ConvolverIrStore.SLOT_STEREO to "Stereo", 0 to "Low", 1 to "Mid", 2 to "High")
 private val PhoneGroupGap = 60.dp

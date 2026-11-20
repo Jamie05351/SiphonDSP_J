@@ -105,7 +105,8 @@ private fun DeepBassGroup(dsp: BmwDspState, row: DeepBassRow) {
     )
     InfoLine("Master %s dB, +0.3 dB per dB of cut".format(formatVolume(volumeDb)), row(204, 28))
     InfoLine("Moves 50 Hz to 32 Hz as the volume drops", row(232, 28))
-    InfoLine("None at full volume, after the master volume", row(260, 28))
+    // The last line: nothing below it, so it can wrap rather than lose its end.
+    InfoLine("None at full volume, after the master volume", row(260, 52), maxLines = 2)
 }
 
 @Composable
@@ -169,8 +170,8 @@ private fun DrawScope.drawCurveGraph(now: NativeBmwDspValues.DeepBassCurve, quie
 }
 
 @Composable
-private fun InfoLine(text: String, modifier: Modifier, color: Color = InfoColor) {
-    Box(modifier, contentAlignment = Alignment.CenterStart) { ArtLabel(text, color = color) }
+private fun InfoLine(text: String, modifier: Modifier, color: Color = InfoColor, maxLines: Int = 1) {
+    Box(modifier, contentAlignment = Alignment.CenterStart) { ArtLabel(text, color = color, maxLines = maxLines) }
 }
 
 /** Phone: the two groups side by side when they fit, else stacked; scrolls if too tall. */

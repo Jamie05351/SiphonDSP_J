@@ -43,6 +43,10 @@ import app.siphondsp.compose.controls.GlassDialogText
 import app.siphondsp.compose.controls.GlassDivider
 import app.siphondsp.compose.controls.GlassItem
 import app.siphondsp.compose.controls.GlassMenu
+import app.siphondsp.compose.controls.GlassNote
+import app.siphondsp.compose.screens.lastBackupText
+import app.siphondsp.compose.screens.rememberDspBackup
+import app.siphondsp.compose.state.PeqStateHolder
 import app.siphondsp.compose.launcher.HomeTile
 import app.siphondsp.compose.launcher.LauncherActions
 import app.siphondsp.compose.launcher.LauncherHome
@@ -99,6 +103,9 @@ fun HomeRoute(powered: Boolean, onTogglePower: () -> Unit, launcherHost: Launche
     // The saved values give the volume control its setting; every stage cell is the engine's own
     // report (rememberEngineStatus), never the settings.
     var savedValues by remember { mutableStateOf(NativeBmwDspValues.load(context)) }
+    // The complete DSP backup, in More as well as on the PEQ page. The PEQ holder is only loaded
+    // when a backup is written or restored.
+    val backup = rememberDspBackup({ PeqStateHolder(context.applicationContext) }) { savedValues = it }
     val engineStatus by rememberEngineStatus()
     val engineState = remember(engineStatus, savedValues) { HomeEngineState.from(engineStatus, savedValues) }
     var levelReadout by remember { mutableStateOf(LevelReadout.SILENT) }
@@ -276,6 +283,10 @@ fun HomeRoute(powered: Boolean, onTogglePower: () -> Unit, launcherHost: Launche
                         GlassItem(R.string.launcher_dsp_settings, R.drawable.ic_tune_vertical_variant_24dp) { moreAnchor = null; if (openingTile == null) navigator.open(Routes.SETTINGS) }
                         GlassDivider()
                     }
+                    GlassItem("Back up all DSP settings…", icon = R.drawable.ic_twotone_save_24dp) { moreAnchor = null; backup.backUp() }
+                    GlassItem("Restore all DSP settings…", icon = R.drawable.ic_twotone_settings_backup_restore_24dp) { moreAnchor = null; backup.restore() }
+                    GlassNote(lastBackupText(backup.lastBackupMs))
+                    GlassDivider()
                     // Each page waits out a tile that's still opening, as the dock's own buttons do.
                     GlassItem(R.string.action_measurement, R.drawable.ic_twotone_mic_24dp) { moreAnchor = null; if (openingTile == null) navigator.open(Routes.MEASUREMENT_CAPTURE) }
                     GlassItem(R.string.action_signal_generator, R.drawable.ic_baseline_waveform_24dp) { moreAnchor = null; if (openingTile == null) navigator.open(Routes.SIGNAL_GENERATOR) }

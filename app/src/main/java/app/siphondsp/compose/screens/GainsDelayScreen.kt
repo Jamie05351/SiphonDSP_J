@@ -1,7 +1,5 @@
 package app.siphondsp.compose.screens
 
-import app.siphondsp.compose.nav.LocalAppNavigator
-import app.siphondsp.compose.nav.Routes
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -182,7 +180,6 @@ private fun HeadUnitDelayPage(
         StereoLinkRow(dsp, linked, true, Modifier.artRect(LinkRect))
         MonoBassSwitchRow(dsp, true, Modifier.artRect(MonoBassSwitchRect))
         MonoBassFreqRow(dsp, HeadUnitSizing, true, Modifier.artRect(MonoBassFreqRect))
-        BandAlignLink(Modifier.artRect(BandAlignRect))
     }
 }
 
@@ -217,30 +214,11 @@ private fun PhoneDelayPage(
             StereoLinkRow(dsp, linked, false, Modifier.fillMaxWidth())
             MonoBassSwitchRow(dsp, false, Modifier.fillMaxWidth())
             MonoBassFreqRow(dsp, PhoneSizing, false, Modifier.fillMaxWidth())
-            BandAlignLink(Modifier.height(36.dp))
         }
     }
 }
 
 // ---------------------------------------------------------------- pieces
-
-/** Opens Band Align, which solves each side's Low delay and polarity against Mid from REW measurements. */
-@Composable
-private fun BandAlignLink(modifier: Modifier) {
-    val navigator = LocalAppNavigator.current
-    Box(
-        modifier.clickable { navigator.open(Routes.BAND_ALIGN) },
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            text = "Band Align ›",
-            color = Color(BmwDashboardSkin.LIGHT_BLUE),
-            fontSize = 15.sp,
-            fontWeight = FontWeight.Bold,
-            textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline,
-        )
-    }
-}
 
 /** The High / Mid / Low tabs, each in its band colour. Shared with the ALLPASS page. */
 @Composable
@@ -627,7 +605,6 @@ private fun snapGain(raw: Float): Float {
 // Mid · PROPOSED"). Band tabs across the top, the 3-way note under them while High is off, the car
 // in the middle with the Left and Right cards either side of it, then the stereo link.
 private val TabsRect = artDp(487, 76, 420, 40)
-private val BandAlignRect = artDp(1042, 76, 200, 40)
 private val NoteRect = artDp(447, 118, 500, 22)
 private val CarRect = artDp(447, 140, 500, 251)
 private val LeftCardRect = artDp(152, 150, 320, 240)
