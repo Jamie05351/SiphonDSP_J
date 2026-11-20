@@ -44,8 +44,6 @@ internal enum class HomeTile(@StringRes val title: Int, val accent: Color, @Draw
     FILES(R.string.launcher_tile_files, Color(0xFFFBBF24), R.drawable.launcher_tile_files),
     DRIVE(R.string.launcher_tile_drive, Color(0xFF34D399), R.drawable.launcher_tile_drive),
     TOOLKIT(R.string.launcher_tile_toolkit, Color(0xFF60A5FA), R.drawable.launcher_tile_toolkit),
-    SETTINGS(R.string.launcher_tile_settings, Color(0xFFA5B4FC), R.drawable.launcher_tile_settings),
-    DSP(R.string.launcher_tile_dsp, Color(0xFFA855F7), R.drawable.launcher_tile_dsp),
     ;
 
     /** The tile's key in [LauncherCustomisation.Look.hidden] when it's hidden. */
@@ -54,23 +52,20 @@ internal enum class HomeTile(@StringRes val title: Int, val accent: Color, @Draw
     companion object {
         const val KeyPrefix = "tile:"
 
-        /** The tiles in the swipe row: every tile but [MUSIC], which is pinned beside it and can't be hidden. */
-        val Swipe: List<HomeTile> = entries.filter { it != MUSIC }
-
-        /** The swipe row's tiles not in [hidden], in order. A saved hidden key for [MUSIC] is ignored. */
-        fun visible(hidden: Set<String>): List<HomeTile> = Swipe.filter { it.key !in hidden }
+        /** The tiles in the grid: every tile but [MUSIC], which is pinned beside it and can't be hidden. */
+        val Grid: List<HomeTile> = entries.filter { it != MUSIC }
 
         /**
-         * The swipe row's pages: [visible] in pairs, page k holding tiles 2k and 2k + 1. With an odd
-         * count the last page holds one tile (its other half stays empty).
+         * The grid's tiles not in [hidden], in order, filling it row by row; hidden tiles leave no gap.
+         * A saved hidden key for [MUSIC], or for a tile that no longer exists, is ignored.
          */
-        fun pages(hidden: Set<String>): List<List<HomeTile>> = visible(hidden).chunked(TilesPerPage)
+        fun visible(hidden: Set<String>): List<HomeTile> = Grid.filter { it.key !in hidden }
 
-        /** Whether any swipe tile is hidden, so the car menu offers to show them again. */
-        fun anyHidden(hidden: Set<String>): Boolean = Swipe.any { it.key in hidden }
+        /** Whether any grid tile is hidden, so the car menu offers to show them again. */
+        fun anyHidden(hidden: Set<String>): Boolean = Grid.any { it.key in hidden }
 
-        /** Tiles on one page of the swipe row. */
-        const val TilesPerPage = 2
+        /** The grid's columns; it has as many rows as [Grid] needs. */
+        const val Columns = 2
     }
 }
 

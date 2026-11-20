@@ -5,16 +5,6 @@ import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.pager.PageSize
-import androidx.compose.foundation.pager.PagerDefaults
-import androidx.compose.foundation.pager.PagerSnapDistance
-import androidx.compose.runtime.rememberCoroutineScope
-import kotlinx.coroutines.launch
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateDpAsState
@@ -48,15 +38,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.selection.toggleable
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -147,7 +133,6 @@ import app.siphondsp.compose.home.SignalPath
 import app.siphondsp.compose.home.StageCard
 import app.siphondsp.compose.home.VolumeColumn
 import app.siphondsp.compose.home.animateActive
-import app.siphondsp.compose.home.drawSettingsGlyph
 import app.siphondsp.compose.home.drawSpark
 import app.siphondsp.compose.home.formatDb
 import app.siphondsp.compose.home.tile
@@ -165,8 +150,11 @@ sealed interface LauncherOverlay {
     data object None : LauncherOverlay
     /** The app list; with [pickFor], tapping an app puts it in that home slot instead of opening it. */
     data class Drawer(val pickFor: Int? = null) : LauncherOverlay
-    /** The head unit's own screens and switches; with [pickFor], tapping one fills that slot. */
-    data class CarMenu(val pickFor: Int? = null) : LauncherOverlay
+    /**
+     * The head unit's own screens and switches and the home screen's settings, opened at [section];
+     * with [pickFor], only the car functions, and tapping one fills that slot.
+     */
+    data class CarMenu(val pickFor: Int? = null, val section: CarSection = CarSection.CAR) : LauncherOverlay
     /** The apps hidden from the drawer; tapping one shows it again. */
     data object HiddenApps : LauncherOverlay
 }
@@ -216,10 +204,10 @@ interface LauncherActions {
 /**
  * The front page as the head unit's home screen, laid out in dp at 1280 x 480 like [HomeScreen]
  * (scaled down to fit a smaller screen): the car wallpaper, a slim master volume strip at the far
- * left, then the double-width music tile pinned beside it, then the swipe row of the other home
- * tiles in pages of two (each swipe turns one page), the app drawer and car menu at the top right,
- * and the DSP dock along the bottom: power, the five DSP tiles, the headroom at OUT, then More and
- * Settings. A dock tile opens its page.
+ * left, then the double-width music tile pinned beside it, then the other home tiles in a fixed
+ * two-by-two grid as wide as the music tile, the app drawer and car menu at the top right, and the
+ * DSP dock along the bottom: power, the five DSP tiles, the headroom at OUT, then More (which holds
+ * the DSP settings). A dock tile opens its page.
  *
  * [apps] is null until the installed apps first load. [carFunctions] are the car functions this head
  * unit has. [overlay] is the drawer or car menu when one is open. [look] is the user's wallpaper,
@@ -356,9 +344,9 @@ fun LauncherHome(
                                 engine.masterVolumeDb, engine.masterMuted, g, actions::volumeStep, actions::toggleMute,
                                 Modifier.at(PodX, TilesTop, PodWidth, TileHeight),
                             )
-                            TileRow(apps, slots, look.hidden, track, lastPlayer, onOverlayChange, actions)
+                            TileGrid(apps, slots, look.hidden, track, lastPlayer, onOverlayChange, actions)
                             CornerButton(designWidth - 2 * CornerSize - 12f, stringResource(R.string.launcher_drawer), { onOverlayChange(LauncherOverlay.Drawer()) }) { drawDrawerGlyph() }
-                            CornerButton(designWidth - CornerSize, stringResource(R.string.launcher_car_menu), { onOverlayChange(LauncherOverlay.CarMenu()) }) { drawSettingsGlyph() }
+                            CornerButton(designWidth - CornerSize, stringResource(R.string.launcher_car_menu), { onOverlayChange(LauncherOverlay.CarMenu()) }) { drawCarGlyph() }
                         }
                     }
                 }
@@ -379,7 +367,7 @@ fun LauncherHome(
             when (overlay) {
                 is LauncherOverlay.Drawer -> AppDrawer(apps, slots, look, overlay.pickFor, HomeEdgePadding, overlayTop, overlayBottom, overlayEntry, onOverlayChange, actions)
                 is LauncherOverlay.CarMenu -> CarMenu(
-                    carFunctions, overlay.pickFor, look.wallpaper != null, HomeTile.anyHidden(look.hidden), nowPlayingAllowed, appSwipeAllowed, HomeEdgePadding, overlayTop, overlayBottom, overlayEntry, onOverlayChange, actions,
+                    carFunctions, overlay.pickFor, overlay.section, look.wallpaper != null, HomeTile.anyHidden(look.hidden), nowPlayingAllowed, appSwipeAllowed, HomeEdgePadding, overlayTop, overlayBottom, overlayEntry, onOverlayChange, actions,
                 )
                 LauncherOverlay.HiddenApps -> HiddenApps(apps, look, HomeEdgePadding, overlayTop, overlayBottom, overlayEntry, onOverlayChange, actions)
                 LauncherOverlay.None -> {}
@@ -438,15 +426,13 @@ private fun Modifier.at(x: Float, y: Float, w: Float, h: Float): Modifier {
 // --- The tile row ---
 
 /**
- * The tiles beside the volume: the [MusicTile] pinned on the left, then the swipe row, pages of two
- * tiles ([HomeTile.pages]: every other [HomeTile] not in [hidden], in order). A swipe turns exactly
- * one page and always comes to rest on a whole pair; the row wraps round from the last page to the
- * first, and the dots under it say which page is showing. The row keeps its own swipes: the swipe
- * to the DSP settings page works everywhere else on the home screen.
+ * The tiles beside the volume: the [MusicTile] pinned on the left, then the other tiles in a fixed
+ * grid of [HomeTile.Columns] columns as wide as the music tile ([HomeTile.visible]: every other
+ * [HomeTile] not in [hidden], row by row). Every tile is on screen at once, with nothing to swipe
+ * to; a hidden tile leaves its place empty at the end of the grid.
  */
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun TileRow(
+private fun TileGrid(
     apps: List<AppEntry>?,
     slots: List<SlotTarget>,
     hidden: Set<String>,
@@ -455,74 +441,14 @@ private fun TileRow(
     onOverlayChange: (LauncherOverlay) -> Unit,
     actions: LauncherActions,
 ) {
-    val s = LocalHomeScale.current
-    val view = LocalView.current
-    val scope = rememberCoroutineScope()
     Box(Modifier.at(TilesX, TilesTop, MusicWidth, TileHeight)) {
         MusicTile(slots, apps, track, lastPlayer, onOverlayChange, actions)
     }
-    val pages = HomeTile.pages(hidden)
-    if (pages.isEmpty()) return
-    // Many copies of the pages, starting in the middle, so swiping either way never runs out. The
-    // loop is of pages, not tiles, so a pair always stays together. Started again when a tile is
-    // hidden or shown, so every page still maps to the same pair and dot.
-    val pager = key(pages) { rememberPagerState(initialPage = pages.size * (LoopCopies / 2)) { pages.size * LoopCopies } }
-    HorizontalPager(
-        pager,
-        Modifier
-            .at(PagerX, TilesTop, PageWidth, TileHeight)
-            // A touch on the row is the row's: the pager round the home screen mustn't take it
-            // as the swipe to the settings page.
-            .pointerInput(Unit) {
-                awaitEachGesture {
-                    awaitFirstDown(requireUnconsumed = false)
-                    view.parent?.requestDisallowInterceptTouchEvent(true)
-                }
-            },
-        pageSize = PageSize.Fixed(s.dp(PageWidth)),
-        pageSpacing = s.dp(TileGap),
-        // The pages either side are composed and laid out off screen, so their tiles don't pop in
-        // as a swipe starts, and the knob can move focus onto them.
-        beyondViewportPageCount = 1,
-        // One page per swipe, always snapping: a drag past SnapThreshold of a page, or a flick,
-        // goes on a page; anything less springs back.
-        flingBehavior = PagerDefaults.flingBehavior(
-            pager,
-            pagerSnapDistance = PagerSnapDistance.atMost(1),
-            snapPositionalThreshold = SnapThreshold,
-        ),
-    ) { page ->
-        val pair = pages[page % pages.size]
-        Row(
-            Modifier
-                .fillMaxSize()
-                // The knob moving focus onto a tile off to one side turns the row to that tile's page.
-                .onFocusChanged {
-                    if (it.hasFocus && pager.currentPage != page) scope.launch { pager.animateScrollToPage(page) }
-                },
-            horizontalArrangement = Arrangement.spacedBy(s.dp(TileGap)),
-        ) {
-            for (slot in 0 until HomeTile.TilesPerPage) {
-                Box(Modifier.width(s.dp(TileWidth)).fillMaxHeight()) {
-                    // An odd count leaves the last page's second place empty.
-                    pair.getOrNull(slot)?.let { Tile(it, slots, apps, onOverlayChange, actions) }
-                }
-            }
-        }
-    }
-    val current = pager.currentPage % pages.size
-    Row(
-        Modifier.at(PagerX, DotsTop, PageWidth, DotSize),
-        horizontalArrangement = Arrangement.spacedBy(s.dp(8f), Alignment.CenterHorizontally),
-    ) {
-        for (i in pages.indices) {
-            Box(
-                Modifier
-                    .width(s.dp(if (i == current) DotSize * 2.5f else DotSize))
-                    .fillMaxHeight()
-                    .clip(CircleShape)
-                    .background(if (i == current) BmwTheme.colors.sliderHeadroom else HomePalette.Idle),
-            )
+    HomeTile.visible(hidden).forEachIndexed { n, tile ->
+        val column = n % HomeTile.Columns
+        val row = n / HomeTile.Columns
+        Box(Modifier.at(GridX + column * (TileWidth + TileGap), TilesTop + row * (GridTileHeight + TileGap), TileWidth, GridTileHeight)) {
+            Tile(tile, slots, apps, onOverlayChange, actions)
         }
     }
 }
@@ -542,7 +468,7 @@ private fun Tile(
     val app = (target as? SlotTarget.App)?.let { t -> apps?.firstOrNull { it.component == t.component } }
     val open = {
         when (target) {
-            SlotTarget.Empty -> if (tile == HomeTile.DSP) actions.dspSettings() else onOverlayChange(LauncherOverlay.Drawer(pickFor = i))
+            SlotTarget.Empty -> onOverlayChange(LauncherOverlay.Drawer(pickFor = i))
             is SlotTarget.Car -> actions.runCar(target.function)
             is SlotTarget.App -> if (apps != null) {
                 app?.let(actions::launchApp) ?: onOverlayChange(LauncherOverlay.Drawer(pickFor = i))
@@ -552,7 +478,7 @@ private fun Tile(
     val attached = when (target) {
         is SlotTarget.App -> app?.label ?: target.component.packageName
         is SlotTarget.Car -> stringResource(target.function.label)
-        SlotTarget.Empty -> stringResource(if (tile == HomeTile.DSP) R.string.launcher_dsp_settings else R.string.launcher_tile_choose)
+        SlotTarget.Empty -> stringResource(R.string.launcher_tile_choose)
     }
     Box(Modifier.fillMaxSize()) {
         // The edge wears the attached app's own colour; a car function or an empty slot keeps the tile's.
@@ -572,19 +498,21 @@ private fun SlotMenu(
     actions: LauncherActions,
     hide: (() -> Unit)?,
 ) {
-    DropdownMenu(expanded = expanded, onDismissRequest = dismiss) {
-        MenuItem(R.string.launcher_slot_choose_app) { dismiss(); onOverlayChange(LauncherOverlay.Drawer(pickFor = slot)) }
-        MenuItem(R.string.launcher_slot_choose_car) { dismiss(); onOverlayChange(LauncherOverlay.CarMenu(pickFor = slot)) }
+    GlassMenu(expanded = expanded, onDismissRequest = dismiss) {
+        GlassItem(R.string.launcher_slot_choose_app, R.drawable.ic_launcher_apps_24dp) { dismiss(); onOverlayChange(LauncherOverlay.Drawer(pickFor = slot)) }
+        GlassItem(R.string.launcher_slot_choose_car, R.drawable.ic_launcher_car_24dp) { dismiss(); onOverlayChange(LauncherOverlay.CarMenu(pickFor = slot)) }
+        if (target != SlotTarget.Empty || hide != null) GlassDivider()
         if (target != SlotTarget.Empty) {
-            MenuItem(R.string.launcher_slot_clear) { dismiss(); actions.assignSlot(slot, SlotTarget.Empty) }
+            GlassItem(R.string.launcher_slot_clear, R.drawable.ic_twotone_remove_24dp) { dismiss(); actions.assignSlot(slot, SlotTarget.Empty) }
         }
-        if (hide != null) MenuItem(R.string.launcher_tile_hide) { dismiss(); hide() }
+        if (hide != null) GlassItem(R.string.launcher_tile_hide, R.drawable.ic_twotone_app_blocking_24dp) { dismiss(); hide() }
     }
 }
 
 /**
- * The music tile, pinned at the left of the tile row and never hidden: the album art, then the
- * title (up to two lines), artist and player, with previous, play / pause and next under them.
+ * The music tile, pinned at the left of the tile row and never hidden: the album art over the whole
+ * tile, and on a dark fade along its bottom the title, then the artist and player beside previous,
+ * play / pause and next.
  * Whatever is playing shows here, from any player. With nothing playing it names the last player
  * (else the app in the music slot) with its icon, and offers Play. Tapping opens the player;
  * holding opens the slot's menu.
@@ -638,49 +566,52 @@ private fun MusicTile(
                 .combinedClickable(role = Role.Button, onClick = open, onLongClick = { menu = true })
                 .semantics { contentDescription = listOf(title, heading, track?.artist.orEmpty(), playerName).filter { it.isNotEmpty() }.distinct().joinToString(": ") },
         ) {
-            // The tile's own picture, faint, behind everything, so it reads as the music tile.
-            Image(
-                painterResource(tile.image), contentDescription = null, contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize().graphicsLayer { alpha = 0.22f },
-            )
-            Row(Modifier.fillMaxSize().padding(s.dp(MusicPad))) {
-                val artShape = RoundedCornerShape(s.dp(12f))
-                Box(
-                    Modifier.size(s.dp(MusicArt)).clip(artShape).background(HomePalette.Panel),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    val art = track?.art
-                    val icon = player?.icon
-                    when {
-                        art != null -> Image(art, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
-                        // No art (or nothing playing): the player's own icon in the middle.
-                        icon != null -> Image(icon, contentDescription = null, modifier = Modifier.size(s.dp(MusicArt * 0.5f)))
-                        else -> Image(
-                            painterResource(tile.image), contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize(),
-                        )
+            val art = track?.art
+            if (art != null) {
+                // The album art over the whole tile: what the tile is this size for.
+                Image(art, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+            } else {
+                // No art (or nothing playing): the tile's own picture, faint, with the player's icon
+                // in the middle of the space above the text.
+                Image(
+                    painterResource(tile.image), contentDescription = null, contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize().graphicsLayer { alpha = 0.22f },
+                )
+                player?.icon?.let { icon ->
+                    Box(Modifier.fillMaxWidth().height(s.dp(TileHeight - MusicBand)), contentAlignment = Alignment.Center) {
+                        Image(icon, contentDescription = null, modifier = Modifier.size(s.dp(MusicIcon)).clip(RoundedCornerShape(s.dp(18f))))
                     }
                 }
-                Spacer(Modifier.width(s.dp(MusicInfoGap)))
-                Column(Modifier.width(s.dp(MediaControlsWidth)).fillMaxHeight()) {
-                    // The text takes what the controls leave, so it can never run over them.
-                    Column(Modifier.weight(1f).fillMaxWidth().clipToBounds()) {
-                        Text(
-                            heading, color = Color.White, fontSize = s.sp(16f), fontWeight = FontWeight.SemiBold,
-                            lineHeight = s.sp(19f), maxLines = 2, overflow = TextOverflow.Ellipsis,
-                        )
-                        Text(
-                            detail, color = HomePalette.Subtitle, fontSize = s.sp(13f), maxLines = 1, overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.padding(top = s.dp(4f)),
-                        )
+            }
+            // A dark fade up from the bottom, so the text and controls read over any art.
+            Box(
+                Modifier.fillMaxSize().background(
+                    Brush.verticalGradient(
+                        MusicFadeStart to Color.Transparent,
+                        MusicFadeSolid to HomePalette.TileBase.copy(alpha = 0.88f),
+                        1f to HomePalette.TileBase.copy(alpha = 0.94f),
+                    ),
+                ),
+            )
+            Column(Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(s.dp(MusicPad))) {
+                Text(
+                    heading, color = Color.White, fontSize = s.sp(18f), fontWeight = FontWeight.SemiBold,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis,
+                )
+                Row(Modifier.padding(top = s.dp(6f)), verticalAlignment = Alignment.CenterVertically) {
+                    // The artist and player take what the controls leave, so they never run under them.
+                    Column(Modifier.weight(1f).clipToBounds()) {
+                        Text(detail, color = HomePalette.Subtitle, fontSize = s.sp(13f), maxLines = 1, overflow = TextOverflow.Ellipsis)
                         if (playerName.isNotEmpty() && playerName != heading) {
                             Text(
                                 playerName, color = player?.accent ?: tile.accent, fontSize = s.sp(12f), fontWeight = FontWeight.Medium,
-                                maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = s.dp(3f)),
+                                maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = s.dp(2f)),
                             )
                         }
                     }
+                    Spacer(Modifier.width(s.dp(MusicInfoGap)))
                     Row(
-                        Modifier.fillMaxWidth().height(s.dp(MediaButtonSize)),
+                        Modifier.width(s.dp(MediaControlsWidth)).height(s.dp(MediaButtonSize)),
                         horizontalArrangement = Arrangement.spacedBy(s.dp(MediaButtonGap)),
                     ) {
                         if (track != null) {
@@ -723,18 +654,14 @@ private fun MediaButton(label: String, onClick: () -> Unit, glyph: DrawScope.() 
     }
 }
 
-@Composable
-private fun MenuItem(label: Int, onClick: () -> Unit) {
-    DropdownMenuItem(text = { Text(stringResource(label)) }, onClick = onClick)
-}
-
 // --- The dock ---
 
 /**
  * The DSP along the bottom of the home screen, inside the 15 dp screen edges, with a
  * [DockInset] bottom inset:
  * the front page's own chain (power, the five tiles and the headroom at OUT) at [DockScale] of its
- * size, then More and Settings. A tile opens its stage's page; power works straight from the dock.
+ * size, then More (the DSP settings are in it). A tile opens its stage's page; power works straight
+ * from the dock.
  * The panel's edge is lit purple while the DSP is on.
  */
 @Composable
@@ -831,7 +758,6 @@ private fun Dock(
             verticalArrangement = Arrangement.spacedBy(s.dp(8f), Alignment.CenterVertically),
         ) {
             BarButton(stringResource(R.string.launcher_more), Modifier.onGloballyPositioned { moreBounds = it.boundsInRoot() }, { actions.more(moreBounds) }) { drawMoreDots() }
-            BarButton(stringResource(R.string.launcher_dsp_settings), Modifier, actions::dspSettings) { drawSettingsGlyph() }
         }
     }
 }
@@ -916,6 +842,36 @@ private fun CornerButton(x: Float, label: String, onClick: () -> Unit, glyph: Dr
     }
 }
 
+/**
+ * A car side-on: the body, the cabin on top and two wheels cut out of the body's bottom edge. The
+ * car menu, so it no longer shares the gear with the DSP settings.
+ */
+private fun DrawScope.drawCarGlyph() {
+    val w = size.width
+    val h = size.height
+    val c = HomePalette.Button
+    val cabin = Path().apply {
+        moveTo(w * 0.24f, h * 0.48f)
+        lineTo(w * 0.34f, h * 0.24f)
+        lineTo(w * 0.66f, h * 0.24f)
+        lineTo(w * 0.78f, h * 0.48f)
+        close()
+    }
+    drawPath(cabin, c)
+    val wheel = w * 0.11f
+    val wheelY = h * 0.74f
+    val wheels = Path().apply {
+        addOval(Rect(Offset(w * 0.27f, wheelY), wheel * 1.5f))
+        addOval(Rect(Offset(w * 0.73f, wheelY), wheel * 1.5f))
+    }
+    // The body, with room cut round each wheel so they read apart from it.
+    clipPath(wheels, ClipOp.Difference) {
+        drawRoundRect(c, Offset(w * 0.04f, h * 0.44f), Size(w * 0.92f, h * 0.3f), CornerRadius(h * 0.1f))
+    }
+    drawCircle(c, wheel, Offset(w * 0.27f, wheelY))
+    drawCircle(c, wheel, Offset(w * 0.73f, wheelY))
+}
+
 /** Nine small rounded squares: the app drawer. */
 private fun DrawScope.drawDrawerGlyph() {
     val cell = size.minDimension / 3
@@ -930,7 +886,7 @@ private fun DrawScope.drawDrawerGlyph() {
     }
 }
 
-/** A glyph button at the dock's end (More, Settings). */
+/** The glyph button at the dock's end (More). */
 @Composable
 private fun BarButton(label: String, modifier: Modifier, onClick: () -> Unit, glyph: DrawScope.() -> Unit) {
     val s = LocalHomeScale.current
@@ -1008,21 +964,19 @@ private const val DockChainTop = DockTop + (DockHeight - DockTileHeight) / 2 - D
 private const val DockFade = 50f
 private const val DockShadeTop = 0.6f
 private const val DockShadeBottom = 0.9f
-// More and Settings at the dock's right end, past the chain.
+// More at the dock's right end, past the chain.
 private const val DockButtonsWidth = 96f
 private const val DockButtonSize = 60f
 // The headroom ring at OUT, in chain units: as big as the power button, so the figure reads.
 private const val HeadroomSize = 104f
 // All apps and the car menu, at the padded right edge.
 private const val CornerSize = 58f
-// The tiles beside the volume strip: the music tile, then the swipe row, one page of two tiles
-// showing, each page as wide as the music tile.
+// The tiles beside the volume strip: the music tile, then the grid of the other tiles, two
+// columns as wide as the music tile.
 private const val TileWidth = 165f
 private const val TileGap = 19f
-private const val PageWidth = HomeTile.TilesPerPage * TileWidth + (HomeTile.TilesPerPage - 1) * TileGap
-private const val MusicWidth = PageWidth
-// How far a drag must go, as a fraction of a page, to turn the page on release.
-private const val SnapThreshold = 0.3f
+private const val GridWidth = HomeTile.Columns * TileWidth + (HomeTile.Columns - 1) * TileGap
+private const val MusicWidth = GridWidth
 // The music tile's insides: the art square, then the text and the controls under it.
 private const val MusicCorner = 16f
 private const val MusicPad = 16f
@@ -1035,14 +989,18 @@ private const val PodWidth = 64f
 private const val PodX = 0f
 private const val TilesX = PodX + PodWidth + 20f
 private const val TilesTop = 60f
-private const val PagerX = TilesX + MusicWidth + TileGap
-private const val DotSize = 8f
-private const val DotsTop = DockTop - 14f - DotSize
-private const val TileHeight = DotsTop - 10f - TilesTop
-// Square: the tile's height less its padding, but no wider than leaves the text and controls their
-// width (that limit is what applies at 1280 x 480: 140).
-private val MusicArt = minOf(TileHeight - 2 * MusicPad, MusicWidth - 2 * MusicPad - MusicInfoGap - MediaControlsWidth)
-private const val LoopCopies = 1000
+private const val GridX = TilesX + MusicWidth + TileGap
+// Down to just above the dock's shade (the page dots used to sit in the gap).
+private const val TileHeight = DockTop - 14f - TilesTop
+// Two rows of grid tiles in the music tile's height.
+private const val GridTileHeight = (TileHeight - TileGap) / 2
+// The text and controls' band along the bottom, which the fade darkens; the fade starts at
+// MusicFadeStart of the tile's height and is solid from MusicFadeSolid.
+private const val MusicBand = 100f
+private const val MusicFadeStart = 0.42f
+private const val MusicFadeSolid = 0.7f
+// The player's icon while there's no art.
+private const val MusicIcon = 96f
 private const val PanelMs = 380
 private const val SweepOnMs = 3000
 private const val SweepOffMs = 900

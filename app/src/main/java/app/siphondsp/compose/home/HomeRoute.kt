@@ -17,8 +17,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -41,6 +39,9 @@ import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import app.siphondsp.R
+import app.siphondsp.compose.launcher.GlassDivider
+import app.siphondsp.compose.launcher.GlassItem
+import app.siphondsp.compose.launcher.GlassMenu
 import app.siphondsp.compose.launcher.HomeTile
 import app.siphondsp.compose.launcher.LauncherActions
 import app.siphondsp.compose.launcher.LauncherHome
@@ -267,18 +268,19 @@ fun HomeRoute(powered: Boolean, onTogglePower: () -> Unit, launcherHost: Launche
         moreAnchor?.let { bounds ->
             val density = LocalDensity.current
             Box(Modifier.offset(with(density) { bounds.left.toDp() }, with(density) { bounds.bottom.toDp() })) {
-                DropdownMenu(expanded = true, onDismissRequest = { moreAnchor = null }) {
-                    MoreItem(R.string.action_revert) { moreAnchor = null; confirmRevert = true }
-                    MoreItem(R.string.action_blocked_apps) {
-                        moreAnchor = null
-                        navigator.open(Routes.BLOCKLIST)
+                // Glass, like the launcher's other menus: settings, then the tools, then Revert apart in red.
+                GlassMenu(expanded = true, onDismissRequest = { moreAnchor = null }) {
+                    // The launcher's dock has no Settings button of its own: the DSP settings are here.
+                    if (launcher) {
+                        GlassItem(R.string.launcher_dsp_settings, R.drawable.ic_tune_vertical_variant_24dp) { moreAnchor = null; if (openingTile == null) navigator.open(Routes.SETTINGS) }
+                        GlassDivider()
                     }
-                    MoreItem(R.string.action_measurement) {
-                        moreAnchor = null
-                        navigator.open(Routes.MEASUREMENT_CAPTURE)
-                    }
-                    MoreItem(R.string.action_signal_generator) { moreAnchor = null; navigator.open(Routes.SIGNAL_GENERATOR) }
-                    MoreItem(R.string.action_native_truth) { moreAnchor = null; navigator.open(Routes.NATIVE_TRUTH) }
+                    GlassItem(R.string.action_measurement, R.drawable.ic_twotone_mic_24dp) { moreAnchor = null; navigator.open(Routes.MEASUREMENT_CAPTURE) }
+                    GlassItem(R.string.action_signal_generator, R.drawable.ic_baseline_waveform_24dp) { moreAnchor = null; navigator.open(Routes.SIGNAL_GENERATOR) }
+                    GlassItem(R.string.action_native_truth, R.drawable.ic_twotone_troubleshoot_24dp) { moreAnchor = null; navigator.open(Routes.NATIVE_TRUTH) }
+                    GlassItem(R.string.action_blocked_apps, R.drawable.ic_twotone_app_blocking_24dp) { moreAnchor = null; navigator.open(Routes.BLOCKLIST) }
+                    GlassDivider()
+                    GlassItem(R.string.action_revert, R.drawable.ic_twotone_history_24dp, danger = true) { moreAnchor = null; confirmRevert = true }
                 }
             }
         }
@@ -486,11 +488,6 @@ private fun isHomeApp(activity: Activity): Boolean {
     val home = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
     val current = activity.packageManager.resolveActivity(home, PackageManager.MATCH_DEFAULT_ONLY)
     return current?.activityInfo?.packageName == activity.packageName
-}
-
-@Composable
-private fun MoreItem(title: Int, onClick: () -> Unit) {
-    DropdownMenuItem(text = { Text(stringResource(title)) }, onClick = onClick)
 }
 
 private fun HomeStage.destination() = when (this) {
