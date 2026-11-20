@@ -9,7 +9,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import android.content.Context
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.focusGroup
@@ -67,12 +66,10 @@ import app.siphondsp.fragment.PeqBandEditor
 import app.siphondsp.fragment.PeqBandEditResult
 import app.siphondsp.fragment.PeqGraphPreferences
 import app.siphondsp.fragment.PeqScope
-import app.siphondsp.model.BmwPeqPreset
 import app.siphondsp.model.BmwPeqState
 import app.siphondsp.model.NativeBmwDspValues
 import app.siphondsp.model.ParametricEqChannel
 import app.siphondsp.model.PeqDiagnosticReport
-import app.siphondsp.model.PrivatePeqBackup
 import app.siphondsp.service.RootlessAudioProcessorService
 import app.siphondsp.utils.AppEvent
 import app.siphondsp.utils.AppEvents
@@ -254,16 +251,8 @@ fun PeqToolbarActions(holder: PeqStateHolder, modifier: Modifier = Modifier) {
         ActivityResultContracts.CreateDocument("text/plain"),
     ) { uri -> uri?.let(apoImport::exportTo) }
 
-    val backupExportLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("application/json"),
-    ) { uri ->
-        uri?.let { exportPrivateBackup(context, holder.peqState, PeqGraphPreferences(context), it) }
-    }
-
-    var pendingBackup by remember { mutableStateOf<PendingBackupRestore?>(null) }
-    val backupImportLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenDocument(),
-    ) { uri -> uri?.let { pendingBackup = readBackupForConfirm(context, it) } }
+    // The complete DSP backup (the restore's confirm dialog comes with it).
+    val backup = rememberDspBackup({ holder })
 
     var pendingDiagnostic by remember { mutableStateOf<String?>(null) }
     val diagnosticExportLauncher = rememberLauncherForActivityResult(
@@ -326,28 +315,34 @@ fun PeqToolbarActions(holder: PeqStateHolder, modifier: Modifier = Modifier) {
             onSelect = { holder.selectedScope = it },
             modifier = Modifier.width(400.dp),
         )
-        Chip("Reset") { showResetConfirm = true }
-        Chip("Import") { importLauncher.launch(arrayOf("text/plain", "text/*")) }
-        Chip("Export") { exportLauncher.launch(holder.selectedScope.fileName) }
-        FilterToolsChip(holder, { copyWholeScopeTarget = it }) { message -> context.toast(message) }
-        CarBaselineChip(holder)
-        HouseCurveChip(holder)
-        Chip("Diagnostics") {
-            val sampleRate = RootlessAudioProcessorService.nativeBmwPeqSampleRate()
-            val graphPrefs = PeqGraphPreferences(context)
-            diagnosticReport = PeqDiagnosticReport.create(
-                context = context,
-                state = holder.peqState,
-                systemValues = NativeBmwDspValues.load(context),
-                sampleRate = sampleRate,
-                serviceActive = sampleRate != null,
-                nativeHandleReady = RootlessAudioProcessorService.nativeBmwPeqHandleReady(),
-                channelDisplay = graphPrefs.channelDisplay.name,
-                showIndividualFilters = graphPrefs.showIndividualFilters,
-            )
-        }
-        Chip("Backup") { backupExportLauncher.launch("SiphonDSP-private-peq-backup.json") }
-        Chip("Restore backup") { backupImportLauncher.launch(arrayOf("application/json", "text/plain")) }
+        // Four menus, so everything fits on the line: the whole-DSP backup first (the most
+        // important, and it covers every page, not only the PEQ), then this scope's files, the
+        // filter tools and the graph's overlays.
+        BackupChip(backup)
+        FileChip(
+            scope = holder.selectedScope.label,
+            onImport = { importLauncher.launch(arrayOf("text/plain", "text/*")) },
+            onExport = { exportLauncher.launch(holder.selectedScope.fileName) },
+            onClear = { showResetConfirm = true },
+        )
+        FilterToolsChip(
+            holder, { copyWholeScopeTarget = it }, { message -> context.toast(message) },
+            onDiagnostics = {
+                val sampleRate = RootlessAudioProcessorService.nativeBmwPeqSampleRate()
+                val graphPrefs = PeqGraphPreferences(context)
+                diagnosticReport = PeqDiagnosticReport.create(
+                    context = context,
+                    state = holder.peqState,
+                    systemValues = NativeBmwDspValues.load(context),
+                    sampleRate = sampleRate,
+                    serviceActive = sampleRate != null,
+                    nativeHandleReady = RootlessAudioProcessorService.nativeBmwPeqHandleReady(),
+                    channelDisplay = graphPrefs.channelDisplay.name,
+                    showIndividualFilters = graphPrefs.showIndividualFilters,
+                )
+            },
+        )
+        GraphChip(holder)
     }
 
     // --- dialogs -----------------------------------------------------------------------------
@@ -422,40 +417,16 @@ fun PeqToolbarActions(holder: PeqStateHolder, modifier: Modifier = Modifier) {
         }
     }
 
-    pendingBackup?.let { prompt ->
-        // Red: a restore replaces the whole current DSP setup.
-        GlassDialog(
-            title = "Restore complete private BMW DSP backup?",
-            icon = R.drawable.ic_twotone_settings_backup_restore_24dp,
-            danger = true,
-            onDismissRequest = { pendingBackup = null },
-            buttons = listOf(
-                GlassButton("Cancel", GlassButtonKind.Cancel) { pendingBackup = null },
-                GlassButton("Restore", GlassButtonKind.Danger) {
-                    val toRestore = prompt
-                    pendingBackup = null
-                    // Just applies + broadcasts; no local systemValues to update here (this
-                    // composable doesn't render the graph) -- ParametricEqScreen's own
-                    // event collector picks up the event this sends.
-                    applyBackupRestore(context, holder, PeqGraphPreferences(context), toRestore) {}
-                },
-            ),
-        ) { GlassDialogText(prompt.message) }
-    }
 }
 
 // --- action chips + filter-tools menu ------------------------------------------------------
-
-@Composable
-private fun Chip(label: String, onClick: () -> Unit) {
-    GlassChip(label, onClick = onClick, arrow = false)
-}
 
 @Composable
 private fun FilterToolsChip(
     holder: PeqStateHolder,
     onCopyWholeScope: (PeqScope) -> Unit,
     toast: (String) -> Unit,
+    onDiagnostics: () -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
     val scope = holder.selectedScope
@@ -471,7 +442,7 @@ private fun FilterToolsChip(
     }
 
     Box {
-        GlassChip("Filter tools", onClick = { expanded = true })
+        GlassChip("Tools", onClick = { expanded = true })
         GlassMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             GlassItem(
                 text = "Duplicate selected filter",
@@ -519,6 +490,8 @@ private fun FilterToolsChip(
                     run(PeqBandEditor.copyChannelFilters(holder.peqState, scope, ParametricEqChannel.LEFT_RIGHT, ParametricEqChannel.LEFT, replaceBoth = true))
                 },
             )
+            GlassDivider()
+            GlassItem("Diagnostics", icon = R.drawable.ic_twotone_troubleshoot_24dp, onClick = { expanded = false; onDiagnostics() })
         }
     }
 }
@@ -529,8 +502,7 @@ private fun FilterToolsChip(
  * then adds to every curve so it shows the response you'll actually hear.
  */
 @Composable
-private fun CarBaselineChip(holder: PeqStateHolder) {
-    var expanded by remember { mutableStateOf(false) }
+private fun CarBaselineMenu(holder: PeqStateHolder, expanded: Boolean, onDismiss: () -> Unit) {
     // Saveable: the activity can be recreated (memory, day/night) while the picker is open, and
     // a lost side would turn a Left or Right import into one over both channels.
     var pendingSide by rememberSaveable { mutableStateOf(CarBaselineStore.Side.BOTH) }
@@ -539,35 +511,32 @@ private fun CarBaselineChip(holder: PeqStateHolder) {
         uri?.let { holder.importCarBaseline(it, pendingSide) }
     }
     fun load(side: CarBaselineStore.Side) {
-        expanded = false
+        onDismiss()
         pendingSide = side
         launcher.launch(arrayOf("text/plain", "text/*", "application/octet-stream"))
     }
 
-    Box {
-        GlassChip(if (holder.graphBaseline != null) "Car baseline ✓" else "Car baseline", onClick = { expanded = true })
-        GlassMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            val leftName = holder.carBaselineSource(CarBaselineStore.Side.LEFT)
-            val rightName = holder.carBaselineSource(CarBaselineStore.Side.RIGHT)
-            GlassNote("Left: ${leftName ?: "none"}")
-            GlassNote("Right: ${rightName ?: "none"}")
-            GlassDivider()
-            GlassItem("Load for Left + Right…", onClick = { load(CarBaselineStore.Side.BOTH) })
-            GlassItem("Load for Left…", onClick = { load(CarBaselineStore.Side.LEFT) })
-            GlassItem("Load for Right…", onClick = { load(CarBaselineStore.Side.RIGHT) })
-            GlassDivider()
-            GlassItem(
-                text = "Show on graph",
-                checked = holder.showCarBaseline,
-                enabled = holder.carBaseline != null,
-                onClick = { expanded = false; holder.showCarBaselineOnGraph(!holder.showCarBaseline) },
-            )
-            GlassItem(
-                text = "Clear baseline…",
-                enabled = holder.carBaseline != null,
-                onClick = { expanded = false; showClearConfirm = true },
-            )
-        }
+    GlassMenu(expanded = expanded, onDismissRequest = onDismiss) {
+        val leftName = holder.carBaselineSource(CarBaselineStore.Side.LEFT)
+        val rightName = holder.carBaselineSource(CarBaselineStore.Side.RIGHT)
+        GlassNote("Left: ${leftName ?: "none"}")
+        GlassNote("Right: ${rightName ?: "none"}")
+        GlassDivider()
+        GlassItem("Load for Left + Right…", onClick = { load(CarBaselineStore.Side.BOTH) })
+        GlassItem("Load for Left…", onClick = { load(CarBaselineStore.Side.LEFT) })
+        GlassItem("Load for Right…", onClick = { load(CarBaselineStore.Side.RIGHT) })
+        GlassDivider()
+        GlassItem(
+            text = "Show on graph",
+            checked = holder.showCarBaseline,
+            enabled = holder.carBaseline != null,
+            onClick = { onDismiss(); holder.showCarBaselineOnGraph(!holder.showCarBaseline) },
+        )
+        GlassItem(
+            text = "Clear baseline…",
+            enabled = holder.carBaseline != null,
+            onClick = { onDismiss(); showClearConfirm = true },
+        )
     }
 
     if (showClearConfirm) {
@@ -587,39 +556,35 @@ private fun CarBaselineChip(holder: PeqStateHolder) {
  * shows is the graph legend's toggle, mirrored here as "Show on graph".
  */
 @Composable
-private fun HouseCurveChip(holder: PeqStateHolder) {
-    var expanded by remember { mutableStateOf(false) }
+private fun HouseCurveMenu(holder: PeqStateHolder, expanded: Boolean, onDismiss: () -> Unit) {
     var showClearConfirm by remember { mutableStateOf(false) }
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let { holder.importHouseCurve(it) }
     }
 
-    Box {
-        GlassChip(if (holder.houseCurve != null) "House curve ✓" else "House curve", onClick = { expanded = true })
-        GlassMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            GlassNote("Current: ${holder.houseCurveSource ?: "none"}")
-            GlassDivider()
-            GlassItem(
-                text = "Load house curve…",
-                onClick = {
-                    expanded = false
-                    launcher.launch(arrayOf("text/plain", "text/*", "application/octet-stream"))
-                },
-            )
-            // The same toggle as the graph legend's item, here too so rotary / D-pad navigation
-            // (which can't reach a tap on the graph) can hide or show it without clearing it.
-            GlassItem(
-                text = "Show on graph",
-                checked = holder.showHouseCurve,
-                enabled = holder.houseCurve != null,
-                onClick = { expanded = false; holder.setHouseCurveShown(!holder.showHouseCurve) },
-            )
-            GlassItem(
-                text = "Clear",
-                enabled = holder.houseCurve != null,
-                onClick = { expanded = false; showClearConfirm = true },
-            )
-        }
+    GlassMenu(expanded = expanded, onDismissRequest = onDismiss) {
+        GlassNote("Current: ${holder.houseCurveSource ?: "none"}")
+        GlassDivider()
+        GlassItem(
+            text = "Load house curve…",
+            onClick = {
+                onDismiss()
+                launcher.launch(arrayOf("text/plain", "text/*", "application/octet-stream"))
+            },
+        )
+        // The same toggle as the graph legend's item, here too so rotary / D-pad navigation
+        // (which can't reach a tap on the graph) can hide or show it without clearing it.
+        GlassItem(
+            text = "Show on graph",
+            checked = holder.showHouseCurve,
+            enabled = holder.houseCurve != null,
+            onClick = { onDismiss(); holder.setHouseCurveShown(!holder.showHouseCurve) },
+        )
+        GlassItem(
+            text = "Clear",
+            enabled = holder.houseCurve != null,
+            onClick = { onDismiss(); showClearConfirm = true },
+        )
     }
 
     if (showClearConfirm) {
@@ -632,6 +597,58 @@ private fun HouseCurveChip(holder: PeqStateHolder) {
         )
     }
 }
+
+/** The whole-DSP backup, lit green as the line's most important menu: back up, restore, and when it was last saved. */
+@Composable
+private fun BackupChip(backup: DspBackupActions) {
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        GlassChip("Backup", onClick = { expanded = true }, accent = BackupAccent)
+        GlassMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            GlassItem("Back up all DSP settings…", icon = R.drawable.ic_twotone_save_24dp, colour = BackupAccent) { expanded = false; backup.backUp() }
+            GlassItem("Restore all DSP settings…", icon = R.drawable.ic_twotone_settings_backup_restore_24dp) { expanded = false; backup.restore() }
+            GlassDivider()
+            GlassNote(lastBackupText(backup.lastBackupMs))
+        }
+    }
+}
+
+/** This scope's filters as a file: import, export, and Clear apart in red. */
+@Composable
+private fun FileChip(scope: String, onImport: () -> Unit, onExport: () -> Unit, onClear: () -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        GlassChip("File", onClick = { expanded = true })
+        GlassMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            GlassItem("Import $scope filters…", icon = R.drawable.ic_twotone_download_24) { expanded = false; onImport() }
+            GlassItem("Export $scope filters…", icon = R.drawable.ic_twotone_save_24dp) { expanded = false; onExport() }
+            GlassDivider()
+            GlassItem("Clear $scope…", icon = R.drawable.ic_twotone_delete_24dp, danger = true) { expanded = false; onClear() }
+        }
+    }
+}
+
+/**
+ * The graph's overlays: Car baseline and House curve, each opening its own menu in the same place
+ * (one long menu would scroll on the 480 dp screen). A tick shows which are on the graph.
+ */
+@Composable
+private fun GraphChip(holder: PeqStateHolder) {
+    var expanded by remember { mutableStateOf(false) }
+    var baseline by remember { mutableStateOf(false) }
+    var house by remember { mutableStateOf(false) }
+    Box {
+        GlassChip("Graph", onClick = { expanded = true })
+        GlassMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            GlassItem("Car baseline ›", checked = holder.graphBaseline != null) { expanded = false; baseline = true }
+            GlassItem("House curve ›", checked = holder.houseCurve != null && holder.showHouseCurve) { expanded = false; house = true }
+        }
+        CarBaselineMenu(holder, baseline) { baseline = false }
+        HouseCurveMenu(holder, house) { house = false }
+    }
+}
+
+private val BackupAccent = Color(0xFF5DCAA5)
 
 @Composable
 private fun ConfirmDialog(
@@ -652,100 +669,4 @@ private fun ConfirmDialog(
             GlassButton(confirmLabel, GlassButtonKind.Danger, onClick = onConfirm),
         ),
     ) { GlassDialogText(message) }
-}
-
-// --- private-backup export / restore ---------------------------------------------------------
-
-internal class PendingBackupRestore(val candidate: BmwPeqState, val backup: PrivatePeqBackup, val message: String)
-
-private fun exportPrivateBackup(
-    context: android.content.Context,
-    peqState: BmwPeqState,
-    graphPrefs: PeqGraphPreferences,
-    uri: android.net.Uri,
-) {
-    try {
-        val backup = PrivatePeqBackup(
-            createdAtEpochMs = System.currentTimeMillis(),
-            state = BmwPeqPreset.fromState(peqState, name = "Jamie private PEQ backup"),
-            graphDisplay = PrivatePeqBackup.GraphDisplay(
-                graphPrefs.showIndividualFilters,
-                graphPrefs.channelDisplayName,
-            ),
-            // Full BMW DSP state (Gains & Delay, Compressor, Crossovers & Tilt), not just PEQ.
-            nativeDspValues = NativeBmwDspValues.load(context).toList(),
-        )
-        context.contentResolver.openOutputStream(uri)?.bufferedWriter()?.use {
-            it.write(PrivatePeqBackup.encode(backup))
-        }
-        Timber.i("Private BMW DSP backup exported format=${PrivatePeqBackup.CURRENT_VERSION}")
-        context.toast("Complete private BMW DSP backup exported")
-    } catch (error: Exception) {
-        Timber.e(error, "Private PEQ backup export failed")
-        context.toast("Backup export failed")
-    }
-}
-
-private fun readBackupForConfirm(context: android.content.Context, uri: android.net.Uri): PendingBackupRestore? {
-    return try {
-        val text = context.contentResolver.openInputStream(uri)
-            ?.use(app.siphondsp.fragment.ApoImportRouter::readImportText)
-            ?: throw IllegalArgumentException("The backup file is empty")
-        val backup = PrivatePeqBackup.decode(text)
-        val candidate = backup.validatedState()
-        val sampleRate = RootlessAudioProcessorService.nativeBmwPeqSampleRate() ?: 48_000f
-        candidate.validate(sampleRate)?.let { throw IllegalArgumentException(it) }
-        val restoresFullState = backup.nativeDspValues != null
-        val message = buildString {
-            append("Full Range ${candidate.fullRangeBands.size}, Low ${candidate.lowBandBands.size}, ")
-            append("Mid ${candidate.midBandBands.size}, High ${candidate.highBandBands.size}, preamp ${candidate.preampDb} dB")
-            if (restoresFullState) append(", plus Gains & Delay, Compressor, and Crossovers & Tilt")
-            append(". This replaces all PEQ banks")
-            if (restoresFullState) append(" and the rest of the BMW DSP setup")
-            append(". A failed save is reported; PEQ and DSP settings are saved separately.")
-            if (!restoresFullState) append(" (This is an older backup file that only contains PEQ bands.)")
-        }
-        PendingBackupRestore(candidate, backup, message)
-    } catch (error: Exception) {
-        Timber.e(error, "Private PEQ backup import rejected")
-        BmwPeqState.recordBackupRestoreResult(context, "rejected: ${error.message ?: "invalid backup"}")
-        context.toast(error.message ?: "Invalid backup; previous PEQ was kept")
-        null
-    }
-}
-
-internal fun applyBackupRestore(
-    context: android.content.Context,
-    holder: PeqStateHolder,
-    graphPrefs: PeqGraphPreferences,
-    prompt: PendingBackupRestore,
-    onValuesRestored: (FloatArray) -> Unit,
-) {
-    if (holder.applyCandidate(prompt.candidate, "private-backup-restore")) {
-        prompt.backup.nativeDspValues?.let { values ->
-            // An older backup carries a shorter, position-encoded array and/or leftover bytes in
-            // slots this schema has since reclaimed for something else (stage delay, crossover
-            // type, MBC, ...). migrateRestoredValues() pads it AND runs every load()-time
-            // migration those reclaims depend on -- padToCurrentSize() alone would leave a
-            // leftover value from an older field silently reinterpreted as whatever the slot
-            // means today, applied straight to the running DSP below.
-            val restored = NativeBmwDspValues.migrateRestoredValues(context, values.toFloatArray())
-            if (!NativeBmwDspValues.save(context, restored)) {
-                BmwPeqState.recordBackupRestoreResult(context, "partial: PEQ restored; DSP save failed")
-                Timber.e("Private backup restore incomplete: BMW DSP persistence failed")
-                context.toast("Backup only partly restored: PEQ restored, other DSP settings could not be saved")
-                return
-            }
-            NativeBmwDspValues.broadcast(restored)
-            onValuesRestored(restored)
-        }
-        graphPrefs.writeBackupGraphDisplay(
-            prompt.backup.graphDisplay.showIndividualFilters,
-            prompt.backup.graphDisplay.channelDisplay,
-        )
-        BmwPeqState.recordBackupRestoreResult(context, "success-v${prompt.backup.version}")
-        Timber.i("Private PEQ backup restore succeeded version=${prompt.backup.version}")
-    } else {
-        BmwPeqState.recordBackupRestoreResult(context, "native-apply-rejected")
-    }
 }

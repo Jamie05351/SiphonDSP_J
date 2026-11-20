@@ -58,6 +58,7 @@ fun ArtLabel(
     color: Color = ArtLabelColor,
     size: TextUnit = ArtLabelSize,
     textAlign: TextAlign = TextAlign.Start,
+    maxLines: Int = 1,
 ) {
     Text(
         text = text,
@@ -65,7 +66,7 @@ fun ArtLabel(
         fontSize = size,
         fontWeight = FontWeight.Bold,
         letterSpacing = 0.03.em,
-        maxLines = 1,
+        maxLines = maxLines,
         overflow = TextOverflow.Ellipsis,
         textAlign = textAlign,
         modifier = modifier,
