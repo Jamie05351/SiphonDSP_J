@@ -269,7 +269,7 @@ fun HomeRoute(powered: Boolean, onTogglePower: () -> Unit, launcherHost: Launche
             Box(Modifier.offset(with(density) { bounds.left.toDp() }, with(density) { bounds.bottom.toDp() })) {
                 DropdownMenu(expanded = true, onDismissRequest = { moreAnchor = null }) {
                     // The launcher's dock has no Settings button of its own: the DSP settings are here.
-                    if (launcher) MoreItem(R.string.launcher_dsp_settings) { moreAnchor = null; navigator.open(Routes.SETTINGS) }
+                    if (launcher) MoreItem(R.string.launcher_dsp_settings) { moreAnchor = null; if (openingTile == null) navigator.open(Routes.SETTINGS) }
                     MoreItem(R.string.action_revert) { moreAnchor = null; confirmRevert = true }
                     MoreItem(R.string.action_blocked_apps) {
                         moreAnchor = null
