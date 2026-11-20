@@ -101,7 +101,7 @@ class BandAlignSolverTest {
             BandAlignSolver.Setting(0.8, false), band,
         )
         assertNull(r.proposal)
-        assertTrue(r.updates.isEmpty())
+        assertTrue(BandAlignSolver.applyUpdates(NativeBmwDspValues.DEFAULTS.copyOf(), listOf(r))!!.isEmpty())
     }
 
     @Test
@@ -153,11 +153,71 @@ class BandAlignSolverTest {
     }
 
     @Test
-    fun theUpdatesAreTheSidesLowDelayAndPolarity() {
-        val u = BandAlignSolver.updatesFor(BmwOutputChannel.RIGHT, BandAlignSolver.Setting(0.42, true))
+    fun aLowWantedEarlierThanZeroIsFoundWhenTheOtherDelaysHaveRoom() {
+        // Low set to 0 ms but arriving 1.8 ms late: it wants -1.8 ms (the mirror of the 2.2 ms case).
+        val seats = listOf(seat("Driver", 0.0018))
+        val r = BandAlignSolver().solveSide(BmwOutputChannel.LEFT, seats, BandAlignSolver.Setting(0.0, false), band, minDelayMs = -2.5)
+        assertEquals(-1.8, r.proposal!!.delayMs, 0.02)
+        assertFalse(r.proposal!!.inverted)
+        assertFalse(r.atRangeLimit)
+        // Without room below 0 nothing negative is ever proposed.
+        val capped = BandAlignSolver().solveSide(BmwOutputChannel.LEFT, seats, BandAlignSolver.Setting(0.0, false), band)
+        assertTrue((capped.proposal?.delayMs ?: 0.0) >= 0.0)
+    }
+
+    private fun values(high: Float = 0f, mid: Float = 0f, lowL: Float = 0f, lowR: Float = 0f) = NativeBmwDspValues.DEFAULTS.copyOf().also {
+        it[NativeBmwDspValues.INDEX_HIGH_DELAY_L] = high; it[NativeBmwDspValues.INDEX_HIGH_DELAY_R] = high
+        it[NativeBmwDspValues.INDEX_MID_DELAY_L] = mid; it[NativeBmwDspValues.INDEX_MID_DELAY_R] = mid
+        it[NativeBmwDspValues.INDEX_LOW_DELAY_L] = lowL; it[NativeBmwDspValues.INDEX_LOW_DELAY_R] = lowR
+    }
+
+    private fun proposed(side: BmwOutputChannel, delayMs: Double, inverted: Boolean = false) = BandAlignSolver.SideResult(
+        side, BandAlignSolver.Setting(0.0, false), BandAlignSolver.Setting(delayMs, inverted), 1.0, band, emptyList(), false,
+    )
+
+    @Test
+    fun aPositiveProposalWritesOnlyThatSidesLowDelayAndPolarity() {
+        val u = BandAlignSolver.applyUpdates(values(), listOf(proposed(BmwOutputChannel.RIGHT, 0.42, inverted = true)))!!
         assertEquals(0.42f, u[NativeBmwDspValues.INDEX_LOW_DELAY_R]!!, 1e-6f)
         assertEquals(1f, u[NativeBmwDspValues.outputIndex(NativeBmwDspValues.OUTPUT_LOW_RIGHT, NativeBmwDspValues.FIELD_INVERT)])
         assertEquals(2, u.size)
+    }
+
+    @Test
+    fun aNegativeProposalMakesEveryOtherDelayLaterInstead() {
+        // Left Low wants -0.5 ms: it goes to 0 and the other five delays all gain 0.5 ms.
+        val u = BandAlignSolver.applyUpdates(values(high = 0.3f, mid = 0.2f, lowL = 0.1f, lowR = 0.4f), listOf(proposed(BmwOutputChannel.LEFT, -0.5)))!!
+        assertEquals(0f, u[NativeBmwDspValues.INDEX_LOW_DELAY_L]!!, 1e-6f)
+        assertEquals(0.9f, u[NativeBmwDspValues.INDEX_LOW_DELAY_R]!!, 1e-6f)
+        assertEquals(0.7f, u[NativeBmwDspValues.INDEX_MID_DELAY_L]!!, 1e-6f)
+        assertEquals(0.7f, u[NativeBmwDspValues.INDEX_MID_DELAY_R]!!, 1e-6f)
+        assertEquals(0.8f, u[NativeBmwDspValues.INDEX_HIGH_DELAY_L]!!, 1e-6f)
+        assertEquals(0.8f, u[NativeBmwDspValues.INDEX_HIGH_DELAY_R]!!, 1e-6f)
+    }
+
+    @Test
+    fun bothSidesShareTheLargestOffset() {
+        // Left wants -1.8 ms and Right -0.5 ms: one offset of 1.8 ms serves both, Right Low lands at 1.3 ms.
+        val results = listOf(proposed(BmwOutputChannel.LEFT, -1.8), proposed(BmwOutputChannel.RIGHT, -0.5))
+        assertEquals(1.8, BandAlignSolver.sharedOffsetMs(results), 1e-9)
+        val u = BandAlignSolver.applyUpdates(values(), results)!!
+        assertEquals(1.3f, u[NativeBmwDspValues.INDEX_LOW_DELAY_R]!!, 1e-6f)
+        assertEquals(1.8f, u[NativeBmwDspValues.INDEX_MID_DELAY_L]!!, 1e-6f)
+        assertEquals(0.0, BandAlignSolver.sharedOffsetMs(listOf(proposed(BmwOutputChannel.LEFT, 0.4))), 1e-9)
+    }
+
+    @Test
+    fun anApplyThatWouldPassTheTopOfTheRangeIsRefused() {
+        // Right Low wants 2.6 ms and Left Low -0.5 ms: the offset would put Right Low at 3.1 ms.
+        val results = listOf(proposed(BmwOutputChannel.LEFT, -0.5), proposed(BmwOutputChannel.RIGHT, 2.6))
+        assertNull(BandAlignSolver.applyUpdates(values(), results))
+    }
+
+    @Test
+    fun theRoomBelowZeroIsWhatTheOtherDelaysLeaveUnderTheTop() {
+        val v = values(high = 1.0f, mid = 2.2f, lowL = 0.5f, lowR = 0.3f)
+        assertEquals(-(BandAlignSolver.DELAY_MAX_MS - 2.2), BandAlignSolver.minDelayMs(v, BmwOutputChannel.LEFT), 1e-9)
+        assertEquals(0.0, BandAlignSolver.minDelayMs(values(mid = BandAlignSolver.DELAY_MAX_MS.toFloat()), BmwOutputChannel.LEFT), 1e-9)
     }
 
     @Test

@@ -153,6 +153,7 @@ class BandAlignViewModel(application: Application) : AndroidViewModel(applicatio
                             BandAlignSolver.currentSetting(snapshot, side),
                             BandAlignSolver.scoreBand(snapshot, side),
                             isActive = { isActive },
+                            minDelayMs = BandAlignSolver.minDelayMs(snapshot, side),
                         )
                     }
                 }
@@ -197,11 +198,15 @@ class BandAlignViewModel(application: Application) : AndroidViewModel(applicatio
         return null
     }
 
-    /** Writes every side's proposal through [commit]; remembers what it replaced for [undoApply]. */
+    /**
+     * Writes every side's proposal through [commit] (see [BandAlignSolver.applyUpdates]: a Low
+     * wanted earlier than 0 makes every other delay later instead); remembers what it replaced
+     * for [undoApply].
+     */
     fun apply(values: FloatArray, peq: BmwPeqState, commit: (Map<Int, Float>) -> Boolean): Boolean {
         val current = results ?: return false
-        val updates = LinkedHashMap<Int, Float>().apply { current.forEach { putAll(it.updates) } }
-        if (updates.isEmpty()) return false
+        // These first: after an apply the delays have moved, and the room check below would
+        // otherwise answer a second tap (or a changed tune) with the wrong reason.
         if (current === appliedResults) {
             failure = "Already applied."
             return false
@@ -211,11 +216,25 @@ class BandAlignViewModel(application: Application) : AndroidViewModel(applicatio
             results = null
             return false
         }
+        val updates = BandAlignSolver.applyUpdates(values, current) ?: run {
+            failure = "Not enough room: that would put a delay past ${BandAlignSolver.DELAY_MAX_MS} ms. Lower the largest delay and analyse again."
+            return false
+        }
+        if (updates.isEmpty()) return false
+        // Undo watches each proposed side's Low delay and polarity even when they're not written
+        // (a Low already at 0, or a polarity-only change): a hand edit to one of them since must
+        // stop the undo, or the rest would be put back around it.
+        val watched = LinkedHashMap(updates)
+        for (r in current) if (r.proposal != null) {
+            for (i in listOf(BandAlignSolver.delayIndex(r.side), BandAlignSolver.invertIndex(r.side))) {
+                if (i !in watched) watched[i] = values[i]
+            }
+        }
         // Undo goes back to before Band Align: an index still holding what the last apply wrote
         // keeps its older snapshot; one edited by hand since gets that hand edit as its snapshot,
         // so a second apply's Undo returns to it rather than past it.
         val previous = LinkedHashMap(undo.orEmpty())
-        for (index in updates.keys) {
+        for (index in watched.keys) {
             val stillApplied = applied[index]?.let { abs(values[index] - it) < UNDO_TOLERANCE } == true
             if (!(stillApplied && previous.containsKey(index))) previous[index] = values[index]
         }
@@ -225,7 +244,7 @@ class BandAlignViewModel(application: Application) : AndroidViewModel(applicatio
         }
         failure = null
         undo = previous
-        applied = LinkedHashMap(applied).apply { putAll(updates) }
+        applied = LinkedHashMap(applied).apply { putAll(watched) }
         appliedResults = current
         // The imported files were measured with the settings just replaced. Analysed again they
         // would be read as measured with the new ones and the same correction proposed twice, so
@@ -238,14 +257,19 @@ class BandAlignViewModel(application: Application) : AndroidViewModel(applicatio
     /**
      * Puts back what Band Align replaced, side by side, but only where both of that side's
      * settings (Low delay and polarity) still hold what Band Align wrote: a side edited by hand
-     * since is left as the user set it. Returns what to tell the user, or null if it couldn't save.
+     * since is left as the user set it. When the apply also moved other delays (a Low wanted
+     * earlier than 0), everything it wrote is one group: put back together, or not at all, so the
+     * bands are never left part-shifted. Returns what to tell the user, or null if it couldn't save.
      */
     fun undoApply(values: FloatArray, commit: (Map<Int, Float>) -> Boolean): String? {
         val previous = undo ?: return null
-        val bySide = previous.keys.groupBy { index ->
-            BmwOutputChannel.entries.first { side ->
-                index == BandAlignSolver.delayIndex(side) || index == BandAlignSolver.invertIndex(side)
-            }
+        fun sideOf(index: Int) = BmwOutputChannel.entries.firstOrNull { side ->
+            index == BandAlignSolver.delayIndex(side) || index == BandAlignSolver.invertIndex(side)
+        }
+        val bySide: Map<Any, List<Int>> = if (previous.keys.all { sideOf(it) != null }) {
+            previous.keys.groupBy { sideOf(it)!! }
+        } else {
+            mapOf(AllDelays to previous.keys.toList())
         }
         val untouched = bySide.filterValues { indices ->
             indices.all { i -> applied[i]?.let { a -> values.getOrNull(i)?.let { abs(it - a) < UNDO_TOLERANCE } } == true }
@@ -253,20 +277,22 @@ class BandAlignViewModel(application: Application) : AndroidViewModel(applicatio
         val restore = previous.filterKeys { k -> untouched.values.any { k in it } }
         val kept = bySide.size - untouched.size
         if (restore.isNotEmpty() && !commit(restore)) {
-            failure = "Couldn't restore the previous Low delay and polarity."
+            failure = "Couldn't restore the settings from before Band Align."
             return null
         }
         undo = null
         applied = emptyMap()
         appliedResults = null
         return when {
-            kept == 0 -> "Restored the Low delay and polarity from before Band Align"
+            kept == 0 -> "Restored the settings from before Band Align"
             restore.isEmpty() -> "Nothing restored: you've changed those settings since Band Align"
             else -> "Restored the side you haven't changed since; left the other as you set it"
         }
     }
 
     private companion object {
+        /** The undo group when an apply moved delays beyond the two Low settings. */
+        val AllDelays = Any()
         const val MAX_BYTES = 4 * 1024 * 1024
         /** Half the delay step: a value within this still holds what Band Align wrote. */
         const val UNDO_TOLERANCE = 0.005f

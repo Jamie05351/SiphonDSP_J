@@ -25,8 +25,11 @@ import kotlin.math.sqrt
  * Each candidate is scored by what the side's Low + Mid sum does through the crossover region
  * (see [scoreBand]), power-smoothed over +-1/24 octave, averaged over the region with cuts
  * counted double, and over the seats. A candidate that leaves any seat worse off on that
- * measure is rejected outright, so one seat is never traded for another. Only the Low band's delay (the Gains & Delay range, 0-2.8 ms) and polarity change; Mid
- * stays as it is, so whatever the Mid delays do between the two sides is left alone.
+ * measure is rejected outright, so one seat is never traded for another. Only the Low band's
+ * timing against everything else and its polarity change. Its delay is searched from 0-2.8 ms and
+ * below 0 too, as far as the other delays leave room ([minDelayMs]): Low can't play early, so a
+ * negative answer is written by [applyUpdates] as Low at 0 and every other delay on both sides
+ * later by the same amount, which keeps Mid / High and Left / Right timing exactly as tuned.
  */
 class BandAlignSolver {
 
@@ -66,10 +69,7 @@ class BandAlignSolver {
         val seats: List<SeatResult>,
         /** True when the best delay sits at an end of the range: it may want more than the range allows. */
         val atRangeLimit: Boolean,
-    ) {
-        /** What applying [proposal] writes; empty when there is none. */
-        val updates: Map<Int, Float> get() = proposal?.let { updatesFor(side, it) }.orEmpty()
-    }
+    )
 
     val frequencies: DoubleArray = DoubleArray(POINTS) { i -> MIN_HZ * (MAX_HZ / MIN_HZ).pow(i / (POINTS - 1.0)) }
 
@@ -79,8 +79,11 @@ class BandAlignSolver {
         current: Setting,
         bandHz: ClosedFloatingPointRange<Double>,
         isActive: () -> Boolean = { true },
+        /** How far below 0 the Low delay may go (0 or negative): see [minDelayMs]. */
+        minDelayMs: Double = 0.0,
     ): SideResult {
         require(seats.isNotEmpty()) { "at least one seat" }
+        require(minDelayMs <= 0.0) { "minDelayMs is 0 or below" }
         val f = frequencies
         val fits = seats.map { fitSeat(it) }
         val mids = seats.map { s -> f.map { s.mid.at(it) ?: Complex(0.0, 0.0) } }
@@ -126,8 +129,9 @@ class BandAlignSolver {
 
         // Nearest-to-current first, so a tie keeps the smaller change.
         val steps = (DELAY_MAX_MS / DELAY_STEP_MS).roundToInt()
+        val firstStep = (minDelayMs / DELAY_STEP_MS).roundToInt()
         val candidates = buildList {
-            for (k in 0..steps) for (inv in listOf(current.inverted, !current.inverted)) {
+            for (k in firstStep..steps) for (inv in listOf(current.inverted, !current.inverted)) {
                 add(Setting((k * DELAY_STEP_MS).roundTo(DELAY_STEP_MS), inv))
             }
         }.sortedBy { abs(it.delayMs - current.delayMs) + if (it.inverted != current.inverted) 1e-6 else 0.0 }
@@ -158,7 +162,7 @@ class BandAlignSolver {
                     timingAmbiguous = fits[i].ambiguous,
                 )
             },
-            atRangeLimit = proposal != null && (proposal.delayMs <= 0.0 || proposal.delayMs >= DELAY_MAX_MS - 1e-6),
+            atRangeLimit = proposal != null && (proposal.delayMs <= minDelayMs + 1e-6 || proposal.delayMs >= DELAY_MAX_MS - 1e-6),
         )
     }
 
@@ -258,10 +262,53 @@ class BandAlignSolver {
         fun currentSetting(values: FloatArray, side: BmwOutputChannel) =
             Setting(values[delayIndex(side)].toDouble().roundTo(DELAY_STEP_MS), values[invertIndex(side)] >= .5f)
 
-        fun updatesFor(side: BmwOutputChannel, setting: Setting): Map<Int, Float> = linkedMapOf(
-            delayIndex(side) to setting.delayMs.toFloat(),
-            invertIndex(side) to if (setting.inverted) 1f else 0f,
+        /**
+         * How much later [applyUpdates] makes every delay: the most negative proposed Low delay,
+         * made positive, across both sides (0 when none is negative). One offset serves both.
+         */
+        fun sharedOffsetMs(results: List<SideResult>): Double =
+            (-(results.mapNotNull { it.proposal?.delayMs }.minOrNull() ?: 0.0)).coerceAtLeast(0.0)
+
+        /** The six band delays, High / Mid / Low on each side. */
+        val BandDelays = listOf(
+            NativeBmwDspValues.INDEX_HIGH_DELAY_L, NativeBmwDspValues.INDEX_HIGH_DELAY_R,
+            NativeBmwDspValues.INDEX_MID_DELAY_L, NativeBmwDspValues.INDEX_MID_DELAY_R,
+            NativeBmwDspValues.INDEX_LOW_DELAY_L, NativeBmwDspValues.INDEX_LOW_DELAY_R,
         )
+
+        /**
+         * How far below 0 [side]'s Low delay can be searched: as far as the other five delays can
+         * all be made later without passing [DELAY_MAX_MS]. 0 when one is already at the top.
+         */
+        fun minDelayMs(values: FloatArray, side: BmwOutputChannel): Double {
+            val highest = BandDelays.filter { it != delayIndex(side) }.maxOf { values[it].toDouble() }
+            return -(DELAY_MAX_MS - highest).coerceAtLeast(0.0).roundTo(DELAY_STEP_MS)
+        }
+
+        /**
+         * What applying every side's proposal writes: each proposed side's Low delay and polarity.
+         * A Low delay below 0 can't play, so the most negative one sets an offset that's added to
+         * all six delays: that Low lands at 0 and nothing else changes relative to anything but it.
+         * Only delays that actually change are written. Null when that would put a delay past
+         * [DELAY_MAX_MS] (another side's proposal used the room up); empty with no proposals.
+         */
+        fun applyUpdates(values: FloatArray, results: List<SideResult>): Map<Int, Float>? {
+            val proposals = results.mapNotNull { r -> r.proposal?.let { r.side to it } }
+            if (proposals.isEmpty()) return emptyMap()
+            val delays = LinkedHashMap<Int, Double>()
+            for (i in BandDelays) delays[i] = values[i].toDouble()
+            for ((side, p) in proposals) delays[delayIndex(side)] = p.delayMs
+            val offset = sharedOffsetMs(results)
+            if (offset > 0.0) delays.replaceAll { _, d -> d + offset }
+            if (delays.values.any { it > DELAY_MAX_MS + 1e-6 }) return null
+            val out = LinkedHashMap<Int, Float>()
+            for ((i, d) in delays) {
+                val v = d.roundTo(DELAY_STEP_MS).coerceIn(0.0, DELAY_MAX_MS).toFloat()
+                if (abs(v - values[i]) > 1e-4f) out[i] = v
+            }
+            for ((side, p) in proposals) out[invertIndex(side)] = if (p.inverted) 1f else 0f
+            return out
+        }
 
         /**
          * The crossover region the side is scored over: from 2.5x below to 2.5x above the
