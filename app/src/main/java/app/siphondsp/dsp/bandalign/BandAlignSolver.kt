@@ -262,6 +262,13 @@ class BandAlignSolver {
         fun currentSetting(values: FloatArray, side: BmwOutputChannel) =
             Setting(values[delayIndex(side)].toDouble().roundTo(DELAY_STEP_MS), values[invertIndex(side)] >= .5f)
 
+        /**
+         * How much later [applyUpdates] makes every delay: the most negative proposed Low delay,
+         * made positive, across both sides (0 when none is negative). One offset serves both.
+         */
+        fun sharedOffsetMs(results: List<SideResult>): Double =
+            (-(results.mapNotNull { it.proposal?.delayMs }.minOrNull() ?: 0.0)).coerceAtLeast(0.0)
+
         /** The six band delays, High / Mid / Low on each side. */
         val BandDelays = listOf(
             NativeBmwDspValues.INDEX_HIGH_DELAY_L, NativeBmwDspValues.INDEX_HIGH_DELAY_R,
@@ -291,7 +298,7 @@ class BandAlignSolver {
             val delays = LinkedHashMap<Int, Double>()
             for (i in BandDelays) delays[i] = values[i].toDouble()
             for ((side, p) in proposals) delays[delayIndex(side)] = p.delayMs
-            val offset = (-delays.values.min()).coerceAtLeast(0.0)
+            val offset = sharedOffsetMs(results)
             if (offset > 0.0) delays.replaceAll { _, d -> d + offset }
             if (delays.values.any { it > DELAY_MAX_MS + 1e-6 }) return null
             val out = LinkedHashMap<Int, Float>()

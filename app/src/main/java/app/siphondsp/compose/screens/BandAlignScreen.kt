@@ -252,7 +252,6 @@ private fun ResultSummary(
                 if (p.delayMs < 0.0) {
                     // Low can't play early: Apply makes everything else later instead.
                     Text("Low ${"%.2f".format(-p.delayMs)} ms earlier, ${polarity(p)}", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
-                    Body("Low goes to 0 ms and every other delay, both sides, gets +${"%.2f".format(-p.delayMs)} ms, so Mid / High and Left / Right timing stay as tuned.", color = Accent, small = true)
                 } else {
                     Text("Low: ${describe(p)}", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
                 }
@@ -272,6 +271,15 @@ private fun ResultSummary(
     }
     val proposals = results.mapNotNull { r -> r.proposal?.let { r.side to it } }.toMap()
     if (proposals.isEmpty()) return
+    // One offset for both sides, as Apply uses it: shown once, not per side.
+    val offset = BandAlignSolver.sharedOffsetMs(results)
+    if (offset > 0.0) {
+        Body(
+            "Apply makes every delay, both sides, ${"%.2f".format(offset)} ms later, with the earliest Low at 0 ms, " +
+                "so Mid / High and Left / Right timing stay as tuned.",
+            color = Accent, small = true,
+        )
+    }
     val l = proposals[BmwOutputChannel.LEFT]?.delayMs ?: results.firstOrNull { it.side == BmwOutputChannel.LEFT }?.current?.delayMs
     val rr = proposals[BmwOutputChannel.RIGHT]?.delayMs ?: results.firstOrNull { it.side == BmwOutputChannel.RIGHT }?.current?.delayMs
     if (delayLinked && l != null && rr != null && l != rr) {

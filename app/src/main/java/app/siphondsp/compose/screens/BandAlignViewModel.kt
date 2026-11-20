@@ -205,11 +205,8 @@ class BandAlignViewModel(application: Application) : AndroidViewModel(applicatio
      */
     fun apply(values: FloatArray, peq: BmwPeqState, commit: (Map<Int, Float>) -> Boolean): Boolean {
         val current = results ?: return false
-        val updates = BandAlignSolver.applyUpdates(values, current) ?: run {
-            failure = "Not enough room: that would put a delay past ${BandAlignSolver.DELAY_MAX_MS} ms. Lower the largest delay and analyse again."
-            return false
-        }
-        if (updates.isEmpty()) return false
+        // These first: after an apply the delays have moved, and the room check below would
+        // otherwise answer a second tap (or a changed tune) with the wrong reason.
         if (current === appliedResults) {
             failure = "Already applied."
             return false
@@ -219,11 +216,25 @@ class BandAlignViewModel(application: Application) : AndroidViewModel(applicatio
             results = null
             return false
         }
+        val updates = BandAlignSolver.applyUpdates(values, current) ?: run {
+            failure = "Not enough room: that would put a delay past ${BandAlignSolver.DELAY_MAX_MS} ms. Lower the largest delay and analyse again."
+            return false
+        }
+        if (updates.isEmpty()) return false
+        // Undo watches each proposed side's Low delay and polarity even when they're not written
+        // (a Low already at 0, or a polarity-only change): a hand edit to one of them since must
+        // stop the undo, or the rest would be put back around it.
+        val watched = LinkedHashMap(updates)
+        for (r in current) if (r.proposal != null) {
+            for (i in listOf(BandAlignSolver.delayIndex(r.side), BandAlignSolver.invertIndex(r.side))) {
+                if (i !in watched) watched[i] = values[i]
+            }
+        }
         // Undo goes back to before Band Align: an index still holding what the last apply wrote
         // keeps its older snapshot; one edited by hand since gets that hand edit as its snapshot,
         // so a second apply's Undo returns to it rather than past it.
         val previous = LinkedHashMap(undo.orEmpty())
-        for (index in updates.keys) {
+        for (index in watched.keys) {
             val stillApplied = applied[index]?.let { abs(values[index] - it) < UNDO_TOLERANCE } == true
             if (!(stillApplied && previous.containsKey(index))) previous[index] = values[index]
         }
@@ -233,7 +244,7 @@ class BandAlignViewModel(application: Application) : AndroidViewModel(applicatio
         }
         failure = null
         undo = previous
-        applied = LinkedHashMap(applied).apply { putAll(updates) }
+        applied = LinkedHashMap(applied).apply { putAll(watched) }
         appliedResults = current
         // The imported files were measured with the settings just replaced. Analysed again they
         // would be read as measured with the new ones and the same correction proposed twice, so

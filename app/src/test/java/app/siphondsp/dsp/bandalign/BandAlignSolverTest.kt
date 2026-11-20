@@ -196,6 +196,17 @@ class BandAlignSolverTest {
     }
 
     @Test
+    fun bothSidesShareTheLargestOffset() {
+        // Left wants -1.8 ms and Right -0.5 ms: one offset of 1.8 ms serves both, Right Low lands at 1.3 ms.
+        val results = listOf(proposed(BmwOutputChannel.LEFT, -1.8), proposed(BmwOutputChannel.RIGHT, -0.5))
+        assertEquals(1.8, BandAlignSolver.sharedOffsetMs(results), 1e-9)
+        val u = BandAlignSolver.applyUpdates(values(), results)!!
+        assertEquals(1.3f, u[NativeBmwDspValues.INDEX_LOW_DELAY_R]!!, 1e-6f)
+        assertEquals(1.8f, u[NativeBmwDspValues.INDEX_MID_DELAY_L]!!, 1e-6f)
+        assertEquals(0.0, BandAlignSolver.sharedOffsetMs(listOf(proposed(BmwOutputChannel.LEFT, 0.4))), 1e-9)
+    }
+
+    @Test
     fun anApplyThatWouldPassTheTopOfTheRangeIsRefused() {
         // Right Low wants 2.6 ms and Left Low -0.5 ms: the offset would put Right Low at 3.1 ms.
         val results = listOf(proposed(BmwOutputChannel.LEFT, -0.5), proposed(BmwOutputChannel.RIGHT, 2.6))
