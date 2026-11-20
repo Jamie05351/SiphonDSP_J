@@ -508,8 +508,9 @@ private fun SlotMenu(
 }
 
 /**
- * The music tile, pinned at the left of the tile row and never hidden: the album art, then the
- * title (up to two lines), artist and player, with previous, play / pause and next under them.
+ * The music tile, pinned at the left of the tile row and never hidden: the album art over the whole
+ * tile, and on a dark fade along its bottom the title, then the artist and player beside previous,
+ * play / pause and next.
  * Whatever is playing shows here, from any player. With nothing playing it names the last player
  * (else the app in the music slot) with its icon, and offers Play. Tapping opens the player;
  * holding opens the slot's menu.
@@ -563,49 +564,52 @@ private fun MusicTile(
                 .combinedClickable(role = Role.Button, onClick = open, onLongClick = { menu = true })
                 .semantics { contentDescription = listOf(title, heading, track?.artist.orEmpty(), playerName).filter { it.isNotEmpty() }.distinct().joinToString(": ") },
         ) {
-            // The tile's own picture, faint, behind everything, so it reads as the music tile.
-            Image(
-                painterResource(tile.image), contentDescription = null, contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize().graphicsLayer { alpha = 0.22f },
-            )
-            Row(Modifier.fillMaxSize().padding(s.dp(MusicPad))) {
-                val artShape = RoundedCornerShape(s.dp(12f))
-                Box(
-                    Modifier.size(s.dp(MusicArt)).clip(artShape).background(HomePalette.Panel),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    val art = track?.art
-                    val icon = player?.icon
-                    when {
-                        art != null -> Image(art, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
-                        // No art (or nothing playing): the player's own icon in the middle.
-                        icon != null -> Image(icon, contentDescription = null, modifier = Modifier.size(s.dp(MusicArt * 0.5f)))
-                        else -> Image(
-                            painterResource(tile.image), contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize(),
-                        )
+            val art = track?.art
+            if (art != null) {
+                // The album art over the whole tile: what the tile is this size for.
+                Image(art, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+            } else {
+                // No art (or nothing playing): the tile's own picture, faint, with the player's icon
+                // in the middle of the space above the text.
+                Image(
+                    painterResource(tile.image), contentDescription = null, contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize().graphicsLayer { alpha = 0.22f },
+                )
+                player?.icon?.let { icon ->
+                    Box(Modifier.fillMaxWidth().height(s.dp(TileHeight - MusicBand)), contentAlignment = Alignment.Center) {
+                        Image(icon, contentDescription = null, modifier = Modifier.size(s.dp(MusicIcon)).clip(RoundedCornerShape(s.dp(18f))))
                     }
                 }
-                Spacer(Modifier.width(s.dp(MusicInfoGap)))
-                Column(Modifier.width(s.dp(MediaControlsWidth)).fillMaxHeight()) {
-                    // The text takes what the controls leave, so it can never run over them.
-                    Column(Modifier.weight(1f).fillMaxWidth().clipToBounds()) {
-                        Text(
-                            heading, color = Color.White, fontSize = s.sp(16f), fontWeight = FontWeight.SemiBold,
-                            lineHeight = s.sp(19f), maxLines = 2, overflow = TextOverflow.Ellipsis,
-                        )
-                        Text(
-                            detail, color = HomePalette.Subtitle, fontSize = s.sp(13f), maxLines = 1, overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.padding(top = s.dp(4f)),
-                        )
+            }
+            // A dark fade up from the bottom, so the text and controls read over any art.
+            Box(
+                Modifier.fillMaxSize().background(
+                    Brush.verticalGradient(
+                        MusicFadeStart to Color.Transparent,
+                        MusicFadeSolid to HomePalette.TileBase.copy(alpha = 0.88f),
+                        1f to HomePalette.TileBase.copy(alpha = 0.94f),
+                    ),
+                ),
+            )
+            Column(Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(s.dp(MusicPad))) {
+                Text(
+                    heading, color = Color.White, fontSize = s.sp(18f), fontWeight = FontWeight.SemiBold,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis,
+                )
+                Row(Modifier.padding(top = s.dp(6f)), verticalAlignment = Alignment.CenterVertically) {
+                    // The artist and player take what the controls leave, so they never run under them.
+                    Column(Modifier.weight(1f).clipToBounds()) {
+                        Text(detail, color = HomePalette.Subtitle, fontSize = s.sp(13f), maxLines = 1, overflow = TextOverflow.Ellipsis)
                         if (playerName.isNotEmpty() && playerName != heading) {
                             Text(
                                 playerName, color = player?.accent ?: tile.accent, fontSize = s.sp(12f), fontWeight = FontWeight.Medium,
-                                maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = s.dp(3f)),
+                                maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = s.dp(2f)),
                             )
                         }
                     }
+                    Spacer(Modifier.width(s.dp(MusicInfoGap)))
                     Row(
-                        Modifier.fillMaxWidth().height(s.dp(MediaButtonSize)),
+                        Modifier.width(s.dp(MediaControlsWidth)).height(s.dp(MediaButtonSize)),
                         horizontalArrangement = Arrangement.spacedBy(s.dp(MediaButtonGap)),
                     ) {
                         if (track != null) {
@@ -993,9 +997,13 @@ private const val GridX = TilesX + MusicWidth + TileGap
 private const val TileHeight = DockTop - 14f - TilesTop
 // Two rows of grid tiles in the music tile's height.
 private const val GridTileHeight = (TileHeight - TileGap) / 2
-// Square: the tile's height less its padding, but no wider than leaves the text and controls their
-// width (that limit is what applies at 1280 x 480: 140).
-private val MusicArt = minOf(TileHeight - 2 * MusicPad, MusicWidth - 2 * MusicPad - MusicInfoGap - MediaControlsWidth)
+// The text and controls' band along the bottom, which the fade darkens; the fade starts at
+// MusicFadeStart of the tile's height and is solid from MusicFadeSolid.
+private const val MusicBand = 100f
+private const val MusicFadeStart = 0.42f
+private const val MusicFadeSolid = 0.7f
+// The player's icon while there's no art.
+private const val MusicIcon = 96f
 private const val PanelMs = 380
 private const val SweepOnMs = 3000
 private const val SweepOffMs = 900
