@@ -14,8 +14,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -40,7 +38,7 @@ private val DropdownShape = RoundedCornerShape(4.dp)
 
 /**
  * Compose port of the outlined dropdown button in `CrossoverDashboardBuilder.addDropdownRow` --
- * a `segmentStroke`-bordered pill showing the current option, opening a [DropdownMenu] on tap
+ * a `segmentStroke`-bordered pill showing the current option, opening a [GlassMenu] on tap
  * (the View uses a `PopupMenu`). Same colours / 32dp min height / 4dp corner / trailing
  * down-arrow.
  */
@@ -81,10 +79,11 @@ fun BmwDropdown(
                 modifier = Modifier.size(24.dp),
             )
         }
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+        GlassMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             options.forEachIndexed { i, option ->
-                DropdownMenuItem(
-                    text = { Text(option) },
+                GlassItem(
+                    text = option,
+                    checked = i == selectedIndex,
                     onClick = {
                         expanded = false
                         onSelect(i)
