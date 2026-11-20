@@ -69,7 +69,7 @@ class RootlessSessionDatabase(
             attributes.usage !in RECORDABLE_USAGES) return false
         if (sid <= 0 || sessionList.containsKey(sid)) return false
         if (synchronized(heldLock) { heldMutes.containsKey(sid) }) return false
-        if (isExcludedOwner(uid, packageName)) return false
+        if (isExcludedOwner(uid, packageName) || captureBlocked(uid)) return false
         val now = SystemClock.elapsedRealtime()
         val last = synchronized(heldLock) { lastSuccessfulArmMs[sid] }
         if (last != null && now - last < ARM_RETRY_MS) return false
@@ -157,7 +157,42 @@ class RootlessSessionDatabase(
         return true
     }
 
-    override fun shouldAddSession(id: Int, uid: Int, packageName: String) = true
+    /**
+     * Whether [uid] is known (from the cached capture allowlist) to block capture while such apps
+     * are excluded: its audio can't be recorded, so a mute would only silence it. Set by the
+     * session manager; main thread.
+     */
+    var captureBlocked: (uid: Int) -> Boolean = { false }
+
+    // Sessions to release with a fade rather than at once (see releaseCaptureBlocked). Main thread.
+    private val fadeOnRelease = java.util.Collections.newSetFromMap(java.util.IdentityHashMap<MutedEffectSession, Boolean>())
+
+    override fun shouldAddSession(id: Int, uid: Int, packageName: String): Boolean {
+        if (captureBlocked(uid)) {
+            Timber.d("Session $id ($packageName) not muted: the app blocks capture")
+            return false
+        }
+        return true
+    }
+
+    /**
+     * The capture allowlist, checked after the mute, says some muted apps block capture: their
+     * mutes go, each with a short fade so the app's own audio comes back without a click, until
+     * the recorder excludes them. Rare, so a few ms of mute on such an app is harmless. Main thread.
+     */
+    fun releaseCaptureBlocked() {
+        val blocked = sessionList.filter { (_, s) -> captureBlocked(s.uid) }
+        blocked.forEach { (sid, item) ->
+            val session = item as MutedEffectSession
+            fadeOnRelease += session
+            removeSession(sid)
+            log(sid, session.packageName, Kind.RELEASED, "blocks capture (faded)")
+        }
+        val held = synchronized(heldLock) {
+            heldMutes.filter { captureBlocked(it.value.session.uid) }.onEach { heldMutes.remove(it.key) }
+        }
+        held.forEach { (sid, h) -> releaseHeld(h); log(sid, h.session.packageName, Kind.RELEASED, "blocks capture") }
+    }
 
     override fun createSession(id: Int, uid: Int, packageName: String): MutedEffectSession? {
         val held = synchronized(heldLock) { heldMutes.remove(id) }
@@ -185,7 +220,30 @@ class RootlessSessionDatabase(
         return MutedEffectSession(uid, packageName, muteEffect)
     }
 
-    override fun onSessionRemoved(item: IEffectSession) = release(item as MutedEffectSession)
+    override fun onSessionRemoved(item: IEffectSession) {
+        val session = item as MutedEffectSession
+        if (fadeOnRelease.remove(session)) fadeOutAndRelease(session) else release(session)
+    }
+
+    /** Lift [session]'s mute over [FADE_STEPS_DB] (a few ms apart), then release it. */
+    private fun fadeOutAndRelease(session: MutedEffectSession) {
+        val effect = session.audioMuteEffect
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P || effect !is DynamicsProcessing) {
+            release(session)
+            return
+        }
+        // Listeners off first, as in release(): nothing may re-assert the mute mid-fade.
+        runCatching {
+            effect.setEnableStatusListener(null)
+            effect.setControlStatusListener(null)
+        }
+        FADE_STEPS_DB.forEachIndexed { i, db ->
+            confirmationHandler.postDelayed({
+                if (session.audioMuteEffect === effect) runCatching { effect.setInputGainAllChannelsTo(db) }
+            }, i * FADE_STEP_MS)
+        }
+        confirmationHandler.postDelayed({ release(session) }, FADE_STEPS_DB.size * FADE_STEP_MS)
+    }
 
     override fun onSessionGone(sid: Int, item: IEffectSession) {
         val session = item as MutedEffectSession
@@ -318,6 +376,9 @@ class RootlessSessionDatabase(
         )
         private const val ARM_RETRY_MS = 500L
         private const val ARM_CONFIRMATION_TIMEOUT_MS = 3_000L
+        // ~28 ms from silence back to unity.
+        private val FADE_STEPS_DB = floatArrayOf(-48f, -36f, -24f, -16f, -10f, -5f, -2f, 0f)
+        private const val FADE_STEP_MS = 4L
     }
 }
 

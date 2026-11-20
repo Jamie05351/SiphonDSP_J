@@ -123,6 +123,21 @@ object SessionMuteLog {
         val detail: String,
     )
 
+    /** The last capture-allowlist check: run in the background, after the mutes it verifies. */
+    data class AllowlistCheck(
+        val atMs: Long,
+        val reason: String,
+        /** Queued behind another check, and the hop back to the main thread. */
+        val waitedMs: Long,
+        val tookMs: Long,
+        val ok: Boolean,
+    )
+
+    @Volatile var lastAllowlistCheck: AllowlistCheck? = null
+        private set
+
+    fun noteAllowlistCheck(check: AllowlistCheck) { lastAllowlistCheck = check }
+
     private val events = ArrayDeque<Event>(EVENTS)
     private var lookup: Lookup? = null
     @Volatile var lastConfigLookup: ConfigLookup? = null
@@ -241,5 +256,6 @@ object SessionMuteLog {
         pendingStarts.clear()
         lookup = null
         lastConfigLookup = null
+        lastAllowlistCheck = null
     }
 }

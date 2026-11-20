@@ -106,6 +106,11 @@ class SessionRecordingPolicyManager(private val context: Context) {
         sessionPolicyList[packageName]?.let { it.uid == uid && !it.isRestricted } == true
     }
 
+    /** Whether the cached allowlist says [uid] blocks capture. */
+    fun isRestricted(uid: Int): Boolean = uid > 0 && synchronized(sessionPolicyList) {
+        sessionPolicyList.values.any { it.uid == uid && it.isRestricted }
+    }
+
     fun getRestrictedUids(): Array<Int> {
         return synchronized(sessionPolicyList) {
             sessionPolicyList.values // create copy to prevent concurrent access
