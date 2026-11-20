@@ -22,11 +22,22 @@ class ConvolverResponse(
     val peakGainDb: Double,
     val latencyFrames: Int,
     val sampleRate: Double,
+    /** Non-null only for the three correction FIRs before band summation. */
+    val bands: List<ConvolverResponse>? = null,
 ) {
     /** True when this was computed on exactly [grid]. */
     fun matches(grid: DoubleArray): Boolean = frequencies.contentEquals(grid)
 
     companion object {
+        fun bandSet(responses: List<ConvolverResponse>): ConvolverResponse {
+            require(responses.size == 3)
+            val first = responses.first()
+            require(responses.all { it.matches(first.frequencies) && it.sampleRate == first.sampleRate })
+            // The set's peak is its loudest IR's: native caps all three bands by that one amount.
+            return ConvolverResponse(first.generation, first.frequencies, first.re, first.im,
+                responses.maxOf { it.peakGainDb }, first.latencyFrames, first.sampleRate, responses)
+        }
+
         /**
          * The gain the engine's stage applies: the trim (clamped as native clamps it), capped at
          * -peak so the IR never lifts any frequency above unity (ConvolverStage::process()).

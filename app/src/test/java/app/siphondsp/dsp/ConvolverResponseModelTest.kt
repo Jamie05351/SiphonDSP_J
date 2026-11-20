@@ -37,6 +37,16 @@ class ConvolverResponseModelTest {
 
     private fun w(f: Double) = 2.0 * PI * f / SAMPLE_RATE
 
+    @Test fun bandSetCarriesTheLoudestIrsPeakAsTheSharedCap() {
+        val freqs = grid()
+        val set = ConvolverResponse.bandSet(listOf(
+            response(freqs, 2.0, 2.0, 6.0), response(freqs, 1.0, 1.0, 0.0), response(freqs, 1.0, 1.0, -3.0),
+        ))
+        assertEquals(6.0, set.peakGainDb, 0.0)
+        // Every band is brought down by the same amount: the loudest IR's peak.
+        assertEquals(-6.0, ConvolverResponse.appliedGainDb(0.0, set.peakGainDb), 0.0)
+    }
+
     private fun values(enabled: Boolean, trimDb: Float): FloatArray = NativeBmwDspValues.DEFAULTS.copyOf().also {
         it[NativeBmwDspValues.INDEX_CONVOLVER_ENABLED] = if (enabled) 1f else 0f
         it[NativeBmwDspValues.INDEX_CONVOLVER_GAIN] = trimDb
@@ -115,6 +125,40 @@ class ConvolverResponseModelTest {
         assertArrayEquals(doubleArrayOf(5.0, 7.0), r.re[1], 0.0)
         assertArrayEquals(doubleArrayOf(6.0, 8.0), r.im[1], 0.0)
         assertNull(ConvolverResponse.fromNative(raw.copyOf(raw.size - 1), freqs))
+    }
+
+    @Test
+    fun threeIdenticalBandIrsMatchOneStereoIrWithoutDoubleApplication() {
+        val f = grid()
+        val ir = response(f, MINUS_6_DB, MINUS_6_DB, -6.0)
+        val v = values(enabled = true, trimDb = 0f)
+        val stereo = sums(v, ir)
+        val bands = sums(v, ConvolverResponse.bandSet(listOf(ir, ir, ir)))
+        for (ch in 0..1) for (i in f.indices) {
+            assertEquals(stereo.first[ch][i], bands.first[ch][i], 1e-6)
+            assertEquals(0.0, wrap(stereo.second[ch][i] - bands.second[ch][i]), 1e-6)
+        }
+    }
+
+    @Test
+    fun bandSnapshotBulkDelaysRemainRelativeBeforeSummation() {
+        val f = grid()
+        val v = values(enabled = true, trimDb = 0f)
+        sums(v, null)
+        val baseDb = arrayOf(curves.lowBranchDb[0].copyOf(), curves.midBranchDb[0].copyOf(), curves.highBranchDb[0].copyOf())
+        val basePhase = arrayOf(curves.lowBranchPhase[0].copyOf(), curves.midBranchPhase[0].copyOf(), curves.highBranchPhase[0].copyOf())
+        val delays = intArrayOf(0, 48, 0)
+        val irs = delays.map { delay ->
+            ConvolverResponse(7, f.copyOf(), Array(2) { DoubleArray(f.size) { 1.0 } },
+                Array(2) { DoubleArray(f.size) }, 0.0, delay, SAMPLE_RATE)
+        }
+        sums(v, ConvolverResponse.bandSet(irs))
+        // Branch phase must include the mid IR's 1 ms relative delay rather than
+        // independently discarding all three IR peaks as the stereo graph does.
+        for (i in f.indices) {
+            assertEquals(0.0, wrap(curves.midBranchPhase[0][i] - basePhase[1][i] + 2 * PI * f[i] * .001), 1e-6)
+            assertEquals(baseDb[1][i], curves.midBranchDb[0][i], 1e-6)
+        }
     }
 
     private fun linToDb(x: Double) = 20.0 * kotlin.math.log10(x)

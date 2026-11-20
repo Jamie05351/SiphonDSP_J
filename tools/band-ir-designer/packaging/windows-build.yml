@@ -1,0 +1,33 @@
+name: Band IR Designer Windows
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tools/band-ir-designer/**'
+      - '.github/workflows/band-ir-designer.yml'
+  pull_request:
+    paths:
+      - 'tools/band-ir-designer/**'
+      - '.github/workflows/band-ir-designer.yml'
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: tools/band-ir-designer
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: tools/band-ir-designer/requirements.txt
+      - run: python -m pip install -r requirements.txt
+      - run: python -m unittest discover -s tests -v
+      - run: python -m PyInstaller --noconfirm --clean --windowed --onedir --name BandIRDesigner app.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BandIRDesigner-Windows
+          path: tools/band-ir-designer/dist/BandIRDesigner/
