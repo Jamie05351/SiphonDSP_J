@@ -87,6 +87,14 @@ class LauncherHomeRenderTest {
     @Test
     fun carMenu() = render("car-menu", overlay = LauncherOverlay.CarMenu())
 
+    /** The car menu's home-screen section, from the rail. */
+    @Test
+    fun carMenuHome() = render("car-menu-home", overlay = LauncherOverlay.CarMenu(section = CarSection.HOME))
+
+    /** The car menu's settings section. */
+    @Test
+    fun carMenuSettings() = render("car-menu-settings", overlay = LauncherOverlay.CarMenu(section = CarSection.SETTINGS))
+
     /**
      * The iDrive knob's first press and two turns, saved for a visual check of the focus ring. Not
      * asserted: in Robolectric's shared environment, focus requested after the first frame isn't
@@ -111,6 +119,11 @@ class LauncherHomeRenderTest {
     @Test
     @Config(qualifiers = "w800dp-h400dp-land-mdpi")
     fun scaledDown() = render("scaled-down", overlay = LauncherOverlay.None, minWidth = 800)
+
+    /** The car menu on the smaller screen: every section on the rail stays reachable (it scrolls). */
+    @Test
+    @Config(qualifiers = "w800dp-h400dp-land-mdpi")
+    fun carMenuScaledDown() = render("car-menu-scaled-down", overlay = LauncherOverlay.CarMenu(), minWidth = 800)
 
     /** Every home tile side by side, for checking their pictures. */
     @Test

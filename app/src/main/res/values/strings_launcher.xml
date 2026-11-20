@@ -3,6 +3,10 @@
     <!-- Home launcher: the front page as the head unit's home screen. -->
     <string name="launcher_drawer">All apps</string>
     <string name="launcher_car_menu">Car</string>
+    <string name="launcher_section_car">Car</string>
+    <string name="launcher_section_home">Home screen</string>
+    <string name="launcher_section_permissions">Permissions</string>
+    <string name="launcher_section_settings">Settings</string>
     <string name="launcher_search">Search apps</string>
     <string name="launcher_close">Close</string>
     <string name="launcher_loading">Loading apps…</string>

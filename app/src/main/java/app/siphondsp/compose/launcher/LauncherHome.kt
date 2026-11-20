@@ -39,8 +39,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -152,8 +150,11 @@ sealed interface LauncherOverlay {
     data object None : LauncherOverlay
     /** The app list; with [pickFor], tapping an app puts it in that home slot instead of opening it. */
     data class Drawer(val pickFor: Int? = null) : LauncherOverlay
-    /** The head unit's own screens and switches; with [pickFor], tapping one fills that slot. */
-    data class CarMenu(val pickFor: Int? = null) : LauncherOverlay
+    /**
+     * The head unit's own screens and switches and the home screen's settings, opened at [section];
+     * with [pickFor], only the car functions, and tapping one fills that slot.
+     */
+    data class CarMenu(val pickFor: Int? = null, val section: CarSection = CarSection.CAR) : LauncherOverlay
     /** The apps hidden from the drawer; tapping one shows it again. */
     data object HiddenApps : LauncherOverlay
 }
@@ -366,7 +367,7 @@ fun LauncherHome(
             when (overlay) {
                 is LauncherOverlay.Drawer -> AppDrawer(apps, slots, look, overlay.pickFor, HomeEdgePadding, overlayTop, overlayBottom, overlayEntry, onOverlayChange, actions)
                 is LauncherOverlay.CarMenu -> CarMenu(
-                    carFunctions, overlay.pickFor, look.wallpaper != null, HomeTile.anyHidden(look.hidden), nowPlayingAllowed, appSwipeAllowed, HomeEdgePadding, overlayTop, overlayBottom, overlayEntry, onOverlayChange, actions,
+                    carFunctions, overlay.pickFor, overlay.section, look.wallpaper != null, HomeTile.anyHidden(look.hidden), nowPlayingAllowed, appSwipeAllowed, HomeEdgePadding, overlayTop, overlayBottom, overlayEntry, onOverlayChange, actions,
                 )
                 LauncherOverlay.HiddenApps -> HiddenApps(apps, look, HomeEdgePadding, overlayTop, overlayBottom, overlayEntry, onOverlayChange, actions)
                 LauncherOverlay.None -> {}
@@ -497,13 +498,14 @@ private fun SlotMenu(
     actions: LauncherActions,
     hide: (() -> Unit)?,
 ) {
-    DropdownMenu(expanded = expanded, onDismissRequest = dismiss) {
-        MenuItem(R.string.launcher_slot_choose_app) { dismiss(); onOverlayChange(LauncherOverlay.Drawer(pickFor = slot)) }
-        MenuItem(R.string.launcher_slot_choose_car) { dismiss(); onOverlayChange(LauncherOverlay.CarMenu(pickFor = slot)) }
+    GlassMenu(expanded = expanded, onDismissRequest = dismiss) {
+        GlassItem(R.string.launcher_slot_choose_app, R.drawable.ic_launcher_apps_24dp) { dismiss(); onOverlayChange(LauncherOverlay.Drawer(pickFor = slot)) }
+        GlassItem(R.string.launcher_slot_choose_car, R.drawable.ic_launcher_car_24dp) { dismiss(); onOverlayChange(LauncherOverlay.CarMenu(pickFor = slot)) }
+        if (target != SlotTarget.Empty || hide != null) GlassDivider()
         if (target != SlotTarget.Empty) {
-            MenuItem(R.string.launcher_slot_clear) { dismiss(); actions.assignSlot(slot, SlotTarget.Empty) }
+            GlassItem(R.string.launcher_slot_clear, R.drawable.ic_twotone_remove_24dp) { dismiss(); actions.assignSlot(slot, SlotTarget.Empty) }
         }
-        if (hide != null) MenuItem(R.string.launcher_tile_hide) { dismiss(); hide() }
+        if (hide != null) GlassItem(R.string.launcher_tile_hide, R.drawable.ic_twotone_app_blocking_24dp) { dismiss(); hide() }
     }
 }
 
@@ -650,11 +652,6 @@ private fun MediaButton(label: String, onClick: () -> Unit, glyph: DrawScope.() 
     ) {
         Canvas(Modifier.size(s.dp(20f)), onDraw = glyph)
     }
-}
-
-@Composable
-private fun MenuItem(label: Int, onClick: () -> Unit) {
-    DropdownMenuItem(text = { Text(stringResource(label)) }, onClick = onClick)
 }
 
 // --- The dock ---
