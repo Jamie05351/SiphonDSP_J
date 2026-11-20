@@ -64,7 +64,6 @@ import kotlinx.coroutines.launch
 /** The app's screens, all in MainActivity. The DSP workspaces' routes are [DspDestination.route]. */
 object Routes {
     const val HOME = "home"
-    const val BAND_ALIGN = "band-align"
     const val SIGNAL_GENERATOR = "signal-generator"
     const val NATIVE_TRUTH = "native-truth"
     const val SETTINGS = "settings"
@@ -84,7 +83,7 @@ object Routes {
         "$ONBOARDING?$ARG_FIX_PERMS=$fixPerms&$ARG_REDO_ADB_SETUP=$redoAdbSetup"
 
     /** Alignment's pages, a finder segment each. */
-    const val ALIGNMENT_PAGE_COUNT = 4
+    const val ALIGNMENT_PAGE_COUNT = 5
     const val ALIGNMENT_PAGE_ALLPASS = 2
 
     /** Dynamics: the visualiser, one page per MBC band, then the bus limiters. */
@@ -180,7 +179,6 @@ fun AppNavHost(
             composable(DspDestination.CROSSOVER_TILT.route) { CrossoverWorkspace() }
             composable(DspDestination.DYNAMICS.route) { DynamicsWorkspace() }
             composable(DspDestination.OUTPUT.route) { OutputWorkspace() }
-            composable(Routes.BAND_ALIGN) { BandAlignScreen() }
             composable(Routes.SIGNAL_GENERATOR) {
                 AppScreen(title = stringResource(R.string.title_activity_signal_generator), onBack = navigator::back) { SignalGeneratorScreen() }
             }
@@ -276,8 +274,8 @@ private fun AlignmentWorkspace(startPage: Int) {
             if (LocalContext.current.isHeadUnitDisplay()) {
                 ArtPagerFinder(
                     pagerState = pagerState,
-                    labels = listOf("DELAY", "ALIGN", "ALLPASS", "CENTRE"),
-                    frac = WorkspaceArt.finder4,
+                    labels = listOf("DELAY", "ALIGN", "ALLPASS", "CENTRE", "BAND"),
+                    frac = WorkspaceArt.finder5,
                     selected = pagerState.currentPage,
                     onSelect = { page -> scope.launch { pagerState.scrollToPage(page) } },
                 )
@@ -291,7 +289,9 @@ private fun AlignmentWorkspace(startPage: Int) {
                 0 -> GainsDelayScreen()
                 1 -> SpeakerAlignScreen()
                 Routes.ALIGNMENT_PAGE_ALLPASS -> AllPassPage()
-                else -> VirtualCentreScreen()
+                3 -> VirtualCentreScreen()
+                // Band Align: Low against Mid from REW measurements (was its own screen off a link).
+                else -> BandAlignScreen()
             }
         }
     }

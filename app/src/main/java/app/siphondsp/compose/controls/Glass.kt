@@ -148,10 +148,18 @@ internal fun GlassNote(text: String) {
 
 /**
  * A page's small action button: a dark pill, its edge purple while the knob is on it. With [arrow]
- * (the default) it opens a [GlassMenu] (Filter tools, Car baseline, House curve) and shows a down arrow.
+ * (the default) it opens a [GlassMenu] (Backup, File, Tools, Graph) and shows a down arrow. [accent]
+ * edges and colours the one that matters most on its line (the whole-DSP Backup).
  */
 @Composable
-internal fun GlassChip(label: String, onClick: () -> Unit, modifier: Modifier = Modifier, arrow: Boolean = true) {
+internal fun GlassChip(
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    arrow: Boolean = true,
+    accent: Color? = null,
+    enabled: Boolean = true,
+) {
     val source = remember { MutableInteractionSource() }
     val focused by source.collectIsFocusedAsState()
     val shape = RoundedCornerShape(12.dp)
@@ -160,13 +168,13 @@ internal fun GlassChip(label: String, onClick: () -> Unit, modifier: Modifier = 
             .heightIn(min = 48.dp)
             .clip(shape)
             .background(HomePalette.Cell)
-            .border(1.5.dp, if (focused) glassAccent() else HomePalette.IdleEdge, shape)
-            .clickable(interactionSource = source, indication = null, role = Role.Button, onClick = onClick)
+            .border(1.5.dp, if (focused) glassAccent() else accent?.takeIf { enabled } ?: HomePalette.IdleEdge, shape)
+            .clickable(interactionSource = source, indication = null, enabled = enabled, role = Role.Button, onClick = onClick)
             .bmwFocusRing(source, cornerRadius = 12.dp)
             .padding(start = 16.dp, end = if (arrow) 10.dp else 16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(label, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+        Text(label, color = if (!enabled) HomePalette.Dim else accent ?: Color.White, fontSize = 15.sp, fontWeight = FontWeight.Medium, maxLines = 1)
         if (arrow) {
             Spacer(Modifier.width(6.dp))
             Icon(painterResource(R.drawable.ic_baseline_keyboard_arrow_down_24dp), contentDescription = null, tint = HomePalette.Caption, modifier = Modifier.size(22.dp))

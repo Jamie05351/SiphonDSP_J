@@ -32,7 +32,7 @@ class BandAlignViewModel(application: Application) : AndroidViewModel(applicatio
     enum class Slot(val label: String, val hint: String) {
         LOW("Low only", "Mid and High muted"),
         MID("Mid only", "Low and High muted"),
-        BOTH("Low + Mid", "optional -- High muted; checks the timing"),
+        BOTH("Low + Mid", ""),
     }
 
     data class Key(val seat: Seat, val side: BmwOutputChannel, val slot: Slot)
