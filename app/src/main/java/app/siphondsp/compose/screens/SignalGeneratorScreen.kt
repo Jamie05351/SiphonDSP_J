@@ -37,6 +37,7 @@ import app.siphondsp.compose.controls.BmwSegmentedControl
 import app.siphondsp.compose.state.BmwDspState
 import app.siphondsp.compose.state.rememberBmwDspState
 import app.siphondsp.compose.theme.BmwTheme
+import app.siphondsp.model.BandMutes
 import app.siphondsp.model.NativeBmwDspValues
 import app.siphondsp.view.isHeadUnitDisplay
 
@@ -241,30 +242,12 @@ private fun IsolationColumn(dsp: BmwDspState, accent: Color) {
 @Composable
 private fun RoutingColumn(dsp: BmwDspState, accent: Color) {
     ArtGroupHeader(stringResource(R.string.signal_generator_section_routing), accent, Modifier.fillMaxWidth().height(40.dp))
-    RoutingSwitch(stringResource(R.string.signal_generator_mute_low_band), dsp.isOn(NativeBmwDspValues.INDEX_LOW_MUTE)) {
-        dsp.commit(
-            NativeBmwDspValues.INDEX_LOW_MUTE, if (it) 1f else 0f,
-            mirrors = intArrayOf(
-                NativeBmwDspValues.outputIndex(NativeBmwDspValues.OUTPUT_LOW_LEFT, NativeBmwDspValues.FIELD_MUTE),
-                NativeBmwDspValues.outputIndex(NativeBmwDspValues.OUTPUT_LOW_RIGHT, NativeBmwDspValues.FIELD_MUTE),
-            ),
-        )
-    }
-    RoutingSwitch(stringResource(R.string.signal_generator_mute_mid_band), dsp.isOn(NativeBmwDspValues.INDEX_MID_MUTE)) {
-        dsp.commit(
-            NativeBmwDspValues.INDEX_MID_MUTE, if (it) 1f else 0f,
-            mirrors = intArrayOf(
-                NativeBmwDspValues.outputIndex(NativeBmwDspValues.OUTPUT_MID_LEFT, NativeBmwDspValues.FIELD_MUTE),
-                NativeBmwDspValues.outputIndex(NativeBmwDspValues.OUTPUT_MID_RIGHT, NativeBmwDspValues.FIELD_MUTE),
-            ),
-        )
-    }
-    // High has no aggregate mute index -- its per-output mute (L) is the switch, mirrored onto R.
-    val highMuteL = NativeBmwDspValues.highOutputIndex(NativeBmwDspValues.OUTPUT_HIGH_LEFT, NativeBmwDspValues.FIELD_MUTE)
-    val highMuteR = NativeBmwDspValues.highOutputIndex(NativeBmwDspValues.OUTPUT_HIGH_RIGHT, NativeBmwDspValues.FIELD_MUTE)
-    RoutingSwitch(stringResource(R.string.signal_generator_mute_high_band), dsp.isOn(highMuteL)) {
-        dsp.commit(highMuteL, if (it) 1f else 0f, mirrors = intArrayOf(highMuteR))
-    }
+    // Each band can be muted on one side only (per-output mute), so a band can be soloed on the
+    // measured side while the other side keeps every band playing -- e.g. for a REW timing
+    // reference. No measurement-bus filter is added, unlike band isolation.
+    BandMuteRow(dsp, stringResource(R.string.signal_generator_band_mute_low), BandMutes.Band.LOW, accent)
+    BandMuteRow(dsp, stringResource(R.string.signal_generator_band_mute_mid), BandMutes.Band.MID, accent)
+    BandMuteRow(dsp, stringResource(R.string.signal_generator_band_mute_high), BandMutes.Band.HIGH, accent)
     Row(Modifier.fillMaxWidth().height(40.dp), verticalAlignment = Alignment.CenterVertically) {
         ArtLabel("Channels", Modifier.width(110.dp))
         BmwSegmentedControl(
@@ -277,16 +260,25 @@ private fun RoutingColumn(dsp: BmwDspState, accent: Color) {
             segmentGap = 4.dp,
         )
     }
+    Note(stringResource(R.string.signal_generator_band_mute_note))
 }
 
 @Composable
-private fun RoutingSwitch(label: String, checked: Boolean, onChange: (Boolean) -> Unit) = ArtSwitchRow(
-    label = label,
-    checked = checked,
-    onCheckedChange = onChange,
-    labelWidth = SwitchLabelWidth,
-    modifier = Modifier.fillMaxWidth().height(36.dp),
-)
+private fun BandMuteRow(dsp: BmwDspState, label: String, band: BandMutes.Band, accent: Color) {
+    val side = BandMutes.side(band) { dsp.get(it) }
+    Row(Modifier.fillMaxWidth().height(40.dp), verticalAlignment = Alignment.CenterVertically) {
+        ArtLabel(label, Modifier.width(110.dp))
+        BmwSegmentedControl(
+            options = BandMutes.Side.entries.map { it.label },
+            selectedIndex = side.ordinal,
+            onSelect = { dsp.commitAll(BandMutes.updates(band, BandMutes.Side.entries[it])) },
+            optionAccents = List(BandMutes.Side.entries.size) { accent },
+            modifier = Modifier.weight(1f),
+            segmentHeight = 36.dp,
+            segmentGap = 4.dp,
+        )
+    }
+}
 
 /** A label + value box + −/+ row; [boxWidth] widens the box for values up to 24000 Hz, taking
  *  the room from the label column so the row stays [ColumnWidth] wide. */
