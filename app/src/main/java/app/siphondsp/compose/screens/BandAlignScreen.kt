@@ -249,7 +249,13 @@ private fun ResultSummary(
             if (p == null) {
                 Body("Already adds up as well as it can: ${describe(r.current)}.", small = true)
             } else {
-                Text("Low: ${describe(p)}", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                if (p.delayMs < 0.0) {
+                    // Low can't play early: Apply makes everything else later instead.
+                    Text("Low ${"%.2f".format(-p.delayMs)} ms earlier, ${polarity(p)}", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                    Body("Low goes to 0 ms and every other delay, both sides, gets +${"%.2f".format(-p.delayMs)} ms, so Mid / High and Left / Right timing stay as tuned.", color = Accent, small = true)
+                } else {
+                    Text("Low: ${describe(p)}", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                }
                 Body(
                     "Now ${describe(r.current)}. +${"%.1f".format(r.scoreDb)} dB over ${r.bandHz.start.roundToInt()}-${r.bandHz.endInclusive.roundToInt()} Hz.",
                     small = true,
@@ -307,8 +313,9 @@ private fun HowToMeasure(onClose: () -> Unit) {
     }
 }
 
-private fun describe(s: BandAlignSolver.Setting) =
-    "${"%.2f".format(s.delayMs)} ms, ${if (s.inverted) "inverted" else "normal"} polarity"
+private fun polarity(s: BandAlignSolver.Setting) = if (s.inverted) "inverted polarity" else "normal polarity"
+
+private fun describe(s: BandAlignSolver.Setting) = "${"%.2f".format(s.delayMs)} ms, ${polarity(s)}"
 
 @Composable
 private fun BeforeAfterChart(seat: BandAlignSolver.SeatResult, band: ClosedFloatingPointRange<Double>, modifier: Modifier) {
