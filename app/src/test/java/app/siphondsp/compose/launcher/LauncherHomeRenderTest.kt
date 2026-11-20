@@ -72,11 +72,10 @@ class LauncherHomeRenderTest {
         "MiXplorer" to 0xFFF57828, "KSW Toolkit 3" to 0xFF286EE6, "Play Store" to 0xFF00B48C, "Radio" to 0xFFE63C3C,
     ).map { (label, colour) -> AppEntry(label, ComponentName("test.$label", "test.Main"), icon(colour.toInt())) }
 
-    // In tile order: Navigation, Music, File Explorer, Drive, KSW Toolkit, Settings, DSP.
+    // In tile order: Navigation, Music, File Explorer, Drive, KSW Toolkit.
     private val slots = listOf(
         SlotTarget.App(apps[0].component), SlotTarget.App(apps[1].component), SlotTarget.App(apps[4].component),
-        SlotTarget.App(apps[3].component), SlotTarget.App(apps[5].component), SlotTarget.Car(CarFunction.SETTINGS),
-        SlotTarget.Empty,
+        SlotTarget.App(apps[3].component), SlotTarget.App(apps[5].component),
     )
 
     @Test
@@ -104,9 +103,9 @@ class LauncherHomeRenderTest {
     @Test
     fun nothingPlaying() = render("nothing-playing", overlay = LauncherOverlay.None, playing = false)
 
-    /** An odd number of swipe tiles (one hidden): the last page keeps an empty place. */
+    /** An odd number of grid tiles (one hidden): the grid's last place stays empty. */
     @Test
-    fun oddTiles() = render("odd-tiles", overlay = LauncherOverlay.None, hidden = setOf(HomeTile.DSP.key, HomeTile.MUSIC.key))
+    fun oddTiles() = render("odd-tiles", overlay = LauncherOverlay.None, hidden = setOf(HomeTile.TOOLKIT.key, HomeTile.MUSIC.key))
 
     /** A smaller screen: the whole layout scaled down. */
     @Test

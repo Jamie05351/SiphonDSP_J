@@ -34,8 +34,8 @@ sealed interface SlotTarget {
 }
 
 /**
- * The home screen's app slots, one per home tile in the tile row's order (Navigation, Music, File
- * Explorer, Drive, KSW Toolkit, Settings, DSP), saved in the launcher's own preferences. Changes
+ * The home screen's app slots, one per home tile in the tiles' order (Navigation, Music, File
+ * Explorer, Drive, KSW Toolkit), saved in the launcher's own preferences. Changes
  * are kept in [slots] for the screen and written straight away.
  *
  * On first run each slot starts as the app for its tile. Apps are matched to those names only when
@@ -100,8 +100,6 @@ class HomeSlots private constructor(private val context: Context) {
             if (next[i] != SlotTarget.Empty) return@forEachIndexed
             next[i] = when (name) {
                 NONE -> SlotTarget.Empty
-                // Only on a head unit that has the KSW settings; elsewhere the slot stays free.
-                FACTORY -> if (CarFunction.SETTINGS.isAvailable(context)) SlotTarget.Car(CarFunction.SETTINGS) else SlotTarget.Empty
                 else -> apps.filter { normalise(it.label) == normalise(name) }.singleOrNull()
                     ?.let { SlotTarget.App(it.component) } ?: SlotTarget.Empty
             }
@@ -115,17 +113,19 @@ class HomeSlots private constructor(private val context: Context) {
     }
 
     companion object {
-        /** One per home tile. */
-        const val SLOTS = 7
+        /**
+         * One per home tile. There were 7 until the Settings and DSP tiles went; their saved slots
+         * (slot_5, slot_6) are simply no longer read.
+         */
+        const val SLOTS = 5
         private const val OLD_SLOTS = 9
         private const val KEY_DEFAULTS_DONE = "defaults_done"
         // 2: one slot per home tile; before, nine free slots in a grid.
         private const val KEY_LAYOUT = "layout"
         private const val LAYOUT = 2
-        private const val FACTORY = "\u0000factory"
         private const val NONE = ""
-        // In tile order; the DSP tile opens J_DSP's settings while its slot is empty.
-        private val Defaults = listOf("Waze", "Spotify", "MiXplorer", "Drive", "KSW Toolkit 3", FACTORY, NONE)
+        // In tile order.
+        private val Defaults = listOf("Waze", "Spotify", "MiXplorer", "Drive", "KSW Toolkit 3")
 
         private fun key(i: Int) = "slot_$i"
         private fun normalise(s: String) = s.lowercase(Locale.ROOT).filter { it.isLetterOrDigit() }

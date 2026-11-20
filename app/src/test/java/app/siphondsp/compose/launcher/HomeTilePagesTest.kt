@@ -1,5 +1,6 @@
 package app.siphondsp.compose.launcher
 
+import app.siphondsp.launcher.HomeSlots
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -7,42 +8,41 @@ import org.junit.Test
 
 class HomeTilePagesTest {
     @Test
-    fun musicIsNeverInTheSwipeRow() {
-        assertFalse(HomeTile.MUSIC in HomeTile.Swipe)
-        assertEquals(HomeTile.entries.size - 1, HomeTile.Swipe.size)
+    fun musicIsNeverInTheGrid() {
+        assertFalse(HomeTile.MUSIC in HomeTile.Grid)
+        assertEquals(HomeTile.entries.size - 1, HomeTile.Grid.size)
     }
 
     @Test
-    fun pagesArePairsInOrder() {
-        val pages = HomeTile.pages(emptySet())
-        // Six swipe tiles: three full pages.
+    fun theGridFitsTwoByTwo() {
+        // Every tile on screen at once: two rows of HomeTile.Columns.
         assertEquals(
-            listOf(
-                listOf(HomeTile.NAVIGATION, HomeTile.FILES),
-                listOf(HomeTile.DRIVE, HomeTile.TOOLKIT),
-                listOf(HomeTile.SETTINGS, HomeTile.DSP),
-            ),
-            pages,
+            listOf(HomeTile.NAVIGATION, HomeTile.FILES, HomeTile.DRIVE, HomeTile.TOOLKIT),
+            HomeTile.visible(emptySet()),
         )
+        assertTrue(HomeTile.Grid.size <= 2 * HomeTile.Columns)
     }
 
     @Test
-    fun anOddCountLeavesOneTileOnTheLastPage() {
-        val pages = HomeTile.pages(setOf(HomeTile.FILES.key))
-        assertEquals(3, pages.size)
-        assertEquals(listOf(HomeTile.NAVIGATION, HomeTile.DRIVE), pages[0])
-        assertEquals(listOf(HomeTile.DSP), pages.last())
+    fun oneSlotPerTile() {
+        assertEquals(HomeTile.entries.size, HomeSlots.SLOTS)
     }
 
     @Test
-    fun aSavedHiddenMusicKeyIsIgnored() {
-        assertEquals(HomeTile.pages(emptySet()), HomeTile.pages(setOf(HomeTile.MUSIC.key)))
-        assertFalse(HomeTile.anyHidden(setOf(HomeTile.MUSIC.key)))
+    fun aHiddenTileLeavesNoGap() {
+        assertEquals(listOf(HomeTile.NAVIGATION, HomeTile.DRIVE, HomeTile.TOOLKIT), HomeTile.visible(setOf(HomeTile.FILES.key)))
+    }
+
+    @Test
+    fun savedKeysForMusicOrRemovedTilesAreIgnored() {
+        val stale = setOf(HomeTile.MUSIC.key, HomeTile.KeyPrefix + "SETTINGS", HomeTile.KeyPrefix + "DSP")
+        assertEquals(HomeTile.visible(emptySet()), HomeTile.visible(stale))
+        assertFalse(HomeTile.anyHidden(stale))
         assertTrue(HomeTile.anyHidden(setOf(HomeTile.DRIVE.key)))
     }
 
     @Test
-    fun everyTileHiddenLeavesNoPages() {
-        assertTrue(HomeTile.pages(HomeTile.Swipe.map { it.key }.toSet()).isEmpty())
+    fun everyTileHiddenLeavesAnEmptyGrid() {
+        assertTrue(HomeTile.visible(HomeTile.Grid.map { it.key }.toSet()).isEmpty())
     }
 }
