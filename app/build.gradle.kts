@@ -161,6 +161,16 @@ android {
     namespace = "app.siphondsp"
 }
 
+// AGP 9 only creates unit-test tasks for the tested build type (debug). CI runs the shared
+// JVM/Robolectric suite against Preview, the variant it packages and ships, whose Pluto no-op
+// libraries and missing LeakCanary keep debug-only dependencies off that path:
+// :app:testPreviewUnitTest.
+androidComponents {
+    beforeVariants(selector().withBuildType("preview")) { variant ->
+        variant.hostTests[com.android.build.api.variant.HostTestBuilder.UNIT_TEST_TYPE]?.enable = true
+    }
+}
+
 composeCompiler {
     // Metrics/reports left off by default; enable if you need to diagnose recomposition
     // or stability issues on the head-unit target (Snapdragon 662).
