@@ -25,10 +25,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -51,7 +48,6 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.IntOffset
@@ -60,6 +56,9 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.withStyledAttributes
 import androidx.core.graphics.ColorUtils
 import app.siphondsp.audio.SpectrumEngine
+import app.siphondsp.compose.controls.GlassItem
+import app.siphondsp.compose.controls.GlassMenu
+import app.siphondsp.compose.controls.GlassNote
 import app.siphondsp.compose.controls.bmwFocusRing
 import app.siphondsp.compose.theme.BmwDspTheme
 import app.siphondsp.dsp.AutoHeadroomCalculator
@@ -1554,52 +1553,46 @@ private fun PeqGraphOptionsButton(
             // material-icons isn't on the classpath here (see PeqBandList) — glyph it.
             Text("⋮", fontSize = 20.sp, color = Color(0xFFB0B2BA))
         }
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            DropdownMenuItem(
-                text = { Text("Show individual filters" + if (showIndividualFilters) "  ✓" else "") },
+        GlassMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            GlassItem(
+                text = "Show individual filters",
+                checked = showIndividualFilters,
                 onClick = { options.onShowIndividualFiltersChange(!showIndividualFilters); expanded = false },
             )
             options.onShowConvolverChange?.let { onChange ->
-                DropdownMenuItem(
-                    text = { Text("Show convolver in graphs" + if (showConvolver) "  ✓" else "") },
+                GlassItem(
+                    text = "Show convolver in graphs",
+                    checked = showConvolver,
                     onClick = { onChange(!showConvolver); expanded = false },
                 )
             }
-            MenuSectionLabel("Display channel")
+            GlassNote("Display channel")
             PeqChannelDisplay.entries.forEach { option ->
-                DropdownMenuItem(
-                    text = { Text(option.name.lowercase().replaceFirstChar { it.uppercase() } + if (option == channelDisplay) "  ✓" else "") },
+                GlassItem(
+                    text = option.name.lowercase().replaceFirstChar { it.uppercase() },
+                    checked = option == channelDisplay,
                     onClick = { options.onChannelDisplayChange(option); expanded = false },
                 )
             }
-            MenuSectionLabel("Response mode")
+            GlassNote("Response mode")
             PeqGraphMode.entries.forEach { option ->
-                DropdownMenuItem(
-                    text = { Text(option.name.lowercase().replaceFirstChar { it.uppercase() } + if (option == mode) "  ✓" else "") },
+                GlassItem(
+                    text = option.name.lowercase().replaceFirstChar { it.uppercase() },
+                    checked = option == mode,
                     onClick = { options.onModeChange(option); expanded = false },
                 )
             }
             // Every response graph's (fixed) dB axis; saved, and shared with the crossover graphs.
-            MenuSectionLabel("dB range")
+            GlassNote("dB range")
             GraphDbRange.entries.forEach { option ->
-                DropdownMenuItem(
-                    text = { Text(option.label + if (option == dbRange) "  ✓" else "") },
+                GlassItem(
+                    text = option.label,
+                    checked = option == dbRange,
                     onClick = { GraphDbRangeState.set(context, option); expanded = false },
                 )
             }
         }
     }
-}
-
-@Composable
-private fun MenuSectionLabel(text: String) {
-    Text(
-        text,
-        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
-        fontSize = 14.sp,
-        fontFamily = FontFamily.SansSerif,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
 }
 
 // --- draw-call context + reusable scratch -----------------------------------------------------

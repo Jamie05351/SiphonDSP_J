@@ -538,8 +538,9 @@
     <string name="slider_dialog_step_error">Value must be a multiple of %1$d. Changes not applied.</string>
 
     <!-- Revert confirmation -->
-    <string name="revert_confirmation_title">Are you sure?</string>
-    <string name="revert_confirmation">Do you want to reset your current J_DSP preset to the default values?</string>
+    <string name="revert_confirmation_title">Reset to defaults?</string>
+    <string name="revert_confirmation">Your current J_DSP preset goes back to the default values. This cannot be undone.</string>
+    <string name="revert_confirm_button">Reset</string>
 
     <!-- File intent handler -->
 
