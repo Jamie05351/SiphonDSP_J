@@ -328,7 +328,8 @@ private fun HowToMeasure(onClose: () -> Unit) {
                 "drivers, as long as it starts an octave or more below Mid's high-pass.\n" +
                 "• Low + Mid (optional, checks the timing): only Mute high band on.\n\n" +
                 "Leave Band isolation OFF: it adds brick-wall filters that change the phase. Unmute everything before " +
-                "analysing. Export from REW with File › Export › Measurement as text, smoothing 1/48 octave.",
+                "analysing. Export from REW with File › Export › Measurement as text, smoothing 1/48 octave, and leave " +
+                "\"Do not include any comments or headers\" unticked: the header holds the delay Band Align needs.",
         )
     }
 }

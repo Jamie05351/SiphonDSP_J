@@ -78,6 +78,38 @@ class RewMeasurement private constructor(
         private val SPACE_OR_SEMICOLON = Regex("""[\s;]+""")
 
         /**
+         * A file's text: UTF-8 unless a byte-order mark or the zero bytes of UTF-16 say otherwise
+         * (a UTF-16 file read as UTF-8 has a NUL between every character, so no row parses), with
+         * any byte-order mark dropped.
+         */
+        fun decode(bytes: ByteArray): String {
+            fun at(i: Int) = if (i < bytes.size) bytes[i].toInt() and 0xFF else -1
+            val text = when {
+                at(0) == 0xFF && at(1) == 0xFE -> String(bytes, 2, bytes.size - 2, Charsets.UTF_16LE)
+                at(0) == 0xFE && at(1) == 0xFF -> String(bytes, 2, bytes.size - 2, Charsets.UTF_16BE)
+                else -> {
+                    val sample = bytes.size.coerceAtMost(512)
+                    val oddZeros = (1 until sample step 2).count { bytes[it].toInt() == 0 }
+                    val evenZeros = (0 until sample step 2).count { bytes[it].toInt() == 0 }
+                    when {
+                        sample >= 4 && oddZeros > sample / 4 -> String(bytes, Charsets.UTF_16LE)
+                        sample >= 4 && evenZeros > sample / 4 -> String(bytes, Charsets.UTF_16BE)
+                        else -> String(bytes, Charsets.UTF_8)
+                    }
+                }
+            }
+            return text.removePrefix("\uFEFF")
+        }
+
+        /** The first line that isn't a header or blank, shortened and made printable, for an error. */
+        private fun firstDataLine(text: String): String? = text.lineSequence()
+            .map { it.trim() }
+            .firstOrNull { it.isNotEmpty() && !it.startsWith("*") }
+            ?.map { if (it.isISOControl() || it == '\uFFFD') '?' else it }
+            ?.joinToString("")
+            ?.let { if (it.length > 40) it.take(40) + "..." else it }
+
+        /**
          * Parses an export, or returns the reason it can't be used. [coverFromHz]: the lowest
          * frequency it must reach; null for a Mid-only measurement, which may start wherever its
          * sweep did (Mid is high-passed: below its data it's taken as silent, and Analyse checks
@@ -89,8 +121,10 @@ class RewMeasurement private constructor(
             val ph = ArrayList<Double>()
             var delayMs = 0.0
             var smoothing: String? = null
+            var sawHeader = false
             for (line in text.lineSequence()) {
                 if (line.startsWith("*")) {
+                    sawHeader = true
                     DelayNote.find(line)?.let { m ->
                         delayMs = m.groupValues[1].toDoubleOrNull()
                             ?: return Result.failure(IllegalArgumentException("$name: couldn't read the delay in its header note"))
@@ -109,7 +143,18 @@ class RewMeasurement private constructor(
                 ph += deg * PI / 180.0
             }
             if (f.size < 16) {
-                return Result.failure(IllegalArgumentException("$name: no frequency / SPL / phase rows -- export from REW with File > Export > Measurement as text"))
+                val first = firstDataLine(text)?.let { " (its first line reads \"$it\")" } ?: " (it's empty)"
+                return Result.failure(IllegalArgumentException(
+                    "$name: no frequency / SPL / phase rows$first -- export from REW with File > Export > Measurement as text",
+                ))
+            }
+            // REW takes the measurement's delay out of the phase and says how much only in its
+            // header note: without the header, Low and Mid can't be lined up in time.
+            if (!sawHeader) {
+                return Result.failure(IllegalArgumentException(
+                    "$name: has no REW header, which holds the delay REW took out of the phase. " +
+                        "Re-export with \"Do not include any comments or headers\" unticked.",
+                ))
             }
             // The solver scores the crossover region (within 40-400 Hz) and times Low/Mid up to 500 Hz.
             if (coverFromHz == null) {

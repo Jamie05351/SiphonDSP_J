@@ -79,7 +79,7 @@ class BandAlignViewModel(application: Application) : AndroidViewModel(applicatio
                     val text = app.contentResolver.openInputStream(uri)?.use { stream ->
                         val bytes = stream.readNBytesCompat(MAX_BYTES + 1)
                         require(bytes.size <= MAX_BYTES) { "$name is too large for a measurement export" }
-                        String(bytes, Charsets.UTF_8)
+                        RewMeasurement.decode(bytes)
                     } ?: throw IllegalStateException("couldn't open $name")
                     // Mid only may start where its sweep did (often 100 Hz): Analyse checks it's low enough.
                     val coverFrom = if (key.slot == Slot.MID) null else RewMeasurement.MIN_COVER_HZ

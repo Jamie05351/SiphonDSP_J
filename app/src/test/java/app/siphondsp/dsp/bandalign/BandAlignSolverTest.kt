@@ -307,4 +307,29 @@ class BandAlignSolverTest {
         }
         assertTrue(RewMeasurement.parse("L", text).isSuccess)
     }
+
+    @Test
+    fun aUtf16ExportIsDecoded() {
+        val text = rewText("L", -4.0, "1/48 octave") { f -> lr4Low(f, 140.0) }
+        for (bytes in listOf(
+            byteArrayOf(0xFF.toByte(), 0xFE.toByte()) + text.toByteArray(Charsets.UTF_16LE),
+            text.toByteArray(Charsets.UTF_16LE),
+            byteArrayOf(0xEF.toByte(), 0xBB.toByte(), 0xBF.toByte()) + text.toByteArray(Charsets.UTF_8),
+        )) {
+            assertTrue(RewMeasurement.parse("L", RewMeasurement.decode(bytes)).isSuccess)
+        }
+    }
+
+    @Test
+    fun anExportWithoutItsHeaderIsRefusedAndSaysWhy() {
+        val text = rewText("L", -4.0, "1/48 octave") { f -> lr4Low(f, 140.0) }.lines().filterNot { it.startsWith("*") }.joinToString("\n")
+        val error = RewMeasurement.parse("L", text).exceptionOrNull()!!.message!!
+        assertTrue(error, error.contains("header"))
+    }
+
+    @Test
+    fun anUnreadableFileQuotesItsFirstLine() {
+        val error = RewMeasurement.parse("L", "<html><body>Sign in</body></html>").exceptionOrNull()!!.message!!
+        assertTrue(error, error.contains("<html>"))
+    }
 }
