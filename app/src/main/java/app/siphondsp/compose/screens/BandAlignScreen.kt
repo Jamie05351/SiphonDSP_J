@@ -40,6 +40,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -120,15 +121,19 @@ fun BandAlignScreen(model: BandAlignViewModel = viewModel()) {
                         Legend(Before, "Low + Mid now")
                         if (result.proposal != null) Legend(Accent, "with Band Align")
                     }
-                    SeatNotes(seatResult)
+                    Column(
+                        Modifier.fillMaxWidth().background(Panel, RoundedCornerShape(12.dp)).padding(horizontal = 14.dp, vertical = 10.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) { SeatNotes(seatResult) }
                 } else {
                     Box(
                         Modifier.fillMaxWidth().height(190.dp).background(Panel, RoundedCornerShape(12.dp)),
                         contentAlignment = Alignment.Center,
                     ) {
-                        Body(
+                        Text(
                             if (model.results == null) "Import Low only and Mid only, then Analyse" else "No result for this seat and side",
-                            color = Before, small = true,
+                            color = Before, fontSize = 13.sp, lineHeight = 18.sp, textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(horizontal = 20.dp),
                         )
                     }
                 }
@@ -178,7 +183,11 @@ private fun PageColumn(modifier: Modifier, content: @Composable ColumnScope.() -
     )
 }
 
-/** A measurement slot: its name, then the imported file (or what to measure), and Import / Replace / Clear. */
+/**
+ * A measurement slot: its name, then the imported file (or what to measure, or why the import
+ * failed) at the full width of the column, then Import / Replace / Clear on their own line. Side
+ * by side, the two buttons left the text almost no width: "Low only" broke a letter per line.
+ */
 @Composable
 private fun ImportRow(model: BandAlignViewModel, key: BandAlignViewModel.Key) {
     val context = LocalContext.current
@@ -187,32 +196,34 @@ private fun ImportRow(model: BandAlignViewModel, key: BandAlignViewModel.Key) {
     }
     val imported = model.imports[key]
     val err = model.importErrors[key]
-    Row(
-        Modifier.fillMaxWidth().background(Panel, RoundedCornerShape(12.dp)).padding(horizontal = 12.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    Column(
+        Modifier.fillMaxWidth().background(Panel, RoundedCornerShape(12.dp)).padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        Column(Modifier.weight(1f)) {
-            Text(key.slot.label, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-            when {
-                err != null -> Text(err, color = Warn, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                imported != null -> {
-                    Text(imported.fileName, color = Color(0xFFB8C0CA), fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    if (imported.measurement.heavilySmoothed) {
-                        Text("Smoothed ${imported.measurement.smoothing}: export at 1/48 oct", color = Warn, fontSize = 12.sp, maxLines = 1)
-                    }
+        Text(key.slot.label, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+        when {
+            err != null -> Text(err, color = Warn, fontSize = 12.sp, lineHeight = 16.sp, maxLines = 4, overflow = TextOverflow.Ellipsis)
+            imported != null -> {
+                Text(imported.fileName, color = Color(0xFFB8C0CA), fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                if (imported.measurement.heavilySmoothed) {
+                    Text("Smoothed ${imported.measurement.smoothing}: export at 1/48 oct", color = Warn, fontSize = 12.sp, lineHeight = 16.sp)
                 }
-                key.slot.hint.isNotEmpty() -> Text(key.slot.hint, color = Before, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
+            key.slot.hint.isNotEmpty() -> Text(key.slot.hint, color = Before, fontSize = 12.sp, lineHeight = 16.sp)
         }
-        if (imported != null) GlassChip("Clear", onClick = { model.clear(key) }, arrow = false)
-        GlassChip(if (imported != null) "Replace" else "Import", onClick = {
-            try {
-                launcher.launch(arrayOf("text/*", "application/octet-stream"))
-            } catch (_: ActivityNotFoundException) {
-                Toast.makeText(context, "No file picker on this device -- import the files on a phone", Toast.LENGTH_LONG).show()
-            }
-        }, arrow = false)
+        Row(
+            Modifier.fillMaxWidth().padding(top = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+        ) {
+            if (imported != null) GlassChip("Clear", onClick = { model.clear(key) }, arrow = false)
+            GlassChip(if (imported != null) "Replace" else "Import", onClick = {
+                try {
+                    launcher.launch(arrayOf("text/*", "application/octet-stream"))
+                } catch (_: ActivityNotFoundException) {
+                    Toast.makeText(context, "No file picker on this device -- import the files on a phone", Toast.LENGTH_LONG).show()
+                }
+            }, arrow = false)
+        }
     }
 }
 
