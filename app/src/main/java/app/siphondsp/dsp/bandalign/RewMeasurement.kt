@@ -56,30 +56,92 @@ class RewMeasurement private constructor(
         /** The band every measurement must cover. */
         const val MIN_COVER_HZ = 28.0
         const val MAX_COVER_HZ = 500.0
-        private val Row = Regex("""^\s*([0-9.eE+-]+)\s+([0-9.eE+-]+)\s+([0-9.eE+-]+)""")
-        private val DelayNote = Regex("""Delay\s+(-?[0-9.]+)\s*ms""")
+        // A comma as the decimal point too, as in a comma-decimal export's rows.
+        private val DelayNote = Regex("""Delay\s+(-?[0-9]+(?:[.,][0-9]+)?)\s*ms""")
+        private val RewBanner = Regex("""Measurement data measured by REW""", RegexOption.IGNORE_CASE)
         private val SmoothingNote = Regex("""^\*\s*Smoothing:\s*(.+)$""")
 
-        /** Parses an export, or returns the reason it can't be used. */
-        fun parse(name: String, text: String): Result<RewMeasurement> {
+        /**
+         * A data row's frequency, SPL and phase, or null for anything else (a header, a blank
+         * line). Takes REW's tab- or space-separated text, CSV, semicolon-separated, and a comma
+         * as the decimal point (as REW writes it in some languages): "20.0 85.3 120.1",
+         * "20.0,85.3,120.1", "20,0;85,3;120,1" and "20,0 85,3 120,1" all read the same.
+         */
+        internal fun rowNumbers(line: String): DoubleArray? {
+            val t = line.trim()
+            if (t.isEmpty()) return null
+            val spaced = t.split(SPACE_OR_SEMICOLON).map { it.trimEnd(',') }.filter { it.isNotEmpty() }
+            val parts = if (spaced.size >= 3) spaced.map { it.replace(',', '.') } else t.split(',').map { it.trim() }
+            if (parts.size < 3) return null
+            val values = parts.take(3).map { it.toDoubleOrNull() }
+            return if (values.any { it == null }) null else DoubleArray(3) { values[it]!! }
+        }
+
+        private val SPACE_OR_SEMICOLON = Regex("""[\s;]+""")
+
+        /**
+         * A file's text: UTF-8 unless a byte-order mark or the zero bytes of UTF-16 say otherwise
+         * (a UTF-16 file read as UTF-8 has a NUL between every character, so no row parses), with
+         * any byte-order mark dropped.
+         */
+        fun decode(bytes: ByteArray): String {
+            fun at(i: Int) = if (i < bytes.size) bytes[i].toInt() and 0xFF else -1
+            val text = when {
+                at(0) == 0xFF && at(1) == 0xFE -> String(bytes, 2, bytes.size - 2, Charsets.UTF_16LE)
+                at(0) == 0xFE && at(1) == 0xFF -> String(bytes, 2, bytes.size - 2, Charsets.UTF_16BE)
+                else -> {
+                    val sample = bytes.size.coerceAtMost(512)
+                    val oddZeros = (1 until sample step 2).count { bytes[it].toInt() == 0 }
+                    val evenZeros = (0 until sample step 2).count { bytes[it].toInt() == 0 }
+                    when {
+                        sample >= 4 && oddZeros > sample / 4 -> String(bytes, Charsets.UTF_16LE)
+                        sample >= 4 && evenZeros > sample / 4 -> String(bytes, Charsets.UTF_16BE)
+                        else -> String(bytes, Charsets.UTF_8)
+                    }
+                }
+            }
+            return text.removePrefix("\uFEFF")
+        }
+
+        /** The first line that isn't a header or blank, shortened and made printable, for an error. */
+        private fun firstDataLine(text: String): String? = text.lineSequence()
+            .map { it.trim() }
+            .firstOrNull { it.isNotEmpty() && !it.startsWith("*") }
+            ?.map { if (it.isISOControl() || it == '\uFFFD') '?' else it }
+            ?.joinToString("")
+            ?.let { if (it.length > 40) it.take(40) + "..." else it }
+
+        /**
+         * Parses an export, or returns the reason it can't be used. [coverFromHz]: the lowest
+         * frequency it must reach; null for a Mid-only measurement, which may start wherever its
+         * sweep did (below its data nothing is scored, and Analyse checks it starts low enough
+         * for its crossover).
+         */
+        fun parse(name: String, text: String, coverFromHz: Double? = MIN_COVER_HZ): Result<RewMeasurement> {
             val f = ArrayList<Double>()
             val spl = ArrayList<Double>()
             val ph = ArrayList<Double>()
             var delayMs = 0.0
             var smoothing: String? = null
+            var sawHeader = false
+            var sawDelay = false
+            var fromRew = false
             for (line in text.lineSequence()) {
                 if (line.startsWith("*")) {
+                    sawHeader = true
+                    if (RewBanner.containsMatchIn(line)) fromRew = true
                     DelayNote.find(line)?.let { m ->
-                        delayMs = m.groupValues[1].toDoubleOrNull()
+                        sawDelay = true
+                        delayMs = m.groupValues[1].replace(',', '.').toDoubleOrNull()
                             ?: return Result.failure(IllegalArgumentException("$name: couldn't read the delay in its header note"))
                     }
                     SmoothingNote.find(line.trim())?.let { smoothing = it.groupValues[1].trim() }
                     continue
                 }
-                val m = Row.find(line) ?: continue
-                val freq = m.groupValues[1].toDoubleOrNull() ?: continue
-                val db = m.groupValues[2].toDoubleOrNull() ?: continue
-                val deg = m.groupValues[3].toDoubleOrNull() ?: continue
+                val row = rowNumbers(line) ?: continue
+                val freq = row[0]
+                val db = row[1]
+                val deg = row[2]
                 if (!freq.isFinite() || !db.isFinite() || !deg.isFinite() || freq <= 0.0) continue
                 if (f.isNotEmpty() && freq <= f.last()) continue
                 f += freq
@@ -87,11 +149,37 @@ class RewMeasurement private constructor(
                 ph += deg * PI / 180.0
             }
             if (f.size < 16) {
-                return Result.failure(IllegalArgumentException("$name: no frequency / SPL / phase rows -- export from REW with File > Export > Measurement as text"))
+                val first = firstDataLine(text)?.let { " (its first line reads \"$it\")" } ?: " (it's empty)"
+                return Result.failure(IllegalArgumentException(
+                    "$name: no frequency / SPL / phase rows$first -- export from REW with File > Export > Measurement as text",
+                ))
+            }
+            // REW takes the measurement's delay out of the phase and says how much only in its
+            // header note: without the header, Low and Mid can't be lined up in time.
+            if (!sawHeader) {
+                return Result.failure(IllegalArgumentException(
+                    "$name: has no REW header, which holds the delay REW took out of the phase. " +
+                        "Re-export with \"Do not include any comments or headers\" unticked.",
+                ))
+            }
+            // REW writes the delay note only when it took a delay out, so its own header without
+            // one means 0 ms. Any other header without one can't say what was taken out: refused,
+            // not read as no delay, which would line Low and Mid up wrongly without a word.
+            if (!sawDelay && !fromRew) {
+                return Result.failure(IllegalArgumentException(
+                    "$name: its header has no \"Delay ... ms\" note, so the delay REW took out of the phase " +
+                        "is unknown. Export it from REW with File > Export > Measurement as text.",
+                ))
             }
             // The solver scores the crossover region (within 40-400 Hz) and times Low/Mid up to 500 Hz.
-            if (f.first() > MIN_COVER_HZ || f.last() < MAX_COVER_HZ) {
-                return Result.failure(IllegalArgumentException("$name: needs to cover at least 28-500 Hz (REW exports 20 Hz-20 kHz by default)"))
+            if (coverFromHz == null) {
+                if (f.last() < MAX_COVER_HZ) {
+                    return Result.failure(IllegalArgumentException("$name: needs to reach at least 500 Hz (it ends at ${f.last().toInt()} Hz)"))
+                }
+            } else if (f.first() > coverFromHz || f.last() < MAX_COVER_HZ) {
+                return Result.failure(IllegalArgumentException(
+                    "$name: needs to cover at least ${coverFromHz.toInt()}-500 Hz (it covers ${f.first().toInt()}-${f.last().toInt()} Hz; REW exports 20 Hz-20 kHz by default)",
+                ))
             }
             val delay = delayMs / 1000.0
             val unwrapped = DoubleArray(ph.size)

@@ -324,10 +324,12 @@ private fun HowToMeasure(onClose: () -> Unit) {
                 "With SiphonDSP on and your tune as it is, but Mono Bass and Virtual Centre off. Same mic position for every " +
                 "measurement at a seat, with REW's acoustic timing reference on. For each side, play REW's sweep on that channel only:\n" +
                 "• Low only: Signal Generator › Routing › Mute mid band and Mute high band on.\n" +
-                "• Mid only: Mute low band and Mute high band on.\n" +
+                "• Mid only: Mute low band and Mute high band on. The sweep may start above 20 Hz to spare the " +
+                "drivers, as long as it starts an octave or more below Mid's high-pass.\n" +
                 "• Low + Mid (optional, checks the timing): only Mute high band on.\n\n" +
                 "Leave Band isolation OFF: it adds brick-wall filters that change the phase. Unmute everything before " +
-                "analysing. Export from REW with File › Export › Measurement as text, smoothing 1/48 octave.",
+                "analysing. Export from REW with File › Export › Measurement as text, smoothing 1/48 octave, and leave " +
+                "\"Do not include any comments or headers\" unticked: the header holds the delay Band Align needs.",
         )
     }
 }

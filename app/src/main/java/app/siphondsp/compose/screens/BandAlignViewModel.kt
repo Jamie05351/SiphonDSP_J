@@ -79,9 +79,11 @@ class BandAlignViewModel(application: Application) : AndroidViewModel(applicatio
                     val text = app.contentResolver.openInputStream(uri)?.use { stream ->
                         val bytes = stream.readNBytesCompat(MAX_BYTES + 1)
                         require(bytes.size <= MAX_BYTES) { "$name is too large for a measurement export" }
-                        String(bytes, Charsets.UTF_8)
+                        RewMeasurement.decode(bytes)
                     } ?: throw IllegalStateException("couldn't open $name")
-                    name to RewMeasurement.parse(name, text).getOrThrow()
+                    // Mid only may start where its sweep did (often 100 Hz): Analyse checks it's low enough.
+                    val coverFrom = if (key.slot == Slot.MID) null else RewMeasurement.MIN_COVER_HZ
+                    name to RewMeasurement.parse(name, text, coverFrom).getOrThrow()
                 }
             }
             if (slotGeneration[key] != generation) return@launch
@@ -129,6 +131,12 @@ class BandAlignViewModel(application: Application) : AndroidViewModel(applicatio
         invalidate()
         failure = null
         notReadyReason(values)?.let {
+            failure = it
+            return
+        }
+        sides.entries.firstNotNullOfOrNull { (side, seats) ->
+            seats.firstNotNullOfOrNull { BandAlignSolver.midStartProblem(it.mid, values, side) }
+        }?.let {
             failure = it
             return
         }
