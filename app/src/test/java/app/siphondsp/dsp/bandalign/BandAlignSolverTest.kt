@@ -4,6 +4,7 @@ import app.siphondsp.dsp.BmwOutputChannel
 import app.siphondsp.model.NativeBmwDspValues
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -249,5 +250,61 @@ class BandAlignSolverTest {
         val expected = Complex.polar(0.1, -2 * PI * 100.0 * 0.003)
         assertEquals(expected.re, h.re, 2e-3)
         assertEquals(expected.im, h.im, 2e-3)
+    }
+
+    /** [rewText], but only the rows from [fromHz] up: a Mid swept from there. */
+    private fun startingAt(text: String, fromHz: Double) = text.lines().filter { line ->
+        line.startsWith("*") || (line.substringBefore('\t').toDoubleOrNull()?.let { it >= fromHz } ?: false)
+    }.joinToString("\n")
+
+    @Test
+    fun aMidOnlySweptFrom100HzImportsButOtherSlotsStillNeedTheBottom() {
+        val text = startingAt(rewText("Mid", -4.0, "1/48 octave") { f -> lr4High(f, 300.0) }, 100.0)
+        val mid = RewMeasurement.parse("Mid", text, coverFromHz = null).getOrThrow()
+        assertEquals(100.0, mid.frequencies.first(), 1.0)
+        assertTrue(RewMeasurement.parse("Low", text).isFailure)
+    }
+
+    @Test
+    fun aMidStartingAnOctaveBelowItsHighPassIsAcceptedAndAboveIsNot() {
+        val text = startingAt(rewText("Mid", -4.0, "1/48 octave") { f -> lr4High(f, 300.0) }, 100.0)
+        val mid = RewMeasurement.parse("Mid", text, coverFromHz = null).getOrThrow()
+        val idx = NativeBmwDspValues.outputIndex(NativeBmwDspValues.OUTPUT_MID_LEFT, NativeBmwDspValues.FIELD_CROSSOVER_FREQ)
+        val at300 = NativeBmwDspValues.DEFAULTS.copyOf().also { it[idx] = 300f }
+        val at150 = NativeBmwDspValues.DEFAULTS.copyOf().also { it[idx] = 150f }
+        assertNull(BandAlignSolver.midStartProblem(mid, at300, BmwOutputChannel.LEFT))
+        assertNotNull(BandAlignSolver.midStartProblem(mid, at150, BmwOutputChannel.LEFT))
+    }
+
+    @Test
+    fun aMidSweptFromAboveTheBandStillScoresTheFullBand() {
+        // Crossover at 140 Hz, Mid swept from 70 Hz (an octave below): the solve is unchanged.
+        val full = seat("Driver", 0.0018)
+        val midText = startingAt(rewText("mid", -4.0, "1/48 octave") { f -> lr4High(f, 140.0) * delay(f, 0.004) * Complex(0.1, 0.0) }, 70.0)
+        val shortMid = full.copy(mid = RewMeasurement.parse("mid", midText, coverFromHz = null).getOrThrow())
+        val a = BandAlignSolver().solveSide(BmwOutputChannel.LEFT, listOf(full), BandAlignSolver.Setting(2.2, false), band)
+        val b = BandAlignSolver().solveSide(BmwOutputChannel.LEFT, listOf(shortMid), BandAlignSolver.Setting(2.2, false), band)
+        assertEquals(a.proposal!!.delayMs, b.proposal!!.delayMs, 0.02)
+    }
+
+    @Test
+    fun rowsReadInEveryWayREWWritesThem() {
+        for (line in listOf("20.0\t85.3\t120.1", "20.0 85.3 120.1", "20.0,85.3,120.1", "20.0, 85.3, 120.1", "20,0;85,3;120,1", "20,0 85,3 120,1", "20,0\t85,3\t120,1")) {
+            val r = RewMeasurement.rowNumbers(line)
+            assertNotNull(line, r)
+            assertEquals(line, 20.0, r!![0], 1e-9)
+            assertEquals(line, 85.3, r[1], 1e-9)
+            assertEquals(line, 120.1, r[2], 1e-9)
+        }
+        assertNull(RewMeasurement.rowNumbers("Freq(Hz), SPL(dB), Phase(degrees)"))
+        assertNull(RewMeasurement.rowNumbers(""))
+    }
+
+    @Test
+    fun aCommaDecimalExportParses() {
+        val text = rewText("L", -4.0, "1/48 octave") { f -> lr4Low(f, 140.0) }.lines().joinToString("\n") { line ->
+            if (line.startsWith("*")) line else line.replace('.', ',')
+        }
+        assertTrue(RewMeasurement.parse("L", text).isSuccess)
     }
 }

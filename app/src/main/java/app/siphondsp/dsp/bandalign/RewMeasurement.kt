@@ -56,12 +56,34 @@ class RewMeasurement private constructor(
         /** The band every measurement must cover. */
         const val MIN_COVER_HZ = 28.0
         const val MAX_COVER_HZ = 500.0
-        private val Row = Regex("""^\s*([0-9.eE+-]+)\s+([0-9.eE+-]+)\s+([0-9.eE+-]+)""")
         private val DelayNote = Regex("""Delay\s+(-?[0-9.]+)\s*ms""")
         private val SmoothingNote = Regex("""^\*\s*Smoothing:\s*(.+)$""")
 
-        /** Parses an export, or returns the reason it can't be used. */
-        fun parse(name: String, text: String): Result<RewMeasurement> {
+        /**
+         * A data row's frequency, SPL and phase, or null for anything else (a header, a blank
+         * line). Takes REW's tab- or space-separated text, CSV, semicolon-separated, and a comma
+         * as the decimal point (as REW writes it in some languages): "20.0 85.3 120.1",
+         * "20.0,85.3,120.1", "20,0;85,3;120,1" and "20,0 85,3 120,1" all read the same.
+         */
+        internal fun rowNumbers(line: String): DoubleArray? {
+            val t = line.trim()
+            if (t.isEmpty()) return null
+            val spaced = t.split(SPACE_OR_SEMICOLON).map { it.trimEnd(',') }.filter { it.isNotEmpty() }
+            val parts = if (spaced.size >= 3) spaced.map { it.replace(',', '.') } else t.split(',').map { it.trim() }
+            if (parts.size < 3) return null
+            val values = parts.take(3).map { it.toDoubleOrNull() }
+            return if (values.any { it == null }) null else DoubleArray(3) { values[it]!! }
+        }
+
+        private val SPACE_OR_SEMICOLON = Regex("""[\s;]+""")
+
+        /**
+         * Parses an export, or returns the reason it can't be used. [coverFromHz]: the lowest
+         * frequency it must reach; null for a Mid-only measurement, which may start wherever its
+         * sweep did (Mid is high-passed: below its data it's taken as silent, and Analyse checks
+         * it starts low enough for its crossover).
+         */
+        fun parse(name: String, text: String, coverFromHz: Double? = MIN_COVER_HZ): Result<RewMeasurement> {
             val f = ArrayList<Double>()
             val spl = ArrayList<Double>()
             val ph = ArrayList<Double>()
@@ -76,10 +98,10 @@ class RewMeasurement private constructor(
                     SmoothingNote.find(line.trim())?.let { smoothing = it.groupValues[1].trim() }
                     continue
                 }
-                val m = Row.find(line) ?: continue
-                val freq = m.groupValues[1].toDoubleOrNull() ?: continue
-                val db = m.groupValues[2].toDoubleOrNull() ?: continue
-                val deg = m.groupValues[3].toDoubleOrNull() ?: continue
+                val row = rowNumbers(line) ?: continue
+                val freq = row[0]
+                val db = row[1]
+                val deg = row[2]
                 if (!freq.isFinite() || !db.isFinite() || !deg.isFinite() || freq <= 0.0) continue
                 if (f.isNotEmpty() && freq <= f.last()) continue
                 f += freq
@@ -90,8 +112,14 @@ class RewMeasurement private constructor(
                 return Result.failure(IllegalArgumentException("$name: no frequency / SPL / phase rows -- export from REW with File > Export > Measurement as text"))
             }
             // The solver scores the crossover region (within 40-400 Hz) and times Low/Mid up to 500 Hz.
-            if (f.first() > MIN_COVER_HZ || f.last() < MAX_COVER_HZ) {
-                return Result.failure(IllegalArgumentException("$name: needs to cover at least 28-500 Hz (REW exports 20 Hz-20 kHz by default)"))
+            if (coverFromHz == null) {
+                if (f.last() < MAX_COVER_HZ) {
+                    return Result.failure(IllegalArgumentException("$name: needs to reach at least 500 Hz (it ends at ${f.last().toInt()} Hz)"))
+                }
+            } else if (f.first() > coverFromHz || f.last() < MAX_COVER_HZ) {
+                return Result.failure(IllegalArgumentException(
+                    "$name: needs to cover at least ${coverFromHz.toInt()}-500 Hz (it covers ${f.first().toInt()}-${f.last().toInt()} Hz; REW exports 20 Hz-20 kHz by default)",
+                ))
             }
             val delay = delayMs / 1000.0
             val unwrapped = DoubleArray(ph.size)
