@@ -56,7 +56,8 @@ class RewMeasurement private constructor(
         /** The band every measurement must cover. */
         const val MIN_COVER_HZ = 28.0
         const val MAX_COVER_HZ = 500.0
-        private val DelayNote = Regex("""Delay\s+(-?[0-9.]+)\s*ms""")
+        // A comma as the decimal point too, as in a comma-decimal export's rows.
+        private val DelayNote = Regex("""Delay\s+(-?[0-9]+(?:[.,][0-9]+)?)\s*ms""")
         private val SmoothingNote = Regex("""^\*\s*Smoothing:\s*(.+)$""")
 
         /**
@@ -122,11 +123,13 @@ class RewMeasurement private constructor(
             var delayMs = 0.0
             var smoothing: String? = null
             var sawHeader = false
+            var sawDelay = false
             for (line in text.lineSequence()) {
                 if (line.startsWith("*")) {
                     sawHeader = true
                     DelayNote.find(line)?.let { m ->
-                        delayMs = m.groupValues[1].toDoubleOrNull()
+                        sawDelay = true
+                        delayMs = m.groupValues[1].replace(',', '.').toDoubleOrNull()
                             ?: return Result.failure(IllegalArgumentException("$name: couldn't read the delay in its header note"))
                     }
                     SmoothingNote.find(line.trim())?.let { smoothing = it.groupValues[1].trim() }
@@ -154,6 +157,14 @@ class RewMeasurement private constructor(
                 return Result.failure(IllegalArgumentException(
                     "$name: has no REW header, which holds the delay REW took out of the phase. " +
                         "Re-export with \"Do not include any comments or headers\" unticked.",
+                ))
+            }
+            // A header without the delay note can't say what was taken out either: refused, not
+            // read as no delay, which would line Low and Mid up wrongly without a word.
+            if (!sawDelay) {
+                return Result.failure(IllegalArgumentException(
+                    "$name: its header has no \"Delay ... ms\" note, so the delay REW took out of the phase " +
+                        "is unknown. Export it from REW with File > Export > Measurement as text.",
                 ))
             }
             // The solver scores the crossover region (within 40-400 Hz) and times Low/Mid up to 500 Hz.

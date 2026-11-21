@@ -36,7 +36,7 @@ class BandAlignSolverTest {
     /** An REW-style text export of [response], with [delayMs] taken out of the phase and noted. */
     private fun rewText(name: String, delayMs: Double, smoothing: String, response: (Double) -> Complex): String = buildString {
         appendLine("* Measurement data measured by REW V5.40")
-        if (delayMs != 0.0) appendLine("* Note: ; Delay ${"%.4f".format(delayMs)} ms (-1.5 m) using estimated IR delay")
+        appendLine("* Note: ; Delay ${"%.4f".format(java.util.Locale.ROOT, delayMs)} ms (-1.5 m) using estimated IR delay")
         appendLine("* Measurement: $name")
         appendLine("* Smoothing: $smoothing")
         appendLine("* Freq(Hz)\tSPL(dB)\tPhase(degrees)")
@@ -331,5 +331,21 @@ class BandAlignSolverTest {
     fun anUnreadableFileQuotesItsFirstLine() {
         val error = RewMeasurement.parse("L", "<html><body>Sign in</body></html>").exceptionOrNull()!!.message!!
         assertTrue(error, error.contains("<html>"))
+    }
+
+    @Test
+    fun aCommaDecimalDelayNoteIsRead() {
+        val text = rewText("L", -3.0, "1/48 octave") { f -> Complex.polar(0.1, -2 * PI * f * 0.003) }.lines().joinToString("\n") { line ->
+            if (line.contains("Delay")) line.replace('.', ',') else line
+        }
+        assertTrue(text, text.contains("Delay -3,0000 ms"))
+        assertEquals(-0.003, RewMeasurement.parse("L", text).getOrThrow().removedDelaySeconds, 1e-9)
+    }
+
+    @Test
+    fun aHeaderWithoutTheDelayNoteIsRefused() {
+        val text = rewText("L", -3.0, "1/48 octave") { f -> lr4Low(f, 140.0) }.lines().filterNot { it.contains("Delay") }.joinToString("\n")
+        val error = RewMeasurement.parse("L", text).exceptionOrNull()!!.message!!
+        assertTrue(error, error.contains("Delay"))
     }
 }
