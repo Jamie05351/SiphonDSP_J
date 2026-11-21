@@ -4,6 +4,7 @@ import app.siphondsp.dsp.BmwOutputChannel
 import app.siphondsp.model.NativeBmwDspValues
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -35,7 +36,7 @@ class BandAlignSolverTest {
     /** An REW-style text export of [response], with [delayMs] taken out of the phase and noted. */
     private fun rewText(name: String, delayMs: Double, smoothing: String, response: (Double) -> Complex): String = buildString {
         appendLine("* Measurement data measured by REW V5.40")
-        if (delayMs != 0.0) appendLine("* Note: ; Delay ${"%.4f".format(delayMs)} ms (-1.5 m) using estimated IR delay")
+        appendLine("* Note: ; Delay ${"%.4f".format(java.util.Locale.ROOT, delayMs)} ms (-1.5 m) using estimated IR delay")
         appendLine("* Measurement: $name")
         appendLine("* Smoothing: $smoothing")
         appendLine("* Freq(Hz)\tSPL(dB)\tPhase(degrees)")
@@ -249,5 +250,110 @@ class BandAlignSolverTest {
         val expected = Complex.polar(0.1, -2 * PI * 100.0 * 0.003)
         assertEquals(expected.re, h.re, 2e-3)
         assertEquals(expected.im, h.im, 2e-3)
+    }
+
+    /** [rewText], but only the rows from [fromHz] up: a Mid swept from there. */
+    private fun startingAt(text: String, fromHz: Double) = text.lines().filter { line ->
+        line.startsWith("*") || (line.substringBefore('\t').toDoubleOrNull()?.let { it >= fromHz } ?: false)
+    }.joinToString("\n")
+
+    @Test
+    fun aMidOnlySweptFrom100HzImportsButOtherSlotsStillNeedTheBottom() {
+        val text = startingAt(rewText("Mid", -4.0, "1/48 octave") { f -> lr4High(f, 300.0) }, 100.0)
+        val mid = RewMeasurement.parse("Mid", text, coverFromHz = null).getOrThrow()
+        assertEquals(100.0, mid.frequencies.first(), 1.0)
+        assertTrue(RewMeasurement.parse("Low", text).isFailure)
+    }
+
+    @Test
+    fun aMidStartingAnOctaveBelowItsHighPassIsAcceptedAndAboveIsNot() {
+        val text = startingAt(rewText("Mid", -4.0, "1/48 octave") { f -> lr4High(f, 300.0) }, 100.0)
+        val mid = RewMeasurement.parse("Mid", text, coverFromHz = null).getOrThrow()
+        val idx = NativeBmwDspValues.outputIndex(NativeBmwDspValues.OUTPUT_MID_LEFT, NativeBmwDspValues.FIELD_CROSSOVER_FREQ)
+        val at300 = NativeBmwDspValues.DEFAULTS.copyOf().also { it[idx] = 300f }
+        val at150 = NativeBmwDspValues.DEFAULTS.copyOf().also { it[idx] = 150f }
+        assertNull(BandAlignSolver.midStartProblem(mid, at300, BmwOutputChannel.LEFT))
+        assertNotNull(BandAlignSolver.midStartProblem(mid, at150, BmwOutputChannel.LEFT))
+    }
+
+    @Test
+    fun aMidSweptFromAnOctaveBelowItsCrossoverGivesTheSameProposal() {
+        // Crossover at 140 Hz, Mid swept from 70 Hz (an octave below): the solve is unchanged.
+        val full = seat("Driver", 0.0018)
+        val midText = startingAt(rewText("mid", -4.0, "1/48 octave") { f -> lr4High(f, 140.0) * delay(f, 0.004) * Complex(0.1, 0.0) }, 70.0)
+        val shortMid = full.copy(mid = RewMeasurement.parse("mid", midText, coverFromHz = null).getOrThrow())
+        val a = BandAlignSolver().solveSide(BmwOutputChannel.LEFT, listOf(full), BandAlignSolver.Setting(2.2, false), band)
+        val b = BandAlignSolver().solveSide(BmwOutputChannel.LEFT, listOf(shortMid), BandAlignSolver.Setting(2.2, false), band)
+        assertEquals(a.proposal!!.delayMs, b.proposal!!.delayMs, 0.02)
+    }
+
+    @Test
+    fun rowsReadInEveryWayREWWritesThem() {
+        for (line in listOf("20.0\t85.3\t120.1", "20.0 85.3 120.1", "20.0,85.3,120.1", "20.0, 85.3, 120.1", "20,0;85,3;120,1", "20,0 85,3 120,1", "20,0\t85,3\t120,1")) {
+            val r = RewMeasurement.rowNumbers(line)
+            assertNotNull(line, r)
+            assertEquals(line, 20.0, r!![0], 1e-9)
+            assertEquals(line, 85.3, r[1], 1e-9)
+            assertEquals(line, 120.1, r[2], 1e-9)
+        }
+        assertNull(RewMeasurement.rowNumbers("Freq(Hz), SPL(dB), Phase(degrees)"))
+        assertNull(RewMeasurement.rowNumbers(""))
+    }
+
+    @Test
+    fun aCommaDecimalExportParses() {
+        val text = rewText("L", -4.0, "1/48 octave") { f -> lr4Low(f, 140.0) }.lines().joinToString("\n") { line ->
+            if (line.startsWith("*")) line else line.replace('.', ',')
+        }
+        assertTrue(RewMeasurement.parse("L", text).isSuccess)
+    }
+
+    @Test
+    fun aUtf16ExportIsDecoded() {
+        val text = rewText("L", -4.0, "1/48 octave") { f -> lr4Low(f, 140.0) }
+        for (bytes in listOf(
+            byteArrayOf(0xFF.toByte(), 0xFE.toByte()) + text.toByteArray(Charsets.UTF_16LE),
+            text.toByteArray(Charsets.UTF_16LE),
+            byteArrayOf(0xEF.toByte(), 0xBB.toByte(), 0xBF.toByte()) + text.toByteArray(Charsets.UTF_8),
+        )) {
+            assertTrue(RewMeasurement.parse("L", RewMeasurement.decode(bytes)).isSuccess)
+        }
+    }
+
+    @Test
+    fun anExportWithoutItsHeaderIsRefusedAndSaysWhy() {
+        val text = rewText("L", -4.0, "1/48 octave") { f -> lr4Low(f, 140.0) }.lines().filterNot { it.startsWith("*") }.joinToString("\n")
+        val error = RewMeasurement.parse("L", text).exceptionOrNull()!!.message!!
+        assertTrue(error, error.contains("header"))
+    }
+
+    @Test
+    fun anUnreadableFileQuotesItsFirstLine() {
+        val error = RewMeasurement.parse("L", "<html><body>Sign in</body></html>").exceptionOrNull()!!.message!!
+        assertTrue(error, error.contains("<html>"))
+    }
+
+    @Test
+    fun aCommaDecimalDelayNoteIsRead() {
+        val text = rewText("L", -3.0, "1/48 octave") { f -> Complex.polar(0.1, -2 * PI * f * 0.003) }.lines().joinToString("\n") { line ->
+            if (line.contains("Delay")) line.replace('.', ',') else line
+        }
+        assertTrue(text, text.contains("Delay -3,0000 ms"))
+        assertEquals(-0.003, RewMeasurement.parse("L", text).getOrThrow().removedDelaySeconds, 1e-9)
+    }
+
+    @Test
+    fun anREWHeaderWithoutADelayNoteReadsAsNoDelay() {
+        // REW writes the note only when it removed a delay.
+        val text = rewText("L", 0.0, "1/48 octave") { f -> lr4Low(f, 140.0) }.lines().filterNot { it.contains("Delay") }.joinToString("\n")
+        assertEquals(0.0, RewMeasurement.parse("L", text).getOrThrow().removedDelaySeconds, 0.0)
+    }
+
+    @Test
+    fun aNonREWHeaderWithoutTheDelayNoteIsRefused() {
+        val text = rewText("L", -3.0, "1/48 octave") { f -> lr4Low(f, 140.0) }.lines()
+            .filterNot { it.contains("Delay") || it.contains("measured by REW") }.joinToString("\n")
+        val error = RewMeasurement.parse("L", text).exceptionOrNull()!!.message!!
+        assertTrue(error, error.contains("Delay"))
     }
 }

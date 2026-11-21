@@ -89,6 +89,9 @@ class BandAlignSolver {
         val mids = seats.map { s -> f.map { s.mid.at(it) ?: Complex(0.0, 0.0) } }
         val inBand = BooleanArray(f.size) { f[it] in bandHz }
         val covered = seats.map { s ->
+            // Only where every file has data. A Mid swept from above the bottom of the range
+            // isn't silent just below its first row (an octave below a high-pass is only 12-24 dB
+            // down), so that stretch is left out rather than taken as zero.
             val ms = listOfNotNull(s.low, s.mid, s.both)
             val lo = ms.maxOf { it.frequencies.first() }
             val hi = ms.minOf { it.frequencies.last() }
@@ -180,7 +183,9 @@ class BandAlignSolver {
         val mid = f.map { seat.mid.at(it) ?: Complex(0.0, 0.0) }
         val both = seat.both ?: return SeatFit(low, null, 0.0)
         val target = f.map { hz -> both.at(hz)?.let { 10 * log10(it.power().coerceAtLeast(1e-30)) } }
-        val fitBand = f.indices.filter { f[it] in FIT_LOW_HZ..FIT_HIGH_HZ && target[it] != null }
+        // Not below Mid's data: Mid isn't silent there, only unmeasured.
+        val fitFrom = maxOf(FIT_LOW_HZ, seat.mid.frequencies.first(), seat.low.frequencies.first())
+        val fitBand = f.indices.filter { f[it] in fitFrom..FIT_HIGH_HZ && target[it] != null }
         if (fitBand.size < MIN_FIT_POINTS) return SeatFit(low, null, 0.0)
         fun rms(tau: Double): Double {
             val err = fitBand.map { i ->
@@ -253,6 +258,28 @@ class BandAlignSolver {
 
         private fun midOutput(side: BmwOutputChannel) =
             if (side == BmwOutputChannel.LEFT) NativeBmwDspValues.OUTPUT_MID_LEFT else NativeBmwDspValues.OUTPUT_MID_RIGHT
+
+        /** The Mid high-pass corner, Hz; 0 or below when Mid has none. */
+        fun midHighPassHz(values: FloatArray, side: BmwOutputChannel): Double =
+            values[NativeBmwDspValues.outputIndex(midOutput(side), NativeBmwDspValues.FIELD_CROSSOVER_FREQ)].toDouble()
+
+        /**
+         * Why a Mid-only measurement can't be used with this tune, or null: it has to start an
+         * octave or more below the Mid high-pass, where Mid is well down, so the band where Mid
+         * and Low overlap is in it. Nothing below its data is scored.
+         */
+        fun midStartProblem(mid: RewMeasurement, values: FloatArray, side: BmwOutputChannel): String? {
+            val hp = midHighPassHz(values, side)
+            val needed = if (hp > 0.0) hp / 2.0 else RewMeasurement.MIN_COVER_HZ
+            val start = mid.frequencies.first()
+            if (start <= needed) return null
+            return if (hp > 0.0) {
+                "${mid.name} starts at ${start.roundToInt()} Hz, but Mid's high-pass is at ${hp.roundToInt()} Hz: " +
+                    "measure Mid from ${needed.roundToInt()} Hz or lower (an octave below), so its overlap with Low is in it."
+            } else {
+                "${mid.name} starts at ${start.roundToInt()} Hz, but Mid has no high-pass: measure it from ${needed.roundToInt()} Hz."
+            }
+        }
 
         fun delayIndex(side: BmwOutputChannel) =
             if (side == BmwOutputChannel.LEFT) NativeBmwDspValues.INDEX_LOW_DELAY_L else NativeBmwDspValues.INDEX_LOW_DELAY_R
