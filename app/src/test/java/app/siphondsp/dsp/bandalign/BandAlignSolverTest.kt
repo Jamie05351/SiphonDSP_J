@@ -343,8 +343,16 @@ class BandAlignSolverTest {
     }
 
     @Test
-    fun aHeaderWithoutTheDelayNoteIsRefused() {
-        val text = rewText("L", -3.0, "1/48 octave") { f -> lr4Low(f, 140.0) }.lines().filterNot { it.contains("Delay") }.joinToString("\n")
+    fun anREWHeaderWithoutADelayNoteReadsAsNoDelay() {
+        // REW writes the note only when it removed a delay.
+        val text = rewText("L", 0.0, "1/48 octave") { f -> lr4Low(f, 140.0) }.lines().filterNot { it.contains("Delay") }.joinToString("\n")
+        assertEquals(0.0, RewMeasurement.parse("L", text).getOrThrow().removedDelaySeconds, 0.0)
+    }
+
+    @Test
+    fun aNonREWHeaderWithoutTheDelayNoteIsRefused() {
+        val text = rewText("L", -3.0, "1/48 octave") { f -> lr4Low(f, 140.0) }.lines()
+            .filterNot { it.contains("Delay") || it.contains("measured by REW") }.joinToString("\n")
         val error = RewMeasurement.parse("L", text).exceptionOrNull()!!.message!!
         assertTrue(error, error.contains("Delay"))
     }

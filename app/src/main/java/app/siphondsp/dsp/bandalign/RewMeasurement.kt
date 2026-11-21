@@ -58,6 +58,7 @@ class RewMeasurement private constructor(
         const val MAX_COVER_HZ = 500.0
         // A comma as the decimal point too, as in a comma-decimal export's rows.
         private val DelayNote = Regex("""Delay\s+(-?[0-9]+(?:[.,][0-9]+)?)\s*ms""")
+        private val RewBanner = Regex("""Measurement data measured by REW""", RegexOption.IGNORE_CASE)
         private val SmoothingNote = Regex("""^\*\s*Smoothing:\s*(.+)$""")
 
         /**
@@ -124,9 +125,11 @@ class RewMeasurement private constructor(
             var smoothing: String? = null
             var sawHeader = false
             var sawDelay = false
+            var fromRew = false
             for (line in text.lineSequence()) {
                 if (line.startsWith("*")) {
                     sawHeader = true
+                    if (RewBanner.containsMatchIn(line)) fromRew = true
                     DelayNote.find(line)?.let { m ->
                         sawDelay = true
                         delayMs = m.groupValues[1].replace(',', '.').toDoubleOrNull()
@@ -159,9 +162,10 @@ class RewMeasurement private constructor(
                         "Re-export with \"Do not include any comments or headers\" unticked.",
                 ))
             }
-            // A header without the delay note can't say what was taken out either: refused, not
-            // read as no delay, which would line Low and Mid up wrongly without a word.
-            if (!sawDelay) {
+            // REW writes the delay note only when it took a delay out, so its own header without
+            // one means 0 ms. Any other header without one can't say what was taken out: refused,
+            // not read as no delay, which would line Low and Mid up wrongly without a word.
+            if (!sawDelay && !fromRew) {
                 return Result.failure(IllegalArgumentException(
                     "$name: its header has no \"Delay ... ms\" note, so the delay REW took out of the phase " +
                         "is unknown. Export it from REW with File > Export > Measurement as text.",
