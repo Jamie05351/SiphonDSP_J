@@ -277,7 +277,7 @@ class BandAlignSolverTest {
     }
 
     @Test
-    fun aMidSweptFromAboveTheBandStillScoresTheFullBand() {
+    fun aMidSweptFromAnOctaveBelowItsCrossoverGivesTheSameProposal() {
         // Crossover at 140 Hz, Mid swept from 70 Hz (an octave below): the solve is unchanged.
         val full = seat("Driver", 0.0018)
         val midText = startingAt(rewText("mid", -4.0, "1/48 octave") { f -> lr4High(f, 140.0) * delay(f, 0.004) * Complex(0.1, 0.0) }, 70.0)

@@ -89,10 +89,11 @@ class BandAlignSolver {
         val mids = seats.map { s -> f.map { s.mid.at(it) ?: Complex(0.0, 0.0) } }
         val inBand = BooleanArray(f.size) { f[it] in bandHz }
         val covered = seats.map { s ->
-            // Mid may start above the bottom of the range (its sweep began there): below its
-            // data it's silent, as a high-passed Mid is, so it doesn't narrow what's scored.
+            // Only where every file has data. A Mid swept from above the bottom of the range
+            // isn't silent just below its first row (an octave below a high-pass is only 12-24 dB
+            // down), so that stretch is left out rather than taken as zero.
             val ms = listOfNotNull(s.low, s.mid, s.both)
-            val lo = listOfNotNull(s.low, s.both).maxOf { it.frequencies.first() }
+            val lo = ms.maxOf { it.frequencies.first() }
             val hi = ms.minOf { it.frequencies.last() }
             BooleanArray(f.size) { f[it] in lo..hi }
         }
@@ -182,7 +183,9 @@ class BandAlignSolver {
         val mid = f.map { seat.mid.at(it) ?: Complex(0.0, 0.0) }
         val both = seat.both ?: return SeatFit(low, null, 0.0)
         val target = f.map { hz -> both.at(hz)?.let { 10 * log10(it.power().coerceAtLeast(1e-30)) } }
-        val fitBand = f.indices.filter { f[it] in FIT_LOW_HZ..FIT_HIGH_HZ && target[it] != null }
+        // Not below Mid's data: Mid isn't silent there, only unmeasured.
+        val fitFrom = maxOf(FIT_LOW_HZ, seat.mid.frequencies.first(), seat.low.frequencies.first())
+        val fitBand = f.indices.filter { f[it] in fitFrom..FIT_HIGH_HZ && target[it] != null }
         if (fitBand.size < MIN_FIT_POINTS) return SeatFit(low, null, 0.0)
         fun rms(tau: Double): Double {
             val err = fitBand.map { i ->
@@ -263,7 +266,7 @@ class BandAlignSolver {
         /**
          * Why a Mid-only measurement can't be used with this tune, or null: it has to start an
          * octave or more below the Mid high-pass, where Mid is well down, so the band where Mid
-         * and Low overlap is in it. Below its data Mid is taken as silent.
+         * and Low overlap is in it. Nothing below its data is scored.
          */
         fun midStartProblem(mid: RewMeasurement, values: FloatArray, side: BmwOutputChannel): String? {
             val hp = midHighPassHz(values, side)

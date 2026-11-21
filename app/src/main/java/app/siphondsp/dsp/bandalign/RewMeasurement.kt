@@ -114,8 +114,8 @@ class RewMeasurement private constructor(
         /**
          * Parses an export, or returns the reason it can't be used. [coverFromHz]: the lowest
          * frequency it must reach; null for a Mid-only measurement, which may start wherever its
-         * sweep did (Mid is high-passed: below its data it's taken as silent, and Analyse checks
-         * it starts low enough for its crossover).
+         * sweep did (below its data nothing is scored, and Analyse checks it starts low enough
+         * for its crossover).
          */
         fun parse(name: String, text: String, coverFromHz: Double? = MIN_COVER_HZ): Result<RewMeasurement> {
             val f = ArrayList<Double>()
