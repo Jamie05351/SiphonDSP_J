@@ -166,8 +166,6 @@ class NativeBmwSchemaAgreementTest {
         "kMeasurementNeutral" to NativeBmwDspValues.INDEX_MEASUREMENT_NEUTRAL,
         "kNeutralAllow" to NativeBmwDspValues.INDEX_NEUTRAL_ALLOW,
         "kDeepBassMaxDb" to NativeBmwDspValues.INDEX_DEEP_BASS_MAX_DB,
-        "kLowMidAutoPair" to NativeBmwDspValues.INDEX_LOW_MID_AUTO_PAIR,
-        "kMidHighAutoPair" to NativeBmwDspValues.INDEX_MID_HIGH_AUTO_PAIR,
 
         // The stage bits native reports, neutralises and the self-test names (DspStage).
         "kStageNeutralCount" to DspStage.NEUTRAL_COUNT,

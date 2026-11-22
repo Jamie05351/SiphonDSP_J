@@ -190,10 +190,14 @@ class NativeBmwDspValuesTest {
         values[1] = 1f
         values[2] = 1f
         values[291] = 1f
+        // ...and the removed BW2/BW4 crossover auto-pair switches (313/314) the same way.
+        values[313] = 1f
+        values[314] = 1f
         assertTrue(NativeBmwDspValues.save(context, values))
         assertEquals(0f, values[1], 0f)
+        assertEquals(0f, values[313], 0f)
         val loaded = NativeBmwDspValues.load(context)
-        for (slot in intArrayOf(1, 2, 291)) assertEquals(0f, loaded[slot], 0f)
+        for (slot in intArrayOf(1, 2, 291, 313, 314)) assertEquals(0f, loaded[slot], 0f)
         assertEquals(0f, loaded[NativeBmwDspValues.INDEX_CROSSOVER_BYPASS], 0f)
     }
 

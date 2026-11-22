@@ -212,12 +212,8 @@ public:
     //     parsePeq()'s build() skip (peqBandSkipped()) -- a band this processor discarded
     //     as a no-op is reported as inactive even though its raw values are still shown.
     //   then the engine status block: kEngineStatusSize doubles, laid out as readEngineStatus().
-    //   then the crossover auto-pair block (kTruthPairingWidth doubles): lowMidAutoPair,
-    //   midHighAutoPair (the switches, 0/1), then for Left and Right: the corners the filters are
-    //   really built at -- Low lowpass, Mid highpass, Mid lowpass, High highpass (Hz) -- then
-    //   lowMidCorrected, midHighCorrected, midInverted, highInverted (0/1; the polarity flips are
-    //   the ones the pairing adds on top of the user's own).
-    enum : std::size_t { kTruthOutputWidth = 40, kTruthPairingWidth = 2 + 2 * 8 };
+    //   (A crossover auto-pair block used to follow; it went with the retired auto-pair.)
+    enum : std::size_t { kTruthOutputWidth = 40 };
     std::vector<double> captureTruthSnapshot();
 
     // Measurement neutral, as configure() applies it: in (a full kConfigSize config) copied to
@@ -513,11 +509,6 @@ private:
     void rebuildLowCrossover();
     void rebuildMidCrossover();
     void rebuildHighCrossover();
-    // BW2/BW4 pair auto-correction per side, [left, right] (see NativeBmwDsp::pairCrossovers):
-    // recomputed from p_ / outputConfigs_; true when it changed, so the crossovers and polarity
-    // it feeds need rebuilding.
-    std::array<NativeBmwDsp::CrossoverPairing, 2> pairing_{};
-    bool updatePairing();
     void updateDelays();
     void rebuildBusLimiter();
     // snap: jump outputGain straight to its target (start-up / full rebuild) instead of ramping.

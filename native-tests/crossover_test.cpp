@@ -233,16 +233,11 @@ TEST_CASE("High: kHighXoPass alone fully silences it, independent of the per-out
     CHECK(peakAbs(buf) < 1e-4f);
 }
 
-// BW2 and BW4 can't sum flat as a plain pair (BW2 nulls at the corner, BW4 peaks +3 dB). When
-// both sides of a boundary use the same one, the engine spreads the corners and, for BW2, inverts
-// the band above (pairCrossovers): the summed response stays within about +/-0.5 dB. Each
-// boundary opts in with its auto-pair switch (v[kLowMidAutoPair], v[kMidHighAutoPair]), both
-// on here unless [autoPair] is false.
+// Crossovers run exactly as set: a BW2 or BW4 pair keeps its set corners and the user's own
+// polarity (the BW2/BW4 auto-pair is removed; slots 313/314 that held its switches are not read).
 namespace {
-std::array<float, kConfigSize> pairedConfig(float lowMidType, bool threeWay, float midHighType,
-                                            bool autoPair = true) {
+std::array<float, kConfigSize> pairedConfig(float lowMidType, bool threeWay, float midHighType) {
     auto c = defaultConfig();
-    c[sch::kLowMidAutoPair] = c[sch::kMidHighAutoPair] = autoPair ? 1.f : 0.f;
     c[sch::kTiltEnabled] = 0.f;
     c[sch::kHeadroom] = 0.f;
     c[sch::kMidGainL] = c[sch::kMidGainR] = 0.f;
@@ -267,147 +262,41 @@ std::array<float, kConfigSize> pairedConfig(float lowMidType, bool threeWay, flo
     return c;
 }
 
-double worstSumDeviationDb(const std::array<float, kConfigSize>& cfg, std::initializer_list<double> freqs) {
-    double worst = 0;
-    for (double f : freqs) {
-        NativeBmwDspProcessor proc;
-        worst = std::max(worst, std::fabs(static_cast<double>(outLevelDbAt(proc, cfg, f, 0.02))));
-    }
-    return worst;
+double sumDbAt(const std::array<float, kConfigSize>& cfg, double f) {
+    NativeBmwDspProcessor proc;
+    return static_cast<double>(outLevelDbAt(proc, cfg, f, 0.02));
 }
 }  // namespace
 
-TEST_CASE("A BW2 or BW4 Low/Mid pair is auto-corrected to sum flat") {
-    const auto freqs = {40.0, 80.0, 110.0, 130.0, 150.0, 175.0, 200.0, 280.0, 600.0};
-    for (const float type : {kBw2, kBw4}) {
-        const double worst = worstSumDeviationDb(pairedConfig(type, false, kLr4), freqs);
-        INFO("Type ", type, " Low/Mid pair at 150 Hz: worst deviation ", worst, " dB");
-        CHECK(worst < 0.6);
-    }
-    // LR4 was already flat and is untouched.
-    CHECK(worstSumDeviationDb(pairedConfig(kLr4, false, kLr4), freqs) < 0.1);
-}
-
-TEST_CASE("A 3-way BW2 build is auto-corrected at both boundaries") {
-    const auto freqs = {60.0, 150.0, 400.0, 1200.0, 2000.0, 2500.0, 3200.0, 6000.0};
-    const double worst = worstSumDeviationDb(pairedConfig(kBw2, true, kBw2), freqs);
-    INFO("BW2 at 150 Hz and 2.5 kHz: worst deviation ", worst, " dB");
-    CHECK(worst < 0.6);
-    // BW2 low, LR4 high: Mid is inverted for its BW2 pair, so High is inverted too to stay in
-    // phase with Mid across the LR4 boundary.
-    const double mixed = worstSumDeviationDb(pairedConfig(kBw2, true, kLr4), freqs);
-    INFO("BW2 at 150 Hz, LR4 at 2.5 kHz: worst deviation ", mixed, " dB");
-    CHECK(mixed < 0.6);
-}
-
-TEST_CASE("Auto-correction reports the polarity it adds in the truth snapshot") {
+TEST_CASE("A BW2 or BW4 pair runs exactly as set") {
+    // A plain BW2 pair at one corner nulls there; BW4 peaks about +3 dB; LR4 is flat.
+    CHECK(sumDbAt(pairedConfig(kBw2, false, kLr4), 150.0) < -6.0);
+    CHECK(std::fabs(sumDbAt(pairedConfig(kBw4, false, kLr4), 150.0) - 3.0) <= 0.1);
+    CHECK(std::fabs(sumDbAt(pairedConfig(kLr4, false, kLr4), 150.0)) < 0.1);
+    // The same at the Mid/High boundary.
+    CHECK(sumDbAt(pairedConfig(kLr4, true, kBw2), 2500.0) < -6.0);
+    // No polarity is added behind the user's back.
     NativeBmwDspProcessor proc;
     proc.setSampleRate(kSampleRate);
-    auto cfg = pairedConfig(kBw2, false, kLr4);
-    REQUIRE(proc.configure(cfg.data(), cfg.size()));
-    const auto snap = proc.captureTruthSnapshot();
-    auto inverted = [&](int out) { return snap[3 + out * NativeBmwDspProcessor::kTruthOutputWidth + 5]; };
-    CHECK(inverted(0) == 0.0);  // Low L
-    CHECK(inverted(2) == 1.0);  // Mid L, flipped for the BW2 pair
-    cfg = pairedConfig(kLr4, false, kLr4);
-    REQUIRE(proc.configure(cfg.data(), cfg.size()));
-    CHECK(proc.captureTruthSnapshot()[3 + 2 * NativeBmwDspProcessor::kTruthOutputWidth + 5] == 0.0);
-}
-
-TEST_CASE("Auto-pair ships off and, off, a BW2 or BW4 pair runs exactly as set") {
-    CHECK(defaultConfig()[sch::kLowMidAutoPair] == 0.f);
-    CHECK(defaultConfig()[sch::kMidHighAutoPair] == 0.f);
-    NativeBmwDspProcessor proc;
-    proc.setSampleRate(kSampleRate);
-    auto cfg = pairedConfig(kBw2, true, kBw2, /*autoPair=*/false);
+    auto cfg = pairedConfig(kBw2, true, kBw2);
     REQUIRE(proc.configure(cfg.data(), cfg.size()));
     const auto snap = proc.captureTruthSnapshot();
     auto inv = [&](int out) { return snap[3 + out * NativeBmwDspProcessor::kTruthOutputWidth + 5]; };
-    CHECK(inv(2) == 0.0);  // Mid L: no polarity added
-    // Uncorrected, a plain BW2 pair at the same corner nulls: the sum is well off flat there.
-    CHECK(worstSumDeviationDb(pairedConfig(kBw2, false, kLr4, false), {150.0}) > 6.0);
-    // BW4 peaks about +3 dB at the corner.
-    CHECK(worstSumDeviationDb(pairedConfig(kBw4, false, kLr4, false), {150.0}) > 2.0);
+    for (int out = 0; out < 6; ++out) CHECK(inv(out) == 0.0);
 }
 
-// The user's case: app crossovers ahead of a factory split, where the BW4 +3 dB summing bump is
-// wanted. Auto-pair off, BW4 LP 150 + BW4 HP 150 sums to +3.0 dB at the corner.
-TEST_CASE("Auto-pair off: BW4 LP 150 + BW4 HP 150 sums to +3.0 dB at 150 Hz") {
-    NativeBmwDspProcessor proc;
-    const float level = outLevelDbAt(proc, pairedConfig(kBw4, false, kLr4, /*autoPair=*/false), 150.0, 0.02);
-    INFO("BW4 pair at 150 Hz, auto-pair off: ", level, " dB");
-    CHECK(std::fabs(level - 3.0) <= 0.1);
-}
-
-TEST_CASE("Truth snapshot reports the auto-pair switches and the corners really applied") {
-    NativeBmwDspProcessor proc;
-    proc.setSampleRate(kSampleRate);
-    auto block = [&proc]() {
-        const auto snap = proc.captureTruthSnapshot();
-        REQUIRE(snap.size() >= NativeBmwDspProcessor::kTruthPairingWidth);
-        return std::vector<double>(snap.end() - NativeBmwDspProcessor::kTruthPairingWidth, snap.end());
-    };
-    // Off: the switches read 0 and every corner is exactly as set.
-    auto cfg = pairedConfig(kBw4, false, kLr4, /*autoPair=*/false);
-    REQUIRE(proc.configure(cfg.data(), cfg.size()));
-    auto b = block();
-    CHECK(b[0] == 0.0);
-    CHECK(b[1] == 0.0);
-    for (int side = 0; side < 2; ++side) {
-        const std::size_t s = 2 + side * 8;
-        CHECK(b[s + 0] == doctest::Approx(150.0));  // Low lowpass
-        CHECK(b[s + 1] == doctest::Approx(150.0));  // Mid highpass
-        CHECK(b[s + 4] == 0.0);                     // lowMidCorrected
-        CHECK(b[s + 6] == 0.0);                     // midInverted
-    }
-    // On: the BW4 corners spread to about 133 and 169 Hz, reported as corrected, no inversion.
-    cfg = pairedConfig(kBw4, false, kLr4);
-    REQUIRE(proc.configure(cfg.data(), cfg.size()));
-    b = block();
-    CHECK(b[0] == 1.0);
-    CHECK(b[2] == doctest::Approx(150.0 / 1.128).epsilon(0.002));
-    CHECK(b[3] == doctest::Approx(150.0 * 1.128).epsilon(0.002));
-    CHECK(b[6] == 1.0);
-    CHECK(b[8] == 0.0);
-}
-
-TEST_CASE("Each boundary's auto-pair switch only corrects its own boundary") {
-    const auto lowMidFreqs = {80.0, 150.0, 280.0};
-    // Low/Mid on, Mid/High off: the Low/Mid pair sums flat, the Mid/High BW2 pair still nulls.
-    auto cfg = pairedConfig(kBw2, true, kBw2);
-    cfg[sch::kMidHighAutoPair] = 0.f;
-    CHECK(worstSumDeviationDb(cfg, lowMidFreqs) < 0.6);
-    CHECK(worstSumDeviationDb(cfg, {2500.0}) > 6.0);
-    // The other way round.
-    cfg[sch::kMidHighAutoPair] = 1.f;
-    cfg[sch::kLowMidAutoPair] = 0.f;
-    CHECK(worstSumDeviationDb(cfg, {150.0}) > 6.0);
-    CHECK(worstSumDeviationDb(cfg, {1200.0, 2500.0, 6000.0}) < 0.6);
-}
-
-// Review regressions: the spread is applied in the prewarped domain, so it holds near Nyquist (a
-// plain Hz multiply dipped ~1.5 dB at an 8 kHz Mid/High corner), and only coincident corners pair
-// (a deliberate Low 80 / Mid 200 Hz gap is left exactly as set).
-TEST_CASE("Auto-correction holds at an 8 kHz corner and skips a deliberate gap") {
+TEST_CASE("Leftover auto-pair switches in slots 313/314 change nothing") {
+    CHECK(defaultConfig()[313] == 0.f);
+    CHECK(defaultConfig()[314] == 0.f);
     for (const float type : {kBw2, kBw4}) {
-        auto cfg = pairedConfig(kLr4, true, type);
-        for (int slot = 0; slot < 2; ++slot) {
-            cfg[sch::kMidUpperXo + slot * sch::kMidUpperXoWidth + sch::kMidUpperXoFreq] = 8000.f;
-            cfg[sch::kHighOutputConfigBase + slot * sch::kOutputConfigWidth + sch::kOutCrossoverFreq] = 8000.f;
+        const auto clean = pairedConfig(type, true, type);
+        auto leftover = clean;
+        leftover[313] = leftover[314] = 1.f;
+        for (double f : {150.0, 2500.0}) {
+            INFO("Type ", type, " at ", f, " Hz");
+            CHECK(sumDbAt(leftover, f) == sumDbAt(clean, f));
         }
-        const double worst = worstSumDeviationDb(cfg, {3000.0, 5000.0, 6500.0, 8000.0, 9500.0, 12000.0, 16000.0});
-        INFO("Type ", type, " Mid/High pair at 8 kHz: worst deviation ", worst, " dB");
-        CHECK(worst < 0.6);
     }
-    NativeBmwDspProcessor proc;
-    proc.setSampleRate(kSampleRate);
-    auto gap = pairedConfig(kBw2, false, kLr4);
-    for (int out = 0; out < 4; ++out) {
-        gap[sch::kOutputConfigBase + out * sch::kOutputConfigWidth + sch::kOutCrossoverFreq] = out < 2 ? 80.f : 200.f;
-    }
-    REQUIRE(proc.configure(gap.data(), gap.size()));
-    const auto snap = proc.captureTruthSnapshot();
-    CHECK(snap[3 + 2 * NativeBmwDspProcessor::kTruthOutputWidth + 5] == 0.0);  // Mid L not inverted
 }
 
 // The Low subsonic high-pass: LR4 (the default, 24 dB/oct) or BW2 (12 dB/oct), v[kSubsonicSlope].
