@@ -22,8 +22,10 @@ object NativeBmwDspValues {
 
     const val INDEX_ENABLED = NativeBmwDspSchema.INDEX_ENABLED
     // Slots 1, 2 and 291 held the retired per-band passthroughs (lpfPass / hpfPass / highPass),
-    // replaced by [INDEX_CROSSOVER_BYPASS]: held at 0 on every load (see retirePassthroughs()).
-    private val RETIRED_PASSTHROUGH_SLOTS = intArrayOf(1, 2, 291)
+    // replaced by [INDEX_CROSSOVER_BYPASS]; 313 and 314 held the removed BW2/BW4 crossover
+    // auto-pair switches (crossovers now always run exactly as set). All are held at 0 on every
+    // load (see retirePassthroughs()).
+    private val RETIRED_PASSTHROUGH_SLOTS = intArrayOf(1, 2, 291, 313, 314)
     const val INDEX_CHANNEL_MUTE = NativeBmwDspSchema.INDEX_CHANNEL_MUTE
     const val INDEX_MEASUREMENT_MUTE = NativeBmwDspSchema.INDEX_MEASUREMENT_MUTE
     const val INDEX_HEADROOM = NativeBmwDspSchema.INDEX_HEADROOM
@@ -311,9 +313,6 @@ object NativeBmwDspValues {
     const val INDEX_DEEP_BASS_ENABLED = NativeBmwDspSchema.INDEX_DEEP_BASS_ENABLED
     const val INDEX_DEEP_BASS_STRENGTH = NativeBmwDspSchema.INDEX_DEEP_BASS_STRENGTH // percent, 0..100
     const val INDEX_DEEP_BASS_MAX_DB = NativeBmwDspSchema.INDEX_DEEP_BASS_MAX_DB // boost cap, dB
-    // Crossover auto-pair per boundary (see CrossoverPairing): off by default, a pair runs as set.
-    const val INDEX_LOW_MID_AUTO_PAIR = NativeBmwDspSchema.INDEX_LOW_MID_AUTO_PAIR
-    const val INDEX_MID_HIGH_AUTO_PAIR = NativeBmwDspSchema.INDEX_MID_HIGH_AUTO_PAIR
     // Automatic headroom on (1) or manual (0). Kotlin-only -- native never reads this index; the
     // manual value stays in INDEX_HEADROOM either way, so switching back to manual restores it.
     const val INDEX_HEADROOM_AUTO = NativeBmwDspSchema.INDEX_HEADROOM_AUTO
@@ -519,7 +518,7 @@ object NativeBmwDspValues {
         migrateMidUpperXoTypeIfNeeded(values)
     }
 
-    /** The retired per-band passthrough slots are held at 0 (nothing reads them). True if it changed anything. */
+    /** The retired slots (passthroughs, auto-pair) are held at 0 (nothing reads them). True if it changed anything. */
     private fun retirePassthroughs(values: FloatArray): Boolean {
         var changed = false
         for (slot in RETIRED_PASSTHROUGH_SLOTS) {

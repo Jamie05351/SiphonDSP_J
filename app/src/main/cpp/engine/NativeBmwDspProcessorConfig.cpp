@@ -202,8 +202,6 @@ bool NativeBmwDspProcessor::parseConfig(const float* v, ParsedConfig& parsed) co
     next.deepBassStrength = clampIn(v[nbschema::kDeepBassStrength], 0, 100) * .01f;
     next.deepBassMaxDb = clampIn(v[nbschema::kDeepBassMaxDb], NativeBmwDsp::DeepBass::kMinMaxDb,
                                  NativeBmwDsp::DeepBass::kMaxMaxDb);
-    next.lowMidAutoPair = flagIn(v[nbschema::kLowMidAutoPair]);
-    next.midHighAutoPair = flagIn(v[nbschema::kMidHighAutoPair]);
     next.monoBassEnabled = flagIn(v[nbschema::kMonoBassEnabled]);
     next.monoBassFreq = clampIn(v[nbschema::kMonoBassFreq], NativeBmwDsp::MonoBass::kMinHz,
                                 NativeBmwDsp::MonoBass::kMaxHz);
@@ -690,9 +688,6 @@ void NativeBmwDspProcessor::installConfig(ParsedConfig& parsed) {
     busLimHighEnabledMeterFlag_.store(p_.busLimHighEnabled, std::memory_order_relaxed);
     masterLimiterEnabledMeterFlag_.store(p_.limiterEnabled, std::memory_order_relaxed);
     virtualEnabledMeterFlag_.store(p_.virtualStage.enabled, std::memory_order_relaxed);
-    if (updatePairing()) {
-        dirty |= DirtyLowXo | DirtyMidXo | DirtyHighXo | DirtyPolarity;
-    }
     applyDirty(dirty);
     // The first configure() lands the real settings: snap the polarity/mute ramps to them rather
     // than fading from the constructor's defaults at start-up.
@@ -893,49 +888,22 @@ void NativeBmwDspProcessor::rebuildSubsonic() {
         NativeBmwDsp::buildSubsonic(output(id), outputConfig(id), sampleRate_);
     }
 }
-// The builders get the configured corners moved by pairing_ (identity unless a BW2/BW4 pair is
-// being auto-corrected); outputConfigs_ keeps the frequencies as set.
-bool NativeBmwDspProcessor::updatePairing() {
-    // The crossover bypass doesn't take part: the pairing belongs to the split itself, so turning
-    // the bypass off brings back exactly the crossover that was running before. Each boundary is
-    // corrected only while its auto-pair switch is on (v[313..314]); off, the pair runs as set.
-    const bool lowMidRuns = p_.lowMidAutoPair;
-    const bool midHighRuns = p_.midHighAutoPair && !p_.highXoPass;
-    bool changedAny = false;
-    for (std::size_t side = 0; side < pairing_.size(); ++side) {
-        const auto& low = outputConfigs_[static_cast<std::size_t>(OutputId::LowLeft) + side];
-        const auto& mid = outputConfigs_[static_cast<std::size_t>(OutputId::MidLeft) + side];
-        const auto& high = outputConfigs_[static_cast<std::size_t>(OutputId::HighLeft) + side];
-        const auto next = NativeBmwDsp::pairCrossovers(low, mid, high, lowMidRuns, midHighRuns);
-        changedAny = changedAny || next != pairing_[side];
-        pairing_[side] = next;
-    }
-    return changedAny;
-}
 void NativeBmwDspProcessor::rebuildLowCrossover() {
     for (std::size_t side = 0; side < 2; ++side) {
         const auto id = static_cast<OutputId>(static_cast<std::size_t>(OutputId::LowLeft) + side);
-        auto cfg = outputConfig(id);
-        cfg.crossoverFreq = NativeBmwDsp::spreadCorner(cfg.crossoverFreq, pairing_[side].lowLowpass, sampleRate_);
-        NativeBmwDsp::buildLowCrossover(output(id), cfg, sampleRate_);
+        NativeBmwDsp::buildLowCrossover(output(id), outputConfig(id), sampleRate_);
     }
 }
 void NativeBmwDspProcessor::rebuildMidCrossover() {
     for (std::size_t side = 0; side < 2; ++side) {
         const auto id = static_cast<OutputId>(static_cast<std::size_t>(OutputId::MidLeft) + side);
-        auto cfg = outputConfig(id);
-        cfg.crossoverFreq = NativeBmwDsp::spreadCorner(cfg.crossoverFreq, pairing_[side].midHighpass, sampleRate_);
-        cfg.upperCrossoverFreq =
-            NativeBmwDsp::spreadCorner(cfg.upperCrossoverFreq, pairing_[side].midLowpass, sampleRate_);
-        NativeBmwDsp::buildMidCrossover(output(id), cfg, sampleRate_);
+        NativeBmwDsp::buildMidCrossover(output(id), outputConfig(id), sampleRate_);
     }
 }
 void NativeBmwDspProcessor::rebuildHighCrossover() {
     for (std::size_t side = 0; side < 2; ++side) {
         const auto id = static_cast<OutputId>(static_cast<std::size_t>(OutputId::HighLeft) + side);
-        auto cfg = outputConfig(id);
-        cfg.crossoverFreq = NativeBmwDsp::spreadCorner(cfg.crossoverFreq, pairing_[side].highHighpass, sampleRate_);
-        NativeBmwDsp::buildHighCrossover(output(id), cfg, sampleRate_);
+        NativeBmwDsp::buildHighCrossover(output(id), outputConfig(id), sampleRate_);
     }
 }
 void NativeBmwDspProcessor::retuneDeepBass() {
@@ -984,13 +952,7 @@ void NativeBmwDspProcessor::rebuildPolarityAndMute(bool snap) {
             p_.measurementMute != 0 &&
             !measurementMuteIsolates(p_.measurementMute, NativeBmwRouting::band(i));
         out.muted = cfg.muted || measurementMuted;
-        // The user's polarity, flipped once more where a BW2 pair is being auto-corrected.
-        const auto band = NativeBmwRouting::band(i);
-        const auto& pairing = pairing_[i % 2];
-        const bool autoInverted = band == NativeBmwRouting::Band::Mid    ? pairing.midInverted
-                                  : band == NativeBmwRouting::Band::High ? pairing.highInverted
-                                                                         : false;
-        out.polarityInverted = cfg.polarityInverted != autoInverted;
+        out.polarityInverted = cfg.polarityInverted;
         out.outputGainTarget = out.muted ? 0.f : out.polarityInverted ? -1.f : 1.f;
         if (snap) {
             out.outputGain = out.outputGainTarget;
@@ -1086,7 +1048,6 @@ void NativeBmwDspProcessor::applyDirty(uint32_t d) {
 
 void NativeBmwDspProcessor::rebuildAll() {
     dcR_ = NativeBmwDsp::DcBlocker::coefficient(sampleRate_);
-    updatePairing();
     rebuildGains();
     headroom_ = headroomTarget_;  // a full rebuild applies it at once, no ramp
     rebuildSubsonic();

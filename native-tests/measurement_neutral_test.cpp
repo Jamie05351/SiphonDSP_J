@@ -241,11 +241,10 @@ TEST_CASE("engine status reports the installed chain") {
     CHECK((active & bit(sch::kStageConvolver)) == 0u);
     CHECK(s[4] == 3.f);
     CHECK(s[12] == kSampleRate);
-    // The truth snapshot carries the same block, just ahead of its auto-pair block (the last).
+    // The truth snapshot carries the same block, last.
     const auto snap = p.captureTruthSnapshot();
-    REQUIRE(snap.size() > NativeBmwDspProcessor::kEngineStatusSize + NativeBmwDspProcessor::kTruthPairingWidth);
-    const std::size_t at =
-        snap.size() - NativeBmwDspProcessor::kTruthPairingWidth - NativeBmwDspProcessor::kEngineStatusSize;
+    REQUIRE(snap.size() > NativeBmwDspProcessor::kEngineStatusSize);
+    const std::size_t at = snap.size() - NativeBmwDspProcessor::kEngineStatusSize;
     CHECK(snap[at] == 1.0);
     CHECK(static_cast<std::uint32_t>(snap[at + 1]) == active);
 }
