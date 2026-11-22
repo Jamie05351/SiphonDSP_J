@@ -139,38 +139,12 @@ data class NativePeqSnapshot(
     val high: NativePeqBank,
 )
 
-/** One side's crossover auto-pair, as native really built it (NativeBmwDspProcessor kTruthPairingWidth). */
-data class NativePairingSide(
-    val lowLowpassHz: Double,
-    val midHighpassHz: Double,
-    val midLowpassHz: Double,
-    val highHighpassHz: Double,
-    val lowMidCorrected: Boolean,
-    val midHighCorrected: Boolean,
-    val midInverted: Boolean,
-    val highInverted: Boolean,
-)
-
-/** The auto-pair switches and each side's applied corners. */
-data class NativePairingSnapshot(
-    val lowMidAutoPair: Boolean,
-    val midHighAutoPair: Boolean,
-    val left: NativePairingSide,
-    val right: NativePairingSide,
-) {
-    companion object {
-        const val WIDTH = 2 + 2 * 8
-    }
-}
-
 data class NativeDspTruthSnapshot(
     val sampleRate: Double,
     val crossovers: Map<NativeDspOutput, NativeCrossoverSnapshot>,
     val peq: NativePeqSnapshot,
     /** The engine status at the same instant (the snapshot's last block); null from an engine without it. */
     val status: EngineStatus? = null,
-    /** The crossover auto-pair block, after the status; null from an engine without it. */
-    val pairing: NativePairingSnapshot? = null,
 )
 
 /**
@@ -340,31 +314,11 @@ fun parseNativeTruthSnapshot(raw: DoubleArray?): NativeDspTruthSnapshot? {
     } else {
         null
     }
-    // Then the crossover auto-pair block, last.
-    val pairing = if (status != null && raw.size - cursor >= NativePairingSnapshot.WIDTH) {
-        val lowMid = next() != 0.0
-        val midHigh = next() != 0.0
-        fun side() = NativePairingSide(
-            lowLowpassHz = next(),
-            midHighpassHz = next(),
-            midLowpassHz = next(),
-            highHighpassHz = next(),
-            lowMidCorrected = next() != 0.0,
-            midHighCorrected = next() != 0.0,
-            midInverted = next() != 0.0,
-            highInverted = next() != 0.0,
-        )
-        val left = side()
-        NativePairingSnapshot(lowMid, midHigh, left, side())
-    } else {
-        null
-    }
 
     return NativeDspTruthSnapshot(
         sampleRate = sampleRate,
         crossovers = crossovers,
         peq = NativePeqSnapshot(peqEnabled, peqPreampDb, full, low, mid, high),
         status = status,
-        pairing = pairing,
     )
 }

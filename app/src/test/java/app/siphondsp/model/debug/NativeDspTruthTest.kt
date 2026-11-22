@@ -213,21 +213,6 @@ class ParseNativeTruthSnapshotTest {
         assertEquals(setOf(app.siphondsp.model.DspStage.CROSSOVER, app.siphondsp.model.DspStage.BAND_EQ), snapshot.status!!.activeStages)
     }
 
-    @Test fun parsesTheAutoPairBlockAfterTheStatus() {
-        val status = doubleArrayOf(1.0, 6.0, 0.0, 0.0, 3.0, 2.0, -1.0, 0.0, 0.0, 0.0, 0.0, -6.0, 48000.0, 2.0)
-        assertNull(parseNativeTruthSnapshot(buildArray() + status)!!.pairing)  // an engine without it
-        val left = doubleArrayOf(133.0, 169.0, 3000.0, 3000.0, 1.0, 0.0, 0.0, 0.0)
-        val right = doubleArrayOf(150.0, 150.0, 3000.0, 3000.0, 0.0, 0.0, 0.0, 0.0)
-        val pairing = parseNativeTruthSnapshot(buildArray() + status + doubleArrayOf(1.0, 0.0) + left + right)!!.pairing!!
-        assertTrue(pairing.lowMidAutoPair)
-        assertFalse(pairing.midHighAutoPair)
-        assertEquals(133.0, pairing.left.lowLowpassHz, 0.0)
-        assertEquals(169.0, pairing.left.midHighpassHz, 0.0)
-        assertTrue(pairing.left.lowMidCorrected)
-        assertFalse(pairing.right.lowMidCorrected)
-        assertEquals(150.0, pairing.right.midHighpassHz, 0.0)
-    }
-
     @Test fun nullOnTooShortArray() {
         assertNull(parseNativeTruthSnapshot(doubleArrayOf(1.0, 2.0)))
     }

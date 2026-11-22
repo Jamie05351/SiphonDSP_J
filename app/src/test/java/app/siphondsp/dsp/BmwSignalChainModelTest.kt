@@ -440,8 +440,7 @@ class BmwSignalChainModelTest {
             setOutput(values, output, NativeBmwDspValues.FIELD_SUBSONIC_ENABLED, 0f)
         }
         val result = compute(values)
-        // Low and Mid both BW4 is a pair auto-pair would correct, but it ships off: both corners
-        // sit at 200 Hz exactly as set.
+        // Low and Mid both BW4: both corners sit at 200 Hz exactly as set (no auto-pairing).
         val lowCorner = 200.0
         val highCorner = 200.0
         for (channel in 0..1) {

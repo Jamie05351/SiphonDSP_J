@@ -8,7 +8,7 @@ Slots are append-only: a retired slot is never reused for a different meaning wi
 
 **Reader**: *native* = `configure()` reads and validates it (a non-finite value rejects the whole update; native-tests checks this for every slot); *Kotlin only* = native never reads it (migration markers, UI state, legacy values Kotlin migrates from); *reserved* = nothing reads it.
 
-210 native, 80 Kotlin only, 25 reserved.
+208 native, 80 Kotlin only, 27 reserved.
 
 
 ## Enabled, retired band passthroughs (1..2), channelMute, measurementMute
@@ -549,12 +549,12 @@ Slots are append-only: a retired slot is never reused for a different meaning wi
 |---:|---:|---|---|---|---|
 | 312 | 12 | native | `INDEX_DEEP_BASS_MAX_DB` | `kDeepBassMaxDb` | deepBassMaxDb (boost cap, dB, 3..15) |
 
-## Crossover auto-pair, Low/Mid and Mid/High boundary (added in the 313 -> 315 growth)
+## Retired crossover auto-pair (313..314) -- removed: crossovers always run exactly as set; held at 0 on every load
 
 | slot | default | reader | Kotlin | C++ | meaning |
 |---:|---:|---|---|---|---|
-| 313 | 0 | native | `INDEX_LOW_MID_AUTO_PAIR` | `kLowMidAutoPair` | lowMidAutoPair (1 = a same-corner BW2/BW4 Low/Mid pair has its corners spread and Mid inverted; off by default) |
-| 314 | 0 | native | `INDEX_MID_HIGH_AUTO_PAIR` | `kMidHighAutoPair` | midHighAutoPair (1 = the same for the Mid/High pair, inverting High; off by default) |
+| 313 | 0 | reserved |  |  | lowMidAutoPair (retired: BW2/BW4 Low/Mid crossover auto-pair, removed) |
+| 314 | 0 | reserved |  |  | midHighAutoPair (retired: BW2/BW4 Mid/High crossover auto-pair, removed) |
 
 ## Structure constants (C++)
 
