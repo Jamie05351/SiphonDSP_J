@@ -263,6 +263,8 @@ fun LauncherHome(
     val overlayEntry = remember { FocusRequester() }
     // Whether knob focus is inside the open drawer or car menu; see the key handler below.
     var overlayHasFocus by remember { mutableStateOf(false) }
+    // Whether knob focus is in the DSP pill or panel: with the panel open, it stays there.
+    var dockHasFocus by remember { mutableStateOf(false) }
     // The host bumps [knobFocusRequests] when the iDrive knob is used while nothing here has focus:
     // focus then lands on the open drawer or car menu, else on the DSP bar (on screen in every
     // other state), and moves on from there. Each request is handled once: entering composition
@@ -317,7 +319,8 @@ fun LauncherHome(
                     // arrives, and a failed request must never take the home screen down.
                     when {
                         inOverlay && (!moved || !view.hasFocus() || !overlayHasFocus) -> runCatching { overlayEntry.requestFocus() }
-                        !inOverlay && (!moved || !view.hasFocus()) -> runCatching { knobEntry.requestFocus() }
+                        // The open panel covers the tiles under it, so focus never goes onto them.
+                        !inOverlay && (!moved || !view.hasFocus() || (dockExpanded && !dockHasFocus)) -> runCatching { knobEntry.requestFocus() }
                     }
                     true
                 },
@@ -378,7 +381,7 @@ fun LauncherHome(
                 }
                 // Retain animation state and the requester node while a menu is open. An
                 // unplaced dock is neither drawn nor a target for touch or focus navigation.
-                Design(designWidth, Modifier.align(Alignment.Center).dockVisibility(covered)) {
+                Design(designWidth, Modifier.align(Alignment.Center).dockVisibility(covered).onFocusChanged { dockHasFocus = it.hasFocus }) {
                     Dock(
                         designWidth, engine, powered, g, readout, openingStage, animateTiles, actions, knobEntry,
                         dockExpanded, { dockOpen }, onDockExpandedChange,
@@ -751,6 +754,8 @@ private fun Dock(
     Box(
         Modifier
             .at(x, top, w, h)
+            // The face takes every tap between the controls, so none goes through to a tile under it.
+            .blockTouches(true)
             .drawBehind {
                 // The glow round the edge once the sweep has gone all the way round.
                 val lit = ChainSweep.arrived(sweep.value) * g
@@ -784,8 +789,8 @@ private fun Dock(
     // The pill's contents fade out over the first half of the slide, the panel's in over the second.
     val pillAlpha = (1f - o * 2f).coerceIn(0f, 1f)
     if (!expanded || pillAlpha > 0f) {
-        // Fading out under the opening panel, it takes no taps.
-        Box(Modifier.at(pillX, PillTop, PillWidth, PillHeight).graphicsLayer { alpha = pillAlpha }.blockTouches(expanded)) {
+        // Fading out under the opening panel, or not yet back as the panel closes, it takes no taps.
+        Box(Modifier.at(pillX, PillTop, PillWidth, PillHeight).graphicsLayer { alpha = pillAlpha }.blockTouches(expanded || pillAlpha < 1f)) {
             CompositionLocalProvider(LocalHomeScale provides HomeScale(s.k * DockScale)) {
                 Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.Center) {
                     PowerNode(powered, g, actions::togglePower, caption = false)
