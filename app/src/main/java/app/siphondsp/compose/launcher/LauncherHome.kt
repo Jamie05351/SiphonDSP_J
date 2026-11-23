@@ -1,5 +1,11 @@
 package app.siphondsp.compose.launcher
 
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.runtime.withFrameNanos
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.onClick
+import app.siphondsp.compose.home.sweptBorder
 import android.os.Build
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.text.TextStyle
@@ -208,9 +214,11 @@ interface LauncherActions {
  * The front page as the head unit's home screen, laid out in dp at 1280 x 480 like [HomeScreen]
  * (scaled down to fit a smaller screen): the car wallpaper, a slim master volume strip at the far
  * left, then the double-width music tile pinned beside it, then the other home tiles in a fixed
- * two-by-two grid as wide as the music tile, the app drawer and car menu at the top right, and the
- * DSP dock along the bottom: power, the five DSP tiles, the headroom at OUT, then More (which holds
- * the DSP settings). A dock tile opens its page.
+ * two-by-two grid as wide as the music tile, all running to the bottom of the screen, and the app
+ * drawer and car menu at the top right. The DSP sits in a pill in the bottom-right corner (power and
+ * the headroom); tapping the headroom ([dockExpanded]) slides out the DSP panel over the launcher:
+ * power, the five DSP tiles, the headroom at OUT, then More (which holds the DSP settings). A panel
+ * tile opens its page.
  *
  * [apps] is null until the installed apps first load. [carFunctions] are the car functions this head
  * unit has. [overlay] is the drawer or car menu when one is open. [look] is the user's wallpaper,
@@ -244,6 +252,8 @@ fun LauncherHome(
     knobFocusRequests: Int = 0,
     onKnobFocusResult: (Boolean) -> Unit = {},
     onHasFocusChanged: (Boolean) -> Unit = {},
+    dockExpanded: Boolean = false,
+    onDockExpandedChange: (Boolean) -> Unit = {},
 ) {
     val focusManager = LocalFocusManager.current
     val view = LocalView.current
@@ -326,6 +336,10 @@ fun LauncherHome(
             }
             val dim by animateFloatAsState(dimTo, tween(PanelMs), label = "home dim")
             val homeAlpha by animateFloatAsState(if (covered) 0f else 1f, tween(PanelMs / 2), label = "home fade")
+            // 0 for the pill, 1 for the panel slid all the way out.
+            val dockOpen by animateFloatAsState(
+                if (dockExpanded) 1f else 0f, tween(DockSlideMs, easing = FastOutSlowInEasing), label = "dock open",
+            )
 
             CompositionLocalProvider(LocalHomeScale provides scale) {
                 // The home screen itself, blurred while something is over it.
@@ -356,10 +370,17 @@ fun LauncherHome(
                 if (dim > 0f) {
                     Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = dim)))
                 }
+                // The launcher dims a little under the open DSP panel. Only drawn: taps still reach it.
+                if (dockOpen > 0f && !covered) {
+                    Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = DockOpenDim * dockOpen)))
+                }
                 // Retain animation state and the requester node while a menu is open. An
                 // unplaced dock is neither drawn nor a target for touch or focus navigation.
                 Design(designWidth, Modifier.align(Alignment.Center).dockVisibility(covered)) {
-                    Dock(designWidth, engine, powered, g, readout, openingStage, animateTiles, actions, knobEntry)
+                    Dock(
+                        designWidth, engine, powered, g, readout, openingStage, animateTiles, actions, knobEntry,
+                        dockExpanded, { dockOpen }, onDockExpandedChange,
+                    )
                 }
             }
             // Menus use the space below the head unit's top banner, including the dock area.
@@ -660,12 +681,16 @@ private fun MediaButton(label: String, onClick: () -> Unit, glyph: DrawScope.() 
 // --- The dock ---
 
 /**
- * The DSP along the bottom of the home screen, inside the 15 dp screen edges, with a
- * [DockInset] bottom inset:
- * the front page's own chain (power, the five tiles and the headroom at OUT) at [DockScale] of its
- * size, then More (the DSP settings are in it). A tile opens its stage's page; power works straight
- * from the dock.
- * The panel's edge is lit purple while the DSP is on.
+ * The DSP in the bottom-right corner, inside the 15 dp screen edges with a [DockInset] bottom inset.
+ *
+ * Collapsed ([expanded] false) it is a pill: power, then the headroom. Tapping the headroom slides
+ * the panel out of the pill ([open], 0..1), twice the old dock's height and over the launcher: the
+ * front page's own chain (power, the five tiles and the headroom at OUT) at [PanelScale], then More
+ * (the DSP settings are in it). A tile opens its stage's page; power works straight from either.
+ * The headroom again (or Back, or Home, or leaving home) puts it away.
+ *
+ * Powering on lights the pill's or panel's edge from the left round to the right, as the chain's
+ * tiles light, and it glows once the sweep reaches OUT.
  */
 @Composable
 private fun Dock(
@@ -678,9 +703,12 @@ private fun Dock(
     animateTiles: Boolean,
     actions: LauncherActions,
     knobEntry: FocusRequester,
+    expanded: Boolean,
+    open: () -> Float,
+    onExpandedChange: (Boolean) -> Unit,
 ) {
     val s = LocalHomeScale.current
-    val chainWidth = width - DockButtonsWidth
+    val view = LocalView.current
     val signal = BmwTheme.colors.sliderHeadroom
     val sweep = animateFloatAsState(
         if (powered) 1f else 0f,
@@ -688,37 +716,91 @@ private fun Dock(
         label = "dock sweep",
     )
     val px = s.k * LocalDensity.current.density
-    var moreBounds by remember { mutableStateOf(Rect.Zero) }
-    val shape = RoundedCornerShape(s.dp(DockCorner))
-    // The wallpaper darkens a little towards the panel, so it sits into the page.
+    val o = open()
+    // The knob's focus follows the switch: onto the panel's first tile, or back onto the pill's headroom.
+    LaunchedEffect(expanded) {
+        if (!view.isInTouchMode) {
+            withFrameNanos { }
+            runCatching { knobEntry.requestFocus() }
+        }
+    }
+    val pillX = width - PillWidth
+    // The edge and face, from the pill's place and size to the panel's.
+    val x = mix(pillX, 0f, o)
+    val top = mix(PillTop, PanelTop, o)
+    val w = mix(PillWidth, width, o)
+    val h = mix(PillHeight, PanelHeight, o)
+    val corner = mix(PillCorner, DockCorner, o)
+    if (o > 0f) {
+        // The wallpaper darkens a little towards the open panel, so it sits into the page.
+        Box(
+            Modifier
+                .at(x, top - DockFade, w, DockFade)
+                .graphicsLayer { alpha = o }
+                .background(Brush.verticalGradient(listOf(Color.Transparent, HomePalette.Panel.copy(alpha = 0.35f)))),
+        )
+    }
     Box(
         Modifier
-            .at(0f, DockTop - DockFade, width, DockFade)
-            .background(Brush.verticalGradient(listOf(Color.Transparent, HomePalette.Panel.copy(alpha = 0.35f)))),
-    )
-    // The panel: its edge solid purple all the way round while on, as the chain tiles' edges are.
-    Box(
-        Modifier
-            .at(0f, DockTop, width, DockHeight)
-            .neonEdge(DockCorner, lerp(HomePalette.PanelEdge, signal, g), glow = g)
-            .clip(shape)
+            .at(x, top, w, h)
+            .drawBehind {
+                // The glow round the edge once the sweep has gone all the way round.
+                val lit = ChainSweep.arrived(sweep.value) * g
+                if (lit <= 0f) return@drawBehind
+                val spread = s.dp(EdgeHalo).toPx()
+                val radius = s.dp(corner).toPx()
+                for (step in 1..3) {
+                    val d = spread * step / 3f
+                    drawRoundRect(
+                        signal.copy(alpha = EdgeHaloAlpha * lit / step),
+                        topLeft = Offset(-d, -d),
+                        size = Size(size.width + 2 * d, size.height + 2 * d),
+                        cornerRadius = CornerRadius(radius + d),
+                        style = Stroke(d * 2 / 3),
+                    )
+                }
+            }
+            .sweptBorder(s.dp(EdgeWidth), s.dp(corner), signal, { sweep.value }, if (powered) signal else null, px, idle = HomePalette.PanelEdge)
+            .clip(RoundedCornerShape(s.dp(corner)))
             .background(
                 Brush.verticalGradient(
-                    listOf(HomePalette.Panel.copy(alpha = DockShadeTop), HomePalette.Panel.copy(alpha = DockShadeBottom)),
+                    listOf(
+                        HomePalette.Panel.copy(alpha = mix(PillShade, PanelShadeTop, o)),
+                        HomePalette.Panel.copy(alpha = mix(PillShade, PanelShadeBottom, o)),
+                    ),
                 ),
             ),
     )
-    // The chain over the panel, unclipped so the tiles' halos show in full.
-    Box(Modifier.at(0f, DockChainTop, width, DockChainHeight)) {
-        Box(Modifier.size(s.dp(chainWidth), s.dp(DockChainHeight))) {
+    val showLabel = stringResource(R.string.launcher_dsp_show)
+    val hideLabel = stringResource(R.string.launcher_dsp_hide)
+    // The pill's contents fade out over the first half of the slide, the panel's in over the second.
+    val pillAlpha = (1f - o * 2f).coerceIn(0f, 1f)
+    if (!expanded || pillAlpha > 0f) {
+        Box(Modifier.at(pillX, PillTop, PillWidth, PillHeight).graphicsLayer { alpha = pillAlpha }) {
             CompositionLocalProvider(LocalHomeScale provides HomeScale(s.k * DockScale)) {
+                Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.Center) {
+                    PowerNode(powered, g, actions::togglePower, caption = false)
+                    HeadroomNode(
+                        readout, engine.ceilingDb, g, { ChainSweep.arrived(sweep.value) }, Modifier,
+                        showLabel, { onExpandedChange(true) }, if (!expanded) knobEntry else null,
+                    )
+                }
+            }
+        }
+    }
+    if (o <= 0f) return
+    val panelAlpha = (o * 2f - 1f).coerceIn(0f, 1f)
+    val chainWidth = width - DockButtonsWidth
+    Box(Modifier.at(0f, PanelTop, width, PanelHeight).graphicsLayer { alpha = panelAlpha }) {
+        Box(Modifier.size(s.dp(chainWidth), s.dp(PanelHeight))) {
+            CompositionLocalProvider(LocalHomeScale provides HomeScale(s.k * PanelScale)) {
                 val c = LocalHomeScale.current
-                val layout = ChainLayout(chainWidth / DockScale, maxCardWidth = CardWidth)
+                val layout = ChainLayout(chainWidth / PanelScale, maxCardWidth = CardWidth)
                 SignalPath(g, { sweep.value }, spark = powered, layout = layout)
-                // No caption under the button: the panel is only as tall as the tiles. Its colour says on or off.
+                // No caption under the button: its colour says on or off.
                 PowerNode(powered, g, actions::togglePower, Modifier.offset(x = c.dp(layout.powerX - ColumnWidth / 2)), caption = false)
                 Row(
-                    Modifier.offset(x = c.dp(layout.tileLeft(0))).fillMaxHeight().padding(vertical = c.dp(DockTileInset)),
+                    Modifier.offset(x = c.dp(layout.tileLeft(0))).fillMaxHeight().padding(vertical = s.dp(PanelTileInset)),
                     horizontalArrangement = Arrangement.spacedBy(c.dp(layout.gap)),
                 ) {
                     for (stage in HomeStage.entries) {
@@ -734,8 +816,8 @@ private fun Dock(
                             onClick = { actions.openStage(stage) },
                             modifier = Modifier
                                 .knobFocusRing(c.dp(16f), grow = true)
-                                // The first tile is where the iDrive knob's focus enters the home screen.
-                                .then(if (stage == HomeStage.entries.first()) Modifier.focusRequester(knobEntry) else Modifier),
+                                // The first tile is where the iDrive knob's focus enters the open panel.
+                                .then(if (expanded && stage == HomeStage.entries.first()) Modifier.focusRequester(knobEntry) else Modifier),
                             width = layout.cardWidth,
                             animateArt = animateTiles,
                         )
@@ -744,26 +826,30 @@ private fun Dock(
                 HeadroomNode(
                     readout, engine.ceilingDb, g, { ChainSweep.arrived(sweep.value) },
                     Modifier.offset(x = c.dp(layout.outX - ColumnWidth / 2)),
+                    hideLabel, { onExpandedChange(false) }, null,
                 )
             }
         }
         Box(
             Modifier
-                .offset(x = s.dp(chainWidth), y = s.dp(DockTop - DockChainTop))
-                .height(s.dp(DockHeight))
-                .padding(vertical = s.dp(20f))
+                .offset(x = s.dp(chainWidth))
+                .height(s.dp(PanelHeight))
+                .padding(vertical = s.dp(PanelTileInset))
                 .width(s.dp(2f))
                 .background(HomePalette.PanelEdge),
         )
+        var moreBounds by remember { mutableStateOf(Rect.Zero) }
         Column(
-            Modifier.offset(x = s.dp(chainWidth + 2f), y = s.dp(DockTop - DockChainTop)).width(s.dp(DockButtonsWidth - 2f)).height(s.dp(DockHeight)),
+            Modifier.offset(x = s.dp(chainWidth + 2f)).width(s.dp(DockButtonsWidth - 2f)).height(s.dp(PanelHeight)),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(s.dp(8f), Alignment.CenterVertically),
+            verticalArrangement = Arrangement.Center,
         ) {
             BarButton(stringResource(R.string.launcher_more), Modifier.onGloballyPositioned { moreBounds = it.boundsInRoot() }, { actions.more(moreBounds) }) { drawMoreDots() }
         }
     }
 }
+
+private fun mix(from: Float, to: Float, t: Float) = from + (to - from) * t
 
 /**
  * OUT, showing the headroom: the figure in the middle of the ring. The ring
@@ -771,7 +857,16 @@ private fun Dock(
  * ([lit], 0..1), or red once the output goes past the ceiling. Edged like the chain tiles.
  */
 @Composable
-private fun HeadroomNode(readout: () -> LevelReadout, ceilingDb: Float, g: Float, lit: () -> Float, modifier: Modifier) {
+private fun HeadroomNode(
+    readout: () -> LevelReadout,
+    ceilingDb: Float,
+    g: Float,
+    lit: () -> Float,
+    modifier: Modifier,
+    label: String,
+    onClick: () -> Unit,
+    focus: FocusRequester?,
+) {
     val s = LocalHomeScale.current
     // Read here, so a new readout recomposes only this.
     val levels = readout()
@@ -780,7 +875,13 @@ private fun HeadroomNode(readout: () -> LevelReadout, ceilingDb: Float, g: Float
     val over = !levels.silent && maxOf(levels.leftPeakDb, levels.rightPeakDb) > ceilingDb
     val powered = g >= 0.5f
     val colour = if (over) HomePalette.HeadroomCritical else BmwTheme.colors.sliderHeadroom
-    Box(modifier.width(s.dp(ColumnWidth)).fillMaxHeight().clearAndSetSemantics { }) {
+    Box(
+        modifier.width(s.dp(ColumnWidth)).fillMaxHeight().clearAndSetSemantics {
+            contentDescription = label
+            role = Role.Button
+            onClick { onClick(); true }
+        },
+    ) {
         Box(
             Modifier
                 .align(Alignment.Center)
@@ -796,7 +897,12 @@ private fun HeadroomNode(readout: () -> LevelReadout, ceilingDb: Float, g: Float
                     drawCircle(HomePalette.OutFill, r)
                     val rim = s.dp(EdgeWidth).toPx()
                     drawCircle(lerp(Color.White.copy(alpha = 0.85f), colour, t * g), r - rim / 2, style = Stroke(rim))
-                },
+                }
+                // Tapping the headroom slides the DSP panel out of the pill, and back in from the panel.
+                .then(if (focus != null) Modifier.focusRequester(focus) else Modifier)
+                .knobFocusRing(s.dp(HeadroomSize / 2), grow = true)
+                .clip(CircleShape)
+                .clickable(role = Role.Button, onClickLabel = label, onClick = onClick),
             contentAlignment = Alignment.Center,
         ) {
             Row(verticalAlignment = Alignment.Bottom) {
@@ -951,22 +1057,32 @@ private val HomeEdgePadding = 15.dp
 // the old front page left the same room.
 private const val TopMargin = 48f
 // The dock uses the full padded width and keeps a 6 dp bottom inset.
+// The pill's power and headroom at the old dock's scale.
 private const val DockScale = 0.7f
 private const val DockInset = 6f
 private const val DockCorner = 16f
-// The chain's own height, in chain units, with the tiles DockTileInset from its top and bottom.
-private const val DockUnits = 212f
-private const val DockTileInset = 28f
-private const val DockChainHeight = DockUnits * DockScale
-// The panel's top edge, and the tiles centred in its height.
-private const val DockTop = DesignH - DockInset - 4f - DockChainHeight + DockTileInset * DockScale - 3f
-private const val DockHeight = DesignH - DockInset - DockTop
-private const val DockTileHeight = (DockUnits - 2 * DockTileInset) * DockScale
-private const val DockChainTop = DockTop + (DockHeight - DockTileHeight) / 2 - DockTileInset * DockScale
-// A soft shade this far above the panel, so it sits into the wallpaper.
+// The old dock's height (the chain's 212 units at DockScale, less the tiles' insets): the panel is
+// twice that.
+private const val OldDockHeight = 135.8f
+private const val PanelHeight = 2 * OldDockHeight
+private const val PanelTop = DesignH - DockInset - PanelHeight
+// The open panel's chain, a little bigger than the old dock's so its writing reads, with the tiles
+// this far in from the panel's top and bottom. Its width still fits five tiles on a 1280 screen.
+private const val PanelScale = 0.8f
+private const val PanelTileInset = 24f
+private const val PanelShadeTop = 1f
+private const val PanelShadeBottom = 1f
+// The pill: power and the headroom side by side, in the bottom-right corner.
+private const val PillWidth = 2 * ColumnWidth * DockScale + 8f
+private const val PillHeight = 116f
+private const val PillTop = DesignH - DockInset - PillHeight
+private const val PillCorner = 24f
+private const val PillShade = 0.9f
+// How long the panel takes to slide out of the pill, and how much the launcher dims under it.
+private const val DockSlideMs = 320
+private const val DockOpenDim = 0.35f
+// A soft shade this far above the open panel, so it sits into the wallpaper.
 private const val DockFade = 50f
-private const val DockShadeTop = 0.6f
-private const val DockShadeBottom = 0.9f
 // More at the dock's right end, past the chain.
 private const val DockButtonsWidth = 96f
 private const val DockButtonSize = 60f
@@ -993,8 +1109,8 @@ private const val PodX = 0f
 private const val TilesX = PodX + PodWidth + 20f
 private const val TilesTop = 60f
 private const val GridX = TilesX + MusicWidth + TileGap
-// Down to just above the dock's shade (the page dots used to sit in the gap).
-private const val TileHeight = DockTop - 14f - TilesTop
+// Down to the bottom of the screen, level with the DSP pill: the open panel goes over them.
+private const val TileHeight = DesignH - DockInset - TilesTop
 // Two rows of grid tiles in the music tile's height.
 private const val GridTileHeight = (TileHeight - TileGap) / 2
 // The text and controls' band along the bottom, which the fade darkens; the fade starts at

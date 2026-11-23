@@ -81,6 +81,15 @@ class LauncherHomeRenderTest {
     @Test
     fun home() = render("home", overlay = LauncherOverlay.None)
 
+    /** The DSP panel slid out of the pill, over the launcher. */
+    @Test
+    fun dockExpanded() = render("dock-expanded", overlay = LauncherOverlay.None, expanded = true)
+
+    /** The open panel on the smaller screen: the five tiles still fit. */
+    @Test
+    @Config(qualifiers = "w800dp-h400dp-land-mdpi")
+    fun dockExpandedScaledDown() = render("dock-expanded-scaled-down", overlay = LauncherOverlay.None, expanded = true, minWidth = 800)
+
     @Test
     fun drawer() = render("drawer", overlay = LauncherOverlay.Drawer())
 
@@ -180,20 +189,21 @@ class LauncherHomeRenderTest {
         playing: Boolean = true,
         hidden: Set<String> = emptySet(),
         minWidth: Int = 1280,
+        expanded: Boolean = false,
     ) {
         // Out of touch mode, as after a knob press, and with window focus, as on a real screen, so
         // knob (D-pad) focus can be taken and drawn.
         val instrumentation = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation()
         instrumentation.setInTouchMode(knob == 0)
         try {
-            renderIn(name, overlay, knob, large, playing, hidden, minWidth)
+            renderIn(name, overlay, knob, large, playing, hidden, minWidth, expanded)
         } finally {
             // Touch mode is global to the instrumentation; put it back for the next test.
             instrumentation.setInTouchMode(true)
         }
     }
 
-    private fun renderIn(name: String, overlay: LauncherOverlay, knob: Int, large: Boolean, playing: Boolean, hidden: Set<String>, minWidth: Int) {
+    private fun renderIn(name: String, overlay: LauncherOverlay, knob: Int, large: Boolean, playing: Boolean, hidden: Set<String>, minWidth: Int, expanded: Boolean) {
         val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup().windowFocusChanged(true)
         val activity = controller.get()
         activity.setContent {
@@ -213,6 +223,7 @@ class LauncherHomeRenderTest {
                     nowPlayingAllowed = false,
                     knobFocusRequests = knobRequests,
                     look = LauncherCustomisation.Look(hidden = hidden),
+                    dockExpanded = expanded,
                 )
               }
             }
