@@ -1,5 +1,7 @@
 package app.siphondsp.compose.launcher
 
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.foundation.shape.CircleShape
@@ -717,11 +719,17 @@ private fun Dock(
     )
     val px = s.k * LocalDensity.current.density
     val o = open()
-    // The knob's focus follows the switch: onto the panel's first tile, or back onto the pill's headroom.
+    // The knob's focus follows a switch: onto the panel's first tile, or back onto the pill's headroom.
+    // Only a real switch, never the first composition (only a knob press brings focus onto home), and
+    // retried for a few frames, as the target is composed only once the slide has started.
+    var shownExpanded by remember { mutableStateOf(expanded) }
     LaunchedEffect(expanded) {
-        if (!view.isInTouchMode) {
+        if (shownExpanded == expanded) return@LaunchedEffect
+        shownExpanded = expanded
+        if (view.isInTouchMode) return@LaunchedEffect
+        repeat(FocusRetryFrames) {
             withFrameNanos { }
-            runCatching { knobEntry.requestFocus() }
+            if (runCatching { knobEntry.requestFocus() }.isSuccess) return@LaunchedEffect
         }
     }
     val pillX = width - PillWidth
@@ -776,7 +784,8 @@ private fun Dock(
     // The pill's contents fade out over the first half of the slide, the panel's in over the second.
     val pillAlpha = (1f - o * 2f).coerceIn(0f, 1f)
     if (!expanded || pillAlpha > 0f) {
-        Box(Modifier.at(pillX, PillTop, PillWidth, PillHeight).graphicsLayer { alpha = pillAlpha }) {
+        // Fading out under the opening panel, it takes no taps.
+        Box(Modifier.at(pillX, PillTop, PillWidth, PillHeight).graphicsLayer { alpha = pillAlpha }.blockTouches(expanded)) {
             CompositionLocalProvider(LocalHomeScale provides HomeScale(s.k * DockScale)) {
                 Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.Center) {
                     PowerNode(powered, g, actions::togglePower, caption = false)
@@ -791,7 +800,8 @@ private fun Dock(
     if (o <= 0f) return
     val panelAlpha = (o * 2f - 1f).coerceIn(0f, 1f)
     val chainWidth = width - DockButtonsWidth
-    Box(Modifier.at(0f, PanelTop, width, PanelHeight).graphicsLayer { alpha = panelAlpha }) {
+    // Not yet showing on the way out, or sliding away, the panel's controls take no taps.
+    Box(Modifier.at(0f, PanelTop, width, PanelHeight).graphicsLayer { alpha = panelAlpha }.blockTouches(!expanded || panelAlpha <= 0f)) {
         Box(Modifier.size(s.dp(chainWidth), s.dp(PanelHeight))) {
             CompositionLocalProvider(LocalHomeScale provides HomeScale(s.k * PanelScale)) {
                 val c = LocalHomeScale.current
@@ -850,6 +860,14 @@ private fun Dock(
 }
 
 private fun mix(from: Float, to: Float, t: Float) = from + (to - from) * t
+
+/** While [blocked], every touch on this or anything in it is used up before its controls see it. */
+private fun Modifier.blockTouches(blocked: Boolean): Modifier =
+    if (!blocked) this else pointerInput(Unit) {
+        awaitPointerEventScope {
+            while (true) awaitPointerEvent(PointerEventPass.Initial).changes.forEach { it.consume() }
+        }
+    }
 
 /**
  * OUT, showing the headroom: the figure in the middle of the ring. The ring
@@ -1081,6 +1099,8 @@ private const val PillShade = 0.9f
 // How long the panel takes to slide out of the pill, and how much the launcher dims under it.
 private const val DockSlideMs = 320
 private const val DockOpenDim = 0.35f
+// How many frames the knob's focus waits for the other state's target to appear.
+private const val FocusRetryFrames = 30
 // A soft shade this far above the open panel, so it sits into the wallpaper.
 private const val DockFade = 50f
 // More at the dock's right end, past the chain.
