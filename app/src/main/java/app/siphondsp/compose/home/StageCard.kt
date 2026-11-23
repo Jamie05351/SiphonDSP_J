@@ -129,18 +129,19 @@ fun StageCard(
 }
 
 /**
- * A rounded border in [HomePalette.Idle], lit in [colour] along two paths that both start at the
+ * A rounded border in [idle], lit in [colour] along two paths that both start at the
  * left-middle edge, one round the top and one round the bottom, each [lit] (0..1) of the way to
  * the right-middle edge. With a [spark] colour, a spark ([drawSpark], [scale] px per design unit)
- * rides the front of each path until they meet.
+ * rides the front of each path until they meet. The launcher's DSP panel and pill light up the same way.
  */
-private fun Modifier.sweptBorder(
+internal fun Modifier.sweptBorder(
     width: Dp,
     radius: Dp,
     colour: Color,
     lit: () -> Float,
     spark: Color?,
     scale: Float,
+    idle: Color = HomePalette.Idle,
 ) = drawWithCache {
     val w = width.toPx()
     val h = w / 2
@@ -174,8 +175,8 @@ private fun Modifier.sweptBorder(
     val litLower = Path()
     onDrawWithContent {
         drawContent()
-        drawPath(upper, HomePalette.Idle, style = Stroke(w))
-        drawPath(lower, HomePalette.Idle, style = Stroke(w))
+        drawPath(upper, idle, style = Stroke(w))
+        drawPath(lower, idle, style = Stroke(w))
         val t = lit()
         if (t > 0f) {
             litUpper.reset()
