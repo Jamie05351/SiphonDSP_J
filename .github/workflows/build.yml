@@ -166,12 +166,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          # The Gradle daemons from the steps above still hold several GB; with an unbounded
-          # parallel compile of the convolver sources the runner ran out of memory and was
-          # shut down mid-build. Free them and cap the jobs.
-          ./gradlew --stop
           cmake -S native-tests -B build/native-tests -DCMAKE_BUILD_TYPE=Debug
-          cmake --build build/native-tests --parallel 2
+          cmake --build build/native-tests --parallel
           ctest --test-dir build/native-tests --output-on-failure
 
       # Renders fixed DSP scenarios with this PR's native code and with the base branch's, and
