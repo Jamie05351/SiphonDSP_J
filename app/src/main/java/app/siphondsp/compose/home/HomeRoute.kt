@@ -126,6 +126,8 @@ fun HomeRoute(powered: Boolean, onTogglePower: () -> Unit, launcherHost: Launche
     var knobFocusRequests by remember { mutableIntStateOf(0) }
     var knobFocusFailed by remember { mutableStateOf(false) }
     var homeHasFocus by remember { mutableStateOf(false) }
+    // The DSP panel slid out over the launcher; otherwise it is the pill in the bottom-right corner.
+    var dockExpanded by rememberSaveable { mutableStateOf(false) }
     // The icon key (SlotTarget.encode) whose image is being picked; kept across recreation.
     var iconKeyPicking by rememberSaveable { mutableStateOf<String?>(null) }
     val nowPlaying = remember(context) { NowPlaying(context.applicationContext) }
@@ -181,6 +183,7 @@ fun HomeRoute(powered: Boolean, onTogglePower: () -> Unit, launcherHost: Launche
             launcherHost?.homePressed = {
                 cancelPendingOpen()
                 overlay = LauncherOverlay.None
+                dockExpanded = false
             }
         }
         onPauseOrDispose {
@@ -189,6 +192,8 @@ fun HomeRoute(powered: Boolean, onTogglePower: () -> Unit, launcherHost: Launche
             levelFeed.running = false
             live = false
             if (launcher) {
+                // Whatever opened over home (a DSP page, an app), the panel is back to the pill on return.
+                dockExpanded = false
                 launcherHost?.knobFocus = null
                 launcherHost?.homePressed = null
                 nowPlaying.stop()
@@ -244,6 +249,8 @@ fun HomeRoute(powered: Boolean, onTogglePower: () -> Unit, launcherHost: Launche
                 knobFocusRequests = knobFocusRequests,
                 onKnobFocusResult = { taken -> knobFocusFailed = !taken },
                 onHasFocusChanged = { homeHasFocus = it },
+                dockExpanded = dockExpanded,
+                onDockExpandedChange = { if (openingTile == null) dockExpanded = it },
                 iconKeyPicking = iconKeyPicking,
                 onIconKeyPicking = { iconKeyPicking = it },
                 onTogglePower = { if (openingTile == null) onTogglePower() },
@@ -299,13 +306,17 @@ fun HomeRoute(powered: Boolean, onTogglePower: () -> Unit, launcherHost: Launche
         }
     }
 
-    // Back closes a drawer or menu; on the plain home screen it does nothing while J_DSP is the home
-    // app (there is nowhere to go back to). Opened from another launcher, it closes as before.
+    // Back closes a drawer or menu, then the DSP panel; on the plain home screen it does nothing while
+    // J_DSP is the home app (there is nowhere to go back to). Opened from another launcher, it closes
+    // as before.
     if (launcher) {
         val activity = context as? Activity
         val isHome = remember(activity?.intent) { activity?.let(::isHomeApp) ?: false }
-        BackHandler(enabled = overlay != LauncherOverlay.None || isHome) {
-            if (overlay != LauncherOverlay.None) overlay = LauncherOverlay.None
+        BackHandler(enabled = overlay != LauncherOverlay.None || dockExpanded || isHome) {
+            when {
+                overlay != LauncherOverlay.None -> overlay = LauncherOverlay.None
+                dockExpanded -> dockExpanded = false
+            }
         }
     }
 
@@ -345,6 +356,8 @@ private fun LauncherRoute(
     knobFocusRequests: Int,
     onKnobFocusResult: (Boolean) -> Unit,
     onHasFocusChanged: (Boolean) -> Unit,
+    dockExpanded: Boolean,
+    onDockExpandedChange: (Boolean) -> Unit,
     iconKeyPicking: String?,
     onIconKeyPicking: (String?) -> Unit,
     onTogglePower: () -> Unit,
@@ -490,6 +503,8 @@ private fun LauncherRoute(
         knobFocusRequests = knobFocusRequests,
         onKnobFocusResult = onKnobFocusResult,
         onHasFocusChanged = onHasFocusChanged,
+        dockExpanded = dockExpanded,
+        onDockExpandedChange = onDockExpandedChange,
     )
 }
 
