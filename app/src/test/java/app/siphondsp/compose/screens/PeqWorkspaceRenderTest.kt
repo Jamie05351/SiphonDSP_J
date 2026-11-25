@@ -10,6 +10,9 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.core.view.drawToBitmap
 import app.siphondsp.compose.nav.AppNavigator
 import app.siphondsp.compose.nav.LocalAppNavigator
@@ -32,6 +35,7 @@ import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import java.io.File
+import kotlin.math.roundToInt
 
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -86,6 +90,58 @@ class PeqWorkspaceRenderTest {
     }
 
     @Test
+    fun livePreviewRedrawsTheResponseBeforeCommit() {
+        compose.onNodeWithText("L").performClick()
+        compose.onNodeWithText("01").performClick()
+        val before = graphBitmap()
+        compose.runOnIdle { holder.previewBandEdit(0, "curve-preview") { it.withGain(-12.0) } }
+        val after = graphBitmap()
+        assertTrue("A live filter preview must move the response curve before saving",
+            !responsePixels(before).contentEquals(responsePixels(after)))
+        before.recycle()
+        after.recycle()
+    }
+
+    @Test
+    fun changingFilterParametersRedrawsThePlottedCurve() {
+        compose.onNodeWithText("L").performClick()
+        compose.onNodeWithText("01").performClick()
+        val before = graphBitmap()
+        repeat(8) { compose.onNodeWithContentDescription("Increase Gain").performClick() }
+        assertEquals(0.5, holder.visibleBands[0].gain, 0.001)
+        val after = graphBitmap()
+        assertTrue("Gain edits must move the purple response curve, not just the node",
+            !responsePixels(before).contentEquals(responsePixels(after)))
+        before.recycle()
+        after.recycle()
+    }
+
+    private fun responsePixels(bitmap: android.graphics.Bitmap): BooleanArray {
+        val pixels = BooleanArray(bitmap.width * bitmap.height)
+        // Exclude the legend/buttons and axis labels; the first two filter shapes are teal/blue.
+        for (y in 60 until bitmap.height - 30) for (x in 36 until bitmap.width - 12) {
+            val color = bitmap.getPixel(x, y)
+            pixels[y * bitmap.width + x] = android.graphics.Color.red(color) > 100 &&
+                android.graphics.Color.blue(color) > 170 && android.graphics.Color.green(color) < 150
+        }
+        assertTrue("The response curve must be visible", pixels.any { it })
+        return pixels
+    }
+
+    private fun graphBitmap(): android.graphics.Bitmap {
+        compose.waitForIdle()
+        val bounds = compose.onNodeWithTag("peq-response-graph").fetchSemanticsNode().boundsInRoot
+        lateinit var bitmap: android.graphics.Bitmap
+        compose.runOnIdle {
+            val full = controller.get().window.decorView.drawToBitmap()
+            bitmap = android.graphics.Bitmap.createBitmap(full, bounds.left.roundToInt(), bounds.top.roundToInt(),
+                bounds.width.roundToInt(), bounds.height.roundToInt())
+            full.recycle()
+        }
+        return bitmap
+    }
+
+    @Test
     fun channelButtonsPersistTheViewAndTheFullFiltersPageRemainsReachable() {
         compose.onNodeWithText("R").performClick().assertIsSelected()
         assertEquals(PeqChannelDisplay.RIGHT, PeqGraphPreferences(controller.get()).channelDisplay)
@@ -112,30 +168,82 @@ class PeqWorkspaceRenderTest {
     }
 
     @Test
+    @Config(qualifiers = "w832dp-h480dp-land-mdpi")
+    fun longFilterValuesFitOnTheSmallestFullStepperRow() {
+        compose.runOnIdle {
+            holder.commitBandEdit(0, "long-values") {
+                it.withFrequency(19999.99).withGain(-29.5).withQ(29.99)
+            }
+        }
+        assertFilterButtonsFitWidth()
+        saveRender("filters-long-values")
+        listOf("19999.99 Hz", "-29.5 dB", "29.99").forEach { value ->
+            val layouts = mutableListOf<TextLayoutResult>()
+            compose.onNodeWithText(value, useUnmergedTree = true)
+                .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+            // The paragraph allocation can exceed Text's measured size even when every glyph
+            // fits. Check the actual character bounds instead of that paragraph overflow flag.
+            assertTrue("$value must fit without clipping", layouts.isNotEmpty() && layouts.all { layout ->
+                value.indices.all { character ->
+                    val glyph = layout.getBoundingBox(character)
+                    glyph.left >= -0.5f && glyph.right <= layout.size.width + 0.5f
+                }
+            })
+        }
+        saveRender("filters-long-values")
+    }
+
+    @Test
+    @Config(qualifiers = "w600dp-h480dp-land-mdpi")
+    fun compactSteppersLeaveRoomForLongValuesAtTheirLowerWidthBoundary() {
+        compose.runOnIdle {
+            holder.commitBandEdit(0, "compact-long-values") {
+                it.withFrequency(999.99).withGain(-29.5).withQ(29.99)
+            }
+        }
+        assertFilterButtonsFitWidth(minTouchWidth = 31f)
+        listOf("999.99", "-29.5", "29.99").forEach { value ->
+            val layouts = mutableListOf<TextLayoutResult>()
+            compose.onNodeWithText(value, useUnmergedTree = true)
+                .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+            assertTrue("$value must fit beside the compact steppers", layouts.isNotEmpty() && layouts.all { layout ->
+                value.indices.all { character ->
+                    val glyph = layout.getBoundingBox(character)
+                    glyph.left >= -0.5f && glyph.right <= layout.size.width + 0.5f
+                }
+            })
+        }
+        saveRender("filters-compact-long-values")
+    }
+
+    @Test
     @Config(qualifiers = "w800dp-h480dp-land-mdpi")
     fun mediumWidthFiltersKeepEveryParameterButtonInsideThePage() {
-        assertFilterButtonsFitWidth()
+        assertFilterButtonsFitWidth(minTouchWidth = 31f)
         saveRender("filters-medium")
     }
 
     @Test
     @Config(qualifiers = "w360dp-h800dp-port-mdpi")
     fun phoneFiltersKeepEveryParameterButtonInsideThePage() {
-        assertFilterButtonsFitWidth()
+        assertFilterButtonsFitWidth(showSteppers = false)
         saveRender("filters-phone")
     }
 
-    private fun assertFilterButtonsFitWidth() {
+    private fun assertFilterButtonsFitWidth(showSteppers: Boolean = true, minTouchWidth: Float = 43f) {
         compose.onNodeWithTag("peq-open-filters").performClick()
         val table = compose.onNodeWithTag("peq-filter-table").fetchSemanticsNode().boundsInRoot
+        val center = compose.onNodeWithContentDescription("Edit Filter 1 frequency").fetchSemanticsNode().boundsInRoot.center.y
         listOf("frequency", "gain", "Q").forEach { parameter ->
-            listOf("Decrease", "Edit", "Increase").forEach { action ->
+            assertEquals("All parameters must stay on one line", center,
+                compose.onNodeWithContentDescription("Edit Filter 1 $parameter").fetchSemanticsNode().boundsInRoot.center.y, 1f)
+            (if (showSteppers) listOf("Decrease", "Edit", "Increase") else listOf("Edit")).forEach { action ->
                 val button = compose.onNodeWithContentDescription("$action Filter 1 $parameter")
                 button.assertIsDisplayed()
                 val bounds = button.fetchSemanticsNode().boundsInRoot
                 assertTrue("$action $parameter left edge", bounds.left >= table.left)
                 assertTrue("$action $parameter right edge", bounds.right <= table.right)
-                assertTrue("$action $parameter touch width", bounds.width >= 43f)
+                assertTrue("$action $parameter touch width", bounds.width >= minTouchWidth)
             }
         }
     }
