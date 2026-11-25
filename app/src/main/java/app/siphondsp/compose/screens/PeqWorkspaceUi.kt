@@ -53,7 +53,6 @@ internal val PeqControlText = Color(0xFFF3F6FA)
 internal val PeqMutedText = Color(0xFF9AA1AB)
 internal val PeqControlFill = Color(0xFF222530)
 internal val PeqPanelFill = Color(0xFF181A22)
-internal val PeqParameterGap = 20.dp
 internal val PeqBottomClearance = 24.dp
 
 /** The same global numbering used for graph node and filter-shape colours. */
@@ -124,7 +123,7 @@ internal fun PeqActionButton(
     }
 }
 
-/** Value in the middle, independent 44dp hold-to-repeat buttons at either side. */
+/** Value in the middle, independent hold-to-repeat buttons at either side. */
 @Composable
 internal fun PeqNumericControl(
     label: String,
@@ -134,11 +133,11 @@ internal fun PeqNumericControl(
     onCommit: () -> Unit,
     modifier: Modifier = Modifier,
     showSteppers: Boolean = true,
-    stepWidth: androidx.compose.ui.unit.Dp = 44.dp,
+    stepWidth: androidx.compose.ui.unit.Dp = 48.dp,
     valueFontSize: androidx.compose.ui.unit.TextUnit = 20.sp,
 ) {
     Row(
-        modifier.height(44.dp).clip(RoundedCornerShape(8.dp)).background(PeqControlFill),
+        modifier.height(48.dp).clip(RoundedCornerShape(8.dp)).background(PeqControlFill),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (showSteppers) HoldStepHalf(
@@ -148,6 +147,7 @@ internal fun PeqNumericControl(
         val source = remember { MutableInteractionSource() }
         Box(
             Modifier.weight(1f).fillMaxHeight()
+                .background(PeqPanelFill)
                 .clickable(interactionSource = source, indication = null, role = Role.Button, onClick = onValueClick)
                 .semantics { contentDescription = "Edit $label" }
                 .bmwFocusRing(source),
