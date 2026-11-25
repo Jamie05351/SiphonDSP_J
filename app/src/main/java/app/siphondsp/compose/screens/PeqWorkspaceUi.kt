@@ -129,13 +129,16 @@ internal fun PeqNumericControl(
     onStep: (Int, Int) -> Unit,
     onCommit: () -> Unit,
     modifier: Modifier = Modifier,
+    showSteppers: Boolean = true,
+    stepWidth: androidx.compose.ui.unit.Dp = 44.dp,
+    valueFontSize: androidx.compose.ui.unit.TextUnit = 20.sp,
 ) {
     Row(
         modifier.height(44.dp).clip(RoundedCornerShape(8.dp)).background(PeqControlFill),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        HoldStepHalf(
-            "−", "Decrease $label", PeqMutedText, true, Modifier.width(44.dp).fillMaxHeight(),
+        if (showSteppers) HoldStepHalf(
+            "−", "Decrease $label", PeqMutedText, true, Modifier.width(stepWidth).fillMaxHeight(),
             { onStep(-1, it) }, StepMath::defaultHoldMultiplier, {}, onCommit,
         )
         val source = remember { MutableInteractionSource() }
@@ -146,10 +149,10 @@ internal fun PeqNumericControl(
                 .bmwFocusRing(source),
             contentAlignment = Alignment.Center,
         ) {
-            Text(value, color = PeqControlText, fontSize = 20.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+            Text(value, color = PeqControlText, fontSize = valueFontSize, fontWeight = FontWeight.Medium, maxLines = 1)
         }
-        HoldStepHalf(
-            "+", "Increase $label", PeqControlBlue, true, Modifier.width(44.dp).fillMaxHeight(),
+        if (showSteppers) HoldStepHalf(
+            "+", "Increase $label", PeqControlBlue, true, Modifier.width(stepWidth).fillMaxHeight(),
             { onStep(1, it) }, StepMath::defaultHoldMultiplier, {}, onCommit,
         )
     }

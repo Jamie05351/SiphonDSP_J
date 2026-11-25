@@ -1766,7 +1766,9 @@ private class PeqResponseModel {
     }
 
     /** Bumped by every [recompute]: the static layers' cache key for "the curves changed". */
-    var version = 0
+    // Canvas reads this in staticKeyOf: a model update must invalidate drawing even if its
+    // remembered model object and the selected filter identity have not changed.
+    var version by mutableIntStateOf(0)
         private set
 
     /** [baseline], when given, is added to every magnitude curve (see [CarBaseline]); [convolver]

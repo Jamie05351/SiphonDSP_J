@@ -32,6 +32,7 @@ import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import java.io.File
+import kotlin.math.roundToInt
 
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -86,6 +87,58 @@ class PeqWorkspaceRenderTest {
     }
 
     @Test
+    fun livePreviewRedrawsTheResponseBeforeCommit() {
+        compose.onNodeWithText("L").performClick()
+        compose.onNodeWithText("01").performClick()
+        val before = graphBitmap()
+        compose.runOnIdle { holder.previewBandEdit(0, "curve-preview") { it.withGain(-12.0) } }
+        val after = graphBitmap()
+        assertTrue("A live filter preview must move the response curve before saving",
+            !responsePixels(before).contentEquals(responsePixels(after)))
+        before.recycle()
+        after.recycle()
+    }
+
+    @Test
+    fun changingFilterParametersRedrawsThePlottedCurve() {
+        compose.onNodeWithText("L").performClick()
+        compose.onNodeWithText("01").performClick()
+        val before = graphBitmap()
+        repeat(8) { compose.onNodeWithContentDescription("Increase Gain").performClick() }
+        assertEquals(0.5, holder.visibleBands[0].gain, 0.001)
+        val after = graphBitmap()
+        assertTrue("Gain edits must move the purple response curve, not just the node",
+            !responsePixels(before).contentEquals(responsePixels(after)))
+        before.recycle()
+        after.recycle()
+    }
+
+    private fun responsePixels(bitmap: android.graphics.Bitmap): BooleanArray {
+        val pixels = BooleanArray(bitmap.width * bitmap.height)
+        // Exclude the legend/buttons and axis labels; the first two filter shapes are teal/blue.
+        for (y in 60 until bitmap.height - 30) for (x in 36 until bitmap.width - 12) {
+            val color = bitmap.getPixel(x, y)
+            pixels[y * bitmap.width + x] = android.graphics.Color.red(color) > 100 &&
+                android.graphics.Color.blue(color) > 170 && android.graphics.Color.green(color) < 150
+        }
+        assertTrue("The response curve must be visible", pixels.any { it })
+        return pixels
+    }
+
+    private fun graphBitmap(): android.graphics.Bitmap {
+        compose.waitForIdle()
+        val bounds = compose.onNodeWithTag("peq-response-graph").fetchSemanticsNode().boundsInRoot
+        lateinit var bitmap: android.graphics.Bitmap
+        compose.runOnIdle {
+            val full = controller.get().window.decorView.drawToBitmap()
+            bitmap = android.graphics.Bitmap.createBitmap(full, bounds.left.roundToInt(), bounds.top.roundToInt(),
+                bounds.width.roundToInt(), bounds.height.roundToInt())
+            full.recycle()
+        }
+        return bitmap
+    }
+
+    @Test
     fun channelButtonsPersistTheViewAndTheFullFiltersPageRemainsReachable() {
         compose.onNodeWithText("R").performClick().assertIsSelected()
         assertEquals(PeqChannelDisplay.RIGHT, PeqGraphPreferences(controller.get()).channelDisplay)
@@ -121,15 +174,18 @@ class PeqWorkspaceRenderTest {
     @Test
     @Config(qualifiers = "w360dp-h800dp-port-mdpi")
     fun phoneFiltersKeepEveryParameterButtonInsideThePage() {
-        assertFilterButtonsFitWidth()
+        assertFilterButtonsFitWidth(showSteppers = false)
         saveRender("filters-phone")
     }
 
-    private fun assertFilterButtonsFitWidth() {
+    private fun assertFilterButtonsFitWidth(showSteppers: Boolean = true) {
         compose.onNodeWithTag("peq-open-filters").performClick()
         val table = compose.onNodeWithTag("peq-filter-table").fetchSemanticsNode().boundsInRoot
+        val center = compose.onNodeWithContentDescription("Edit Filter 1 frequency").fetchSemanticsNode().boundsInRoot.center.y
         listOf("frequency", "gain", "Q").forEach { parameter ->
-            listOf("Decrease", "Edit", "Increase").forEach { action ->
+            assertEquals("All parameters must stay on one line", center,
+                compose.onNodeWithContentDescription("Edit Filter 1 $parameter").fetchSemanticsNode().boundsInRoot.center.y, 1f)
+            (if (showSteppers) listOf("Decrease", "Edit", "Increase") else listOf("Edit")).forEach { action ->
                 val button = compose.onNodeWithContentDescription("$action Filter 1 $parameter")
                 button.assertIsDisplayed()
                 val bounds = button.fetchSemanticsNode().boundsInRoot

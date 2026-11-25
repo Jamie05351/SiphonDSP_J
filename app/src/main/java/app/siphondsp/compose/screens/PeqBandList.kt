@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -25,11 +26,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.siphondsp.compose.state.PeqStateHolder
 import app.siphondsp.model.BmwPeqState
-import app.siphondsp.model.ParametricEqBand
 
-private val TableWeights = listOf(44f, 88f, 116f, 242f, 242f, 222f, 54f)
-
-/** All controls fit the viewport width. Additional filter rows scroll vertically only. */
+/** One aligned line per filter, within the viewport. Only additional rows scroll. */
 @Composable
 fun PeqBandList(
     holder: PeqStateHolder,
@@ -42,63 +40,54 @@ fun PeqBandList(
         if (selected >= 0) listState.animateScrollToItem(selected)
     }
     BoxWithConstraints(modifier.fillMaxWidth().testTag("peq-filter-table")) {
-        val compact = maxWidth < 1040.dp
-        val stacked = maxWidth < 640.dp
+        val compact = maxWidth < 640.dp
+        val showSteppers = maxWidth >= 480.dp
+        val numberWidth = if (compact) 20.dp else 24.dp
+        val buttonWidth = if (compact) 32.dp else 44.dp
+        val parameterGap = if (compact) 8.dp else PeqParameterGap
+        val fontSize = if (compact) 14.sp else if (maxWidth < 900.dp) 16.sp else 20.sp
+        val parameterWeights = if (compact) listOf(1f, 1f, 1f) else listOf(1.15f, 1f, .85f)
+        val row: @Composable (Modifier, @Composable RowScope.() -> Unit) -> Unit = { rowModifier, cells ->
+            Row(rowModifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically, content = cells)
+        }
         Column(Modifier.fillMaxWidth().fillMaxHeight()) {
-            if (!compact) {
-                Row(
-                    Modifier.fillMaxWidth().height(32.dp),
-                    horizontalArrangement = Arrangement.spacedBy(PeqParameterGap),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    listOf("#", "CHANNEL", "TYPE", "FREQUENCY", "GAIN", "Q", "").forEachIndexed { i, label ->
-                        Text(label, color = PeqMutedText, fontSize = 12.sp,
-                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                            modifier = Modifier.weight(TableWeights[i]))
+            row(Modifier.height(32.dp)) {
+                TableHeading("#", Modifier.width(numberWidth))
+                TableHeading("CH", Modifier.width(buttonWidth))
+                TableHeading("TYPE", Modifier.width(buttonWidth))
+                Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(parameterGap)) {
+                    listOf(if (compact) "Hz" else "FREQUENCY", if (compact) "dB" else "GAIN", "Q").forEachIndexed { i, label ->
+                        TableHeading(label, Modifier.weight(parameterWeights[i]))
                     }
                 }
+                TableHeading("", Modifier.width(buttonWidth))
             }
             LazyColumn(state = listState, modifier = Modifier.weight(1f).fillMaxWidth()) {
                 itemsIndexed(bands, key = { _, band -> band.uuid.toString() }) { index, band ->
                     val actions = rememberPeqFilterActions(holder, index)
-                    val filterNumber = holder.filterNumberOffset + index + 1
-                    val rowModifier = Modifier.fillMaxWidth()
-                        .background(if (band.uuid == holder.selectedUuid) PeqPanelFill else Color.Transparent)
-                        .padding(vertical = 6.dp)
-                    if (compact) {
-                        Column(rowModifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                verticalAlignment = Alignment.CenterVertically) {
-                                PeqFilterNumber(filterNumber, Modifier.width(32.dp))
-                                PeqActionButton(band.channel.displayLabel, actions::channel, Modifier.weight(1f))
-                                PeqActionButton(band.filterType.displayLabel, actions::type, Modifier.weight(1f))
-                                PeqActionButton("×", { holder.deleteBand(index) }, Modifier.width(44.dp))
-                            }
-                            if (stacked) {
-                                Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(PeqParameterGap)) {
-                                    repeat(3) { parameter ->
-                                        PeqTableParameter(band, filterNumber, parameter, actions, true, Modifier.fillMaxWidth())
-                                    }
-                                }
-                            } else {
-                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(PeqParameterGap)) {
-                                    repeat(3) { parameter ->
-                                        PeqTableParameter(band, filterNumber, parameter, actions, true, Modifier.weight(1f))
-                                    }
-                                }
-                            }
+                    val number = holder.filterNumberOffset + index + 1
+                    row(Modifier.background(if (band.uuid == holder.selectedUuid) PeqPanelFill else Color.Transparent)
+                        .padding(vertical = 6.dp).testTag("peq-filter-row-$number")) {
+                        Text("$number", color = Color(peqFilterColor(number - 1)),
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                            modifier = Modifier.width(numberWidth))
+                        PeqActionButton(band.channel.displayLabel, actions::channel, Modifier.width(buttonWidth), contentPadding = 2.dp)
+                        PeqActionButton(band.filterType.displayLabel, actions::type, Modifier.width(buttonWidth), contentPadding = 2.dp)
+                        Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(parameterGap)) {
+                            val frequency = if (compact && band.frequency >= 1000.0) "${formatPeqValue(band.frequency / 1000.0)}k"
+                                else formatPeqValue(band.frequency)
+                            PeqNumericControl("Filter $number frequency", if (compact) frequency else "$frequency Hz",
+                                actions::frequency, actions::stepFrequency, actions::commit, Modifier.weight(parameterWeights[0]),
+                                showSteppers = showSteppers, stepWidth = if (compact) 32.dp else 44.dp, valueFontSize = fontSize)
+                            PeqNumericControl("Filter $number gain", formatPeqValue(band.gain) + if (compact) "" else " dB",
+                                actions::gain, actions::stepGain, actions::commit, Modifier.weight(parameterWeights[1]),
+                                showSteppers = showSteppers, stepWidth = if (compact) 32.dp else 44.dp, valueFontSize = fontSize)
+                            PeqNumericControl("Filter $number Q", formatPeqValue(band.q),
+                                actions::q, actions::stepQ, actions::commit, Modifier.weight(parameterWeights[2]),
+                                showSteppers = showSteppers, stepWidth = if (compact) 32.dp else 44.dp, valueFontSize = fontSize)
                         }
-                    } else {
-                        Row(rowModifier, horizontalArrangement = Arrangement.spacedBy(PeqParameterGap),
-                            verticalAlignment = Alignment.CenterVertically) {
-                            PeqFilterNumber(filterNumber, Modifier.weight(TableWeights[0]))
-                            PeqActionButton(band.channel.displayLabel, actions::channel, Modifier.weight(TableWeights[1]))
-                            PeqActionButton(band.filterType.displayLabel, actions::type, Modifier.weight(TableWeights[2]))
-                            repeat(3) { parameter ->
-                                PeqTableParameter(band, filterNumber, parameter, actions, false, Modifier.weight(TableWeights[parameter + 3]))
-                            }
-                            PeqActionButton("×", { holder.deleteBand(index) }, Modifier.weight(TableWeights[6]))
-                        }
+                        PeqActionButton("×", { holder.deleteBand(index) }, Modifier.width(buttonWidth), contentPadding = 2.dp)
                     }
                 }
                 if (bands.size < BmwPeqState.MAX_BANDS) {
@@ -112,30 +101,7 @@ fun PeqBandList(
 }
 
 @Composable
-private fun PeqFilterNumber(number: Int, modifier: Modifier) {
-    Text("$number", color = Color(peqFilterColor(number - 1)),
+private fun TableHeading(label: String, modifier: Modifier) {
+    Text(label, color = PeqMutedText, fontSize = 12.sp, maxLines = 1,
         textAlign = androidx.compose.ui.text.style.TextAlign.Center, modifier = modifier)
-}
-
-@Composable
-private fun PeqTableParameter(
-    band: ParametricEqBand,
-    number: Int,
-    parameter: Int,
-    actions: PeqFilterActions,
-    showLabel: Boolean,
-    modifier: Modifier,
-) {
-    val label = when (parameter) { 0 -> "frequency"; 1 -> "gain"; else -> "Q" }
-    val value = when (parameter) {
-        0 -> "${formatPeqValue(band.frequency)} Hz"
-        1 -> "${formatPeqValue(band.gain)} dB"
-        else -> formatPeqValue(band.q)
-    }
-    val edit: () -> Unit = when (parameter) { 0 -> actions::frequency; 1 -> actions::gain; else -> actions::q }
-    val step: (Int, Int) -> Unit = when (parameter) { 0 -> actions::stepFrequency; 1 -> actions::stepGain; else -> actions::stepQ }
-    Column(modifier, verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        if (showLabel) Text(label.uppercase(java.util.Locale.ROOT), color = PeqMutedText, fontSize = 12.sp)
-        PeqNumericControl("Filter $number $label", value, edit, step, actions::commit, Modifier.fillMaxWidth())
-    }
 }
