@@ -89,6 +89,9 @@ fun ParametricEqScreen(holder: PeqStateHolder, modifier: Modifier = Modifier, sh
     var channelDisplay by remember { mutableStateOf(graphPrefs.channelDisplay) }
     var showOverlays by remember { mutableStateOf(graphPrefs.showIndividualFilters) }
     val showConvolver = rememberShowConvolverInGraphs()
+    // Capture the edited value, not only the holder identity, in the subcomposed graph lambda.
+    val responsePeqState = holder.peqState
+    val responseSelection = holder.selectedUuid
     // A saved filter selection is not an instruction to open the inspector on entry.
     var editorId by rememberSaveable(holder.selectedScope) { mutableStateOf<String?>(null) }
     val editorIndex = holder.visibleBands.indexOfFirst { it.uuid.toString() == editorId }
@@ -152,9 +155,9 @@ fun ParametricEqScreen(holder: PeqStateHolder, modifier: Modifier = Modifier, sh
                         val graph: @Composable (Modifier) -> Unit = { graphModifier ->
                             PeqGraph(
                                 systemValues = systemValues,
-                                peqState = holder.peqState,
+                                peqState = responsePeqState,
                                 activeBank = holder.selectedScope.bank,
-                                selectedBandId = holder.selectedUuid,
+                                selectedBandId = responseSelection,
                                 modifier = graphModifier.testTag("peq-response-graph")
                                     .border(1.dp, Color(0xFF353535), RoundedCornerShape(10.dp)),
                                 mode = graphMode,

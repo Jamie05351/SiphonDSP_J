@@ -31,6 +31,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -296,6 +297,7 @@ fun PeqGraph(
     val paints = rememberPeqSurfacePaints()
     val glass = rememberGlassPaints()
     val model = remember { PeqResponseModel() }
+    val responseDrawVersion = remember { mutableIntStateOf(0) }
     DisposableEffect(model) { onDispose { model.recycleBitmaps() } }
     val maxFrequency = remember(sampleRate) {
         min(PeqGraphMath.MAX_FREQUENCY, sampleRate * 0.5 * 0.999)
@@ -314,12 +316,15 @@ fun PeqGraph(
     // The ⋮ menu's check mark comes from this; the draw and the tap handler each read the live
     // state themselves (GraphDbRangeState.read), so a change redraws the canvas from the draw
     // phase and a tap always hit-tests the window that is on screen. Nothing is written to the
-    // model during composition.
+    // axis preferences during composition.
     val dbRange = GraphDbRangeState.current()
     val rangeContext = LocalContext.current
     remember(ValuesKey(systemValues), peqState, sampleRate, carBaseline, convolver) {
         model.recompute(systemValues, peqState, sampleRate, carBaseline, convolver)
     }
+    // Publish after composition. Only drawing reads this state; composition must not read and
+    // increment a snapshot counter while it is computing the response.
+    SideEffect { responseDrawVersion.intValue = model.version }
 
     // Spectrum + gain-meter poll, scoped to composition. Acquire/release bracket SpectrumEngine;
     // the tick counter is read only in the draw phase below so it never triggers recomposition.
@@ -443,6 +448,7 @@ fun PeqGraph(
                 paints = paints,
                 glass = glass,
                 model = model,
+                modelVersion = responseDrawVersion.intValue,
                 density = density,
                 systemValues = systemValues,
                 peqState = peqState,
@@ -603,7 +609,7 @@ private fun staticKeyOf(ctx: PeqDrawContext, w: Int, h: Int): Int {
     k = 31 * k + h
     // The model's recompute count, not the values' hash (see ValuesKey): it moves on every real
     // change to the values, and only then.
-    k = 31 * k + ctx.model.version
+    k = 31 * k + ctx.modelVersion
     // Bands are not a data class — hashCode is identity — but the same instances are re-listed
     // each frame from the same peqState, so this stays stable between commits and flips on any
     // commit (applyCandidate always deep-copies).
@@ -1638,6 +1644,7 @@ private class PeqDrawContext(
     val paints: PeqSurfacePaints,
     val glass: PeqGlassPaints,
     val model: PeqResponseModel,
+    val modelVersion: Int,
     val density: Float,
     val systemValues: FloatArray,
     peqState: BmwPeqState,
