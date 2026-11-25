@@ -281,6 +281,8 @@ fun PeqGraph(
     onSelectionCleared: () -> Unit = {},
     showNodeCallout: Boolean = true,
     keepFilterShapesVisible: Boolean = false,
+    // Keep the complete DSP response foregrounded independently of editable bank overlays.
+    showCombinedResponse: Boolean = false,
     compactPlotPadding: Boolean = false,
     graphOptions: PeqGraphOptions? = null,
     carBaseline: CarBaseline? = null,
@@ -456,6 +458,7 @@ fun PeqGraph(
                 selectedId = selectedBandId,
                 channelDisplay = channelDisplay,
                 showIndividualFilters = showIndividualFilters,
+                showCombinedResponse = showCombinedResponse,
                 sampleRate = sampleRate,
                 maxFrequency = maxFrequency,
                 mode = mode,
@@ -620,6 +623,7 @@ private fun staticKeyOf(ctx: PeqDrawContext, w: Int, h: Int): Int {
     k = 31 * k + ctx.channelDisplay.ordinal
     k = 31 * k + ctx.legendControlsInsetDp.hashCode()
     k = 31 * k + if (ctx.showIndividualFilters) 1 else 0
+    k = 31 * k + if (ctx.showCombinedResponse) 1 else 0
     k = 31 * k + if (ctx.showTiltHandles) 1 else 0
     k = 31 * k + (ctx.selectedId?.hashCode() ?: 0)
     k = 31 * k + (ctx.calloutBandId?.hashCode() ?: 0)
@@ -661,7 +665,8 @@ private fun renderStaticLayers(bg: Canvas, fg: Canvas, ctx: PeqDrawContext) {
     }
     val houseItem = ctx.house?.takeIf { ctx.mode == PeqGraphMode.MAGNITUDE }
     drawLegend(
-        fg, g, ctx.paints, ctx.density, ctx.mode, focusedBank = ctx.activeBank.takeIf { ctx.focus >= 0.5f },
+        fg, g, ctx.paints, ctx.density, ctx.mode,
+        focusedBank = ctx.activeBank.takeIf { ctx.focus >= 0.5f && !ctx.showCombinedResponse },
         house = houseItem, houseShown = ctx.houseShown, houseHit = ctx.model.houseLegendHit, housePaint = ctx.glass.houseCurvePaint, controlsInsetDp = ctx.legendControlsInsetDp,
     )
     drawVignette(fg, ctx)
@@ -1015,12 +1020,13 @@ private fun drawHouseCurve(nc: Canvas, ctx: PeqDrawContext) {
 
 /**
  * The full EQ'd (summed) curve. With the full curve in focus (focus 0) it's bright with a glow, L
- * neon purple and R neon green; as a bank takes focus it drops back to one faint thin line behind it.
+ * neon purple and R neon green. Combined-response mode keeps it foregrounded while editing;
+ * otherwise bank focus fades it back to a thin context line.
  */
 private fun drawSumCurve(nc: Canvas, ctx: PeqDrawContext) {
     val g = ctx.geometry
     val p = ctx.paints
-    val bright = 1f - ctx.focus
+    val bright = if (ctx.showCombinedResponse) 1f else 1f - ctx.focus
     if (bright > 0f) {
         if (ctx.channelDisplay != PeqChannelDisplay.RIGHT) {
             val values = ctx.curves.sumDb[BmwOutputChannel.LEFT.ordinal]
@@ -1037,7 +1043,7 @@ private fun drawSumCurve(nc: Canvas, ctx: PeqDrawContext) {
             }
         }
     }
-    if (ctx.focus > 0f) {
+    if (ctx.focus > 0f && !ctx.showCombinedResponse) {
         val values = ctx.curves.sumDb[primaryChannel(ctx)]
         if (values.isNotEmpty()) {
             val faint = ctx.glass.faintSumPaint
@@ -1072,7 +1078,7 @@ private fun bankAudible(ctx: PeqDrawContext, bank: BmwPeqBank): Boolean =
 
 /** The focused bank's own curve, bright (L neon purple, R neon green), faded by focus. */
 private fun drawFocusedBankCurve(nc: Canvas, ctx: PeqDrawContext) {
-    if (ctx.focus <= 0f || !bankAudible(ctx, ctx.activeBank)) return
+    if (ctx.showCombinedResponse || ctx.focus <= 0f || !bankAudible(ctx, ctx.activeBank)) return
     val g = ctx.geometry
     val perChannel = bankCurves(ctx.curves, ctx.activeBank)
     val solid = ctx.glass.bankCurvePaint
@@ -1652,6 +1658,7 @@ private class PeqDrawContext(
     val selectedId: UUID?,
     val channelDisplay: PeqChannelDisplay,
     val showIndividualFilters: Boolean,
+    val showCombinedResponse: Boolean = false,
     val sampleRate: Double,
     val maxFrequency: Double,
     val mode: PeqGraphMode,
