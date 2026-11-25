@@ -205,7 +205,7 @@ fun ParametricEqScreen(holder: PeqStateHolder, modifier: Modifier = Modifier, sh
                         Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()),
                             horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             holder.visibleBands.forEachIndexed { index, band ->
-                                PeqActionButton("%02d".format(index + 1), { select(band) },
+                                PeqActionButton("%02d".format(java.util.Locale.ROOT, holder.filterNumberOffset + index + 1), { select(band) },
                                     Modifier.width(64.dp), selected = band.uuid.toString() == editorId)
                             }
                             if (holder.visibleBands.size < BmwPeqState.MAX_BANDS) {

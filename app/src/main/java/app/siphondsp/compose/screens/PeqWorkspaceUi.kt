@@ -255,7 +255,7 @@ internal fun PeqSelectedFilter(holder: PeqStateHolder, index: Int, onClose: () -
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text("Filter ${index + 1}", color = PeqControlText, fontSize = 20.sp, modifier = Modifier.weight(1f))
+            Text("Filter ${holder.filterNumberOffset + index + 1}", color = PeqControlText, fontSize = 20.sp, modifier = Modifier.weight(1f))
             PeqActionButton("Close", onClose)
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {

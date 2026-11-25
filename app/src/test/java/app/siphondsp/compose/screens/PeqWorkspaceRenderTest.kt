@@ -98,6 +98,14 @@ class PeqWorkspaceRenderTest {
     }
 
     @Test
+    fun addedBandUsesTheGraphNumberInItsChipAndEditor() {
+        compose.onNodeWithText("Low").performClick()
+        compose.onNodeWithText("+ Add").performClick()
+        compose.onNodeWithText("03").assertIsDisplayed()
+        compose.onNodeWithText("Filter 3").assertIsDisplayed()
+    }
+
+    @Test
     @Config(qualifiers = "w360dp-h800dp-port-mdpi")
     fun compactEditorLeavesAtLeastHalfTheGraphAreaAndBankControlsRemainReachable() {
         val graph = compose.onNodeWithTag("peq-response-graph").fetchSemanticsNode().boundsInRoot
