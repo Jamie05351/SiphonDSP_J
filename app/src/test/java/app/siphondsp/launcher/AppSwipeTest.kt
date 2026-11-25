@@ -3,8 +3,26 @@ package app.siphondsp.launcher
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
+import org.junit.Before
+import org.junit.After
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.setMain
+import kotlinx.coroutines.test.resetMain
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class AppSwipeTest {
+    @Before
+    fun setUpMainDispatcher() {
+        Dispatchers.setMain(StandardTestDispatcher())
+    }
+
+    @After
+    fun resetMainDispatcher() {
+        Dispatchers.resetMain()
+    }
+
     @Test
     fun readsTheFrontAppAndTheOpenOnesFromAnAndroid12Dump() {
         val tasks = AppSwipe.parse(ANDROID_12)

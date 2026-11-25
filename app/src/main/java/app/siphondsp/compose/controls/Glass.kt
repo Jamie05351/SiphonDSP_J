@@ -34,6 +34,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -67,7 +68,10 @@ import app.siphondsp.compose.theme.BmwTheme
 
 /** The DSP's purple: the signal line and the edge of menus and of dialogs that don't throw work away. */
 @Composable
-internal fun glassAccent(): Color = BmwTheme.colors.sliderHeadroom
+internal fun glassAccent(): Color = LocalGlassAccent.current ?: BmwTheme.colors.sliderHeadroom
+
+/** A workspace may supply its own control accent without recolouring the signal-chain artwork. */
+internal val LocalGlassAccent = staticCompositionLocalOf<Color?> { null }
 
 /**
  * A menu: a black glass popup edged in the DSP's purple, its lines [GlassItem]s, with [GlassDivider]s

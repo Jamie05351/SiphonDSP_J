@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -47,6 +48,7 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
@@ -77,31 +79,19 @@ import app.siphondsp.utils.extensions.ContextExtensions.toast
 import kotlinx.coroutines.launch
 import timber.log.Timber
 
-/**
- * The Parametric EQ graph/list half of the workspace (roadmap Phase 10e/10f, redesigned to share
- * the toolbar line with [PeqToolbarActions] -- see that composable for the scope switch and
- * action-chip row, both relocated off this screen). A two-page horizontal swipe replaces the old
- * Graph/List toggle: page 1 is [PeqGraph], page 2 is [PeqBandList] for whichever scope
- * ([holder]'s selectedScope, driven by [PeqToolbarActions]'s Pre EQ/Low/Mid buttons) is current.
- *
- * [holder] is created once by `ParametricEqualizerActivity` and shared with [PeqToolbarActions]
- * (a separate Compose tree hosted directly on the toolbar, not nested under this screen) so a
- * scope change there is reflected here -- `PeqStateHolder`'s properties are plain
- * `mutableStateOf`, so this works across composition roots as long as it's the same instance.
- * The 192-float native config is reloaded from disk on every resume (the live
- * `NativeBmwDspUpdated` collector is roadmap 10g). Undo/Redo, Edit-as-string, JSON
- * presets and portrait are dropped (2026-09-09 direction).
- */
+/** Graph and full-size filters pages share one holder and retain their swipe/rotary navigation. */
 @Composable
-fun ParametricEqScreen(holder: PeqStateHolder, modifier: Modifier = Modifier) {
+fun ParametricEqScreen(holder: PeqStateHolder, modifier: Modifier = Modifier, showSpectrum: Boolean = true) {
     val context = LocalContext.current
     val graphPrefs = remember(context) { PeqGraphPreferences(context) }
-
     var systemValues by remember { mutableStateOf(NativeBmwDspValues.load(context)) }
     var graphMode by remember { mutableStateOf(graphPrefs.responseMode) }
     var channelDisplay by remember { mutableStateOf(graphPrefs.channelDisplay) }
     var showOverlays by remember { mutableStateOf(graphPrefs.showIndividualFilters) }
     val showConvolver = rememberShowConvolverInGraphs()
+    // A saved filter selection is not an instruction to open the inspector on entry.
+    var editorId by rememberSaveable(holder.selectedScope) { mutableStateOf<String?>(null) }
+    val editorIndex = holder.visibleBands.indexOfFirst { it.uuid.toString() == editorId }
 
     fun reloadEverything() {
         holder.refreshFromDisk()
@@ -110,63 +100,34 @@ fun ParametricEqScreen(holder: PeqStateHolder, modifier: Modifier = Modifier) {
         channelDisplay = graphPrefs.channelDisplay
         showOverlays = graphPrefs.showIndividualFilters
     }
-
-    LaunchedEffect(holder) { holder.loadCarBaseline() }
-    LaunchedEffect(holder) { holder.loadHouseCurve() }
-
+    LaunchedEffect(holder) { holder.loadCarBaseline(); holder.loadHouseCurve() }
     LifecycleResumeEffect(Unit) {
         reloadEverything()
         onPauseOrDispose { }
     }
-
-    // 10g: keep the graph tracking edits made on the other DSP screens (crossover / tilt / gains
-    // / compressor all send AppEvent.NativeBmwDspUpdated) and full-config swaps (preset
-    // load, app-wide backup restore) without needing a screen re-entry.
     LaunchedEffect(holder) {
         AppEvents.flow.collect { event ->
             when (event) {
-                is AppEvent.NativeBmwDspUpdated ->
-                    event.values.takeIf { it.size == NativeBmwDspValues.SIZE }?.let { systemValues = it.copyOf() }
+                is AppEvent.NativeBmwDspUpdated -> event.values.takeIf { it.size == NativeBmwDspValues.SIZE }
+                    ?.let { systemValues = it.copyOf() }
                 AppEvent.ParametricEqChanged -> holder.refreshFromDisk()
-                AppEvent.PresetLoaded, AppEvent.BackupRestored -> reloadEverything()
+                AppEvent.PresetLoaded, AppEvent.BackupRestored -> { reloadEverything(); editorId = null }
                 else -> Unit
             }
         }
     }
-
-    // --- layout: two-page horizontal swipe, Graph then List -----------------------------------
-    // Replaces the old Graph/List BmwSegmentedControl (moved out entirely, along with the scope
-    // switch and action-chip row -- see PeqToolbarActions). Page state isn't persisted: every
-    // entry starts on the graph, matching how the toggle always defaulted before a
-    // graphPrefs.listModeName restore; swiping during the session is enough on its own.
-    val pagerState = rememberPagerState(pageCount = { 2 })
+    val pager = rememberPagerState(pageCount = { 2 })
+    val scope = rememberCoroutineScope()
     val focusManager = LocalFocusManager.current
-    val pagerScope = rememberCoroutineScope()
-    val contentFocusRequester = remember { FocusRequester() }
-    LaunchedEffect(Unit) { contentFocusRequester.requestFocus() }
-
+    val focus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { focus.requestFocus() }
+    fun select(band: app.siphondsp.model.ParametricEqBand) {
+        holder.selectedUuid = band.uuid
+        editorId = band.uuid.toString()
+    }
     Column(
-        modifier
-            .fillMaxSize()
-            .padding(12.dp)
-            .focusRequester(contentFocusRequester)
-            .focusGroup()
-            // Graph/List paging for a hardware D-pad/rotary controller: swipe is the only way to
-            // turn the page otherwise, and the graph (page 0) has no drag/adjust gesture even for
-            // touch (see PeqGraph) so it holds no focusable content to land D-pad focus on at all.
-            // Left/Right only converts to a page turn once normal focus movement inside this
-            // Compose subtree has nowhere left to go -- e.g. immediately on page 0, or at the
-            // List page's leftmost/rightmost cell -- so it never steals Left/Right away from
-            // moving between a band row's own Hz/dB/Q cells.
-            //
-            // LocalFocusManager only searches this ComposeView -- it can never reach the sidebar's
-            // focusable rows (DspCrossNavBar.populate, a sibling View, not part of this Compose
-            // tree) -- so on page 0, Left has nothing to move to and nowhere to page (already the
-            // leftmost page): both moveFocus and the page check are no-ops. Returning true there
-            // anyway would consume the key and stop it from ever reaching Android's own
-            // cross-View focus search, trapping a rotary user in the content area with no way
-            // back to the sidebar. Only report the event as handled when it actually moved focus
-            // or turned the page.
+        modifier.fillMaxSize().padding(bottom = PeqBottomClearance)
+            .focusRequester(focus).focusGroup()
             .onKeyEvent { event ->
                 if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
                 val direction = when (event.key) {
@@ -175,61 +136,107 @@ fun ParametricEqScreen(holder: PeqStateHolder, modifier: Modifier = Modifier) {
                     else -> return@onKeyEvent false
                 }
                 if (focusManager.moveFocus(direction)) return@onKeyEvent true
-                val targetPage = if (direction == FocusDirection.Right) 1 else 0
-                if (pagerState.currentPage == targetPage) return@onKeyEvent false
-                pagerScope.launch { pagerState.animateScrollToPage(targetPage) }
+                val target = if (direction == FocusDirection.Right) 1 else 0
+                if (pager.currentPage == target) return@onKeyEvent false
+                scope.launch { pager.animateScrollToPage(target) }
                 true
             },
     ) {
-        HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
-            when (page) {
-                0 -> PeqGraph(
-                    systemValues = systemValues,
-                    peqState = holder.peqState,
-                    activeBank = holder.selectedScope.bank,
-                    selectedBandId = holder.selectedUuid,
-                    modifier = Modifier.fillMaxSize(),
-                    mode = graphMode,
-                    channelDisplay = channelDisplay,
-                    showIndividualFilters = showOverlays,
-                    showConvolver = showConvolver,
-                    showTiltHandles = true,
-                    showGainMeters = true,
-                    sampleRate = (RootlessAudioProcessorService.nativeBmwPeqSampleRate() ?: 48_000f).toDouble(),
-                    onNodeTapped = { band -> holder.selectedUuid = band.uuid },
-                    graphOptions = PeqGraphOptions(
-                        onModeChange = { graphMode = it; graphPrefs.responseMode = it },
-                        onChannelDisplayChange = { channelDisplay = it; graphPrefs.channelDisplay = it },
-                        onShowIndividualFiltersChange = { showOverlays = it; graphPrefs.showIndividualFilters = it },
-                        onShowConvolverChange = { graphPrefs.showConvolverInGraphs = it },
-                    ),
-                    carBaseline = holder.graphBaseline,
-                    houseCurve = holder.houseCurve,
-                    showHouseCurve = holder.showHouseCurve,
-                    onShowHouseCurveChange = holder::setHouseCurveShown,
-                )
-                else -> PeqBandList(holder, Modifier.fillMaxSize())
+        HorizontalPager(state = pager, modifier = Modifier.fillMaxSize()) { page ->
+            if (page == 0) {
+                Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    androidx.compose.foundation.layout.BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
+                        val wide = maxWidth >= 720.dp || (maxHeight < 360.dp && maxWidth >= 520.dp)
+                        val editorWidth = (maxWidth * 0.36f).coerceIn(220.dp, 288.dp)
+                        val editorHeight = (maxHeight * 0.45f).coerceAtMost(260.dp)
+                        val graph: @Composable (Modifier) -> Unit = { graphModifier ->
+                            PeqGraph(
+                                systemValues = systemValues,
+                                peqState = holder.peqState,
+                                activeBank = holder.selectedScope.bank,
+                                selectedBandId = holder.selectedUuid,
+                                modifier = graphModifier.testTag("peq-response-graph"),
+                                mode = graphMode,
+                                channelDisplay = channelDisplay,
+                                showIndividualFilters = showOverlays,
+                                showConvolver = showConvolver,
+                                showTiltHandles = true,
+                                showGainMeters = false,
+                                showSpectrum = showSpectrum,
+                                showNodeCallout = false,
+                                keepFilterShapesVisible = true,
+                                onSelectionCleared = { editorId = null },
+                                sampleRate = (RootlessAudioProcessorService.nativeBmwPeqSampleRate() ?: 48_000f).toDouble(),
+                                onNodeTapped = ::select,
+                                graphOptions = PeqGraphOptions(
+                                    onModeChange = { graphMode = it; graphPrefs.responseMode = it; editorId = null },
+                                    onChannelDisplayChange = {
+                                        channelDisplay = it; graphPrefs.channelDisplay = it; editorId = null
+                                    },
+                                    onShowIndividualFiltersChange = { showOverlays = it; graphPrefs.showIndividualFilters = it },
+                                    onShowConvolverChange = { graphPrefs.showConvolverInGraphs = it },
+                                ),
+                                carBaseline = holder.graphBaseline,
+                                houseCurve = holder.houseCurve,
+                                showHouseCurve = holder.showHouseCurve,
+                                onShowHouseCurveChange = holder::setHouseCurveShown,
+                            )
+                        }
+                        if (wide) {
+                            Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+                                graph(Modifier.weight(1f).fillMaxHeight())
+                                if (editorIndex >= 0) PeqSelectedFilter(holder, editorIndex, { editorId = null },
+                                    Modifier.width(editorWidth).fillMaxHeight())
+                            }
+                        } else {
+                            Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                graph(Modifier.weight(1f).fillMaxWidth())
+                                if (editorIndex >= 0) PeqSelectedFilter(holder, editorIndex, { editorId = null },
+                                    Modifier.heightIn(max = editorHeight).fillMaxWidth())
+                            }
+                        }
+                    }
+                    Row(
+                        Modifier.fillMaxWidth().height(44.dp).testTag("peq-filter-bar"),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text("FILTERS", color = PeqMutedText, fontSize = 12.sp)
+                        Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            holder.visibleBands.forEachIndexed { index, band ->
+                                PeqActionButton("%02d".format(java.util.Locale.ROOT, holder.filterNumberOffset + index + 1), { select(band) },
+                                    Modifier.width(64.dp), selected = band.uuid.toString() == editorId)
+                            }
+                            if (holder.visibleBands.size < BmwPeqState.MAX_BANDS) {
+                                PeqActionButton("+ Add", {
+                                    val previousSelection = holder.selectedUuid
+                                    holder.addBand()
+                                    if (holder.selectedUuid != previousSelection) {
+                                        editorId = holder.selectedUuid?.toString()
+                                    }
+                                })
+                            }
+                        }
+                        PeqActionButton("Filters", { scope.launch { pager.animateScrollToPage(1) } }, Modifier.testTag("peq-open-filters"))
+                    }
+                }
+            } else {
+                Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Row(Modifier.fillMaxWidth().height(44.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        PeqActionButton("Graph", { scope.launch { pager.animateScrollToPage(0) } }, Modifier.testTag("peq-open-graph"))
+                        PeqActionButton("Filters", {}, selected = true)
+                    }
+                    PeqBandList(holder, Modifier.weight(1f).fillMaxWidth())
+                }
             }
         }
     }
 }
 
-/**
- * The Pre EQ/Low/Mid scope switch + action-chip row (Reset, Import, Export, Filter tools,
- * Diagnostics, Backup export, Restore backup), relocated onto the toolbar's own line -- see
- * activity_parametric_eq.xml's `peq_toolbar_actions` ComposeView and
- * `ParametricEqualizerActivity`, the only caller. One continuous horizontally-scrolling row: the
- * scope switch is its first (leftmost) item, everything else follows. `end = 25.dp` insets the
- * scrollable viewport from the true screen edge, so content reveals/hides there rather than
- * flush against the bezel.
- *
- * Shares [holder] with [ParametricEqScreen] (same instance, created once by the activity) so a
- * scope change here moves the graph/list there. Diagnostics reads [PeqGraphPreferences] and
- * `NativeBmwDspValues` fresh at click time instead of needing those kept in sync live from the
- * graph's own composition -- both are already persisted, so a fresh read is exactly as current.
- */
+/** Compact bank selector and the existing backup/file/filter/overlay menus. */
 @Composable
-fun PeqToolbarActions(holder: PeqStateHolder, modifier: Modifier = Modifier) {
+fun PeqToolbarActions(holder: PeqStateHolder, modifier: Modifier = Modifier, scopeWidth: androidx.compose.ui.unit.Dp = 340.dp) {
     val context = LocalContext.current
 
     val apoImport = remember(context, holder) {
@@ -275,45 +282,20 @@ fun PeqToolbarActions(holder: PeqStateHolder, modifier: Modifier = Modifier) {
     var diagnosticReport by remember { mutableStateOf<String?>(null) }
     var copyWholeScopeTarget by remember { mutableStateOf<PeqScope?>(null) }
 
-    // The hosting ComposeView spans the toolbar's full width (from x=0, under the native back
-    // arrow) so its own visibility can be toggled as one unit -- this row has to clear that
-    // space itself. dsp_status_strip_margin_start is the same "just past the indented back
-    // arrow" offset dsp_status_strip used before it was hidden on this screen (see
-    // ParametricEqualizerActivity), so the row starts exactly where that strip used to.
-    //
-    // top = 25.dp matches the native toolbar's own paddingTop (activity_parametric_eq.xml):
-    // without it, this Row centers within the ComposeView's full (bezel-padded) height and lands
-    // higher than the toolbar's own (padded-then-centered) back arrow -- close enough to read as
-    // two misaligned rows fighting for the same line rather than one clean line.
-    //
-    // The leading dsp_toolbar_nav_inset gap is applied as a native layout_marginStart on the
-    // ComposeView itself (activity_parametric_eq.xml), not as padding here: a horizontalScroll
-    // Row hit-tests across its whole viewport, empty padding included, so padding alone still
-    // covered the toolbar's back arrow underneath and swallowed its touches.
-    val toolbarFocusRequester = remember { FocusRequester() }
-    LaunchedEffect(Unit) { toolbarFocusRequester.requestFocus() }
+    // The compact PEQ header is already aligned to the sidebar's top bezel.
     Row(
         modifier = modifier
             .fillMaxHeight()
-            .padding(top = 25.dp)
             .horizontalScroll(rememberScrollState())
-            .padding(end = 25.dp)
-            .focusRequester(toolbarFocusRequester)
+            .padding(end = 4.dp)
             .focusGroup(),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // Default height (24dp) restored -- 32dp made the segments cramped enough at a narrow
-        // width to look degraded rather than just smaller. Needs an explicit bounded width here
-        // (unlike its old Modifier.weight(1f), which only works in a plain, non-scrolling Row):
-        // BmwSegmentedControl's own segments use weight(1f) internally, which requires a bounded
-        // parent width to distribute -- inside this horizontalScroll Row, an unconstrained
-        // modifier would give it an unbounded width and crash. 100dp per segment keeps each of the 4
-        // labels ("PRE EQ"/"LOW"/"MID"/"HIGH") comfortably unscrunched.
         PeqScopeControl(
             selected = holder.selectedScope,
             onSelect = { holder.selectedScope = it },
-            modifier = Modifier.width(400.dp),
+            modifier = Modifier.width(scopeWidth),
         )
         // Four menus, so everything fits on the line: the whole-DSP backup first (the most
         // important, and it covers every page, not only the PEQ), then this scope's files, the

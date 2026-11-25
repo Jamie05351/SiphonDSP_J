@@ -11,35 +11,23 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import app.siphondsp.compose.controls.BmwSegmentedControl
 import app.siphondsp.compose.theme.BmwDspTheme
 import app.siphondsp.fragment.PeqScope
-import app.siphondsp.view.BmwDashboardSkin
 
-/**
- * The Pre EQ / Low Band / Mid Band / High Band scope switch -- a [BmwSegmentedControl] over [PeqScope],
- * each segment in its bank's accent (Full = white, Low = blue, Mid = yellow,
- * High = pink). Shared by the
- * graph and list halves of the ported Parametric EQ screen (roadmap Phase 10).
- */
+/** Compact bank chips; graph colours remain independent of the control accent. */
 @Composable
 fun PeqScopeControl(
     selected: PeqScope,
     onSelect: (PeqScope) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    BmwSegmentedControl(
-        options = PeqScope.entries.map { it.label },
-        selectedIndex = PeqScope.entries.indexOf(selected),
-        onSelect = { onSelect(PeqScope.entries[it]) },
-        optionAccents = listOf(
-            Color.White,
-            Color(BmwDashboardSkin.LIGHT_BLUE),
-            Color(BmwDashboardSkin.MID_BAND_YELLOW),
-            Color(BmwDashboardSkin.HIGH_BAND_PINK),
-        ),
-        modifier = modifier,
-    )
+    Row(modifier, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        PeqScope.entries.forEach { scope ->
+            PeqActionButton(scope.label.removeSuffix(" Band"), { onSelect(scope) },
+                Modifier.weight(if (scope == PeqScope.FULL) 1.3f else 1f),
+                selected = scope == selected, contentPadding = 4.dp)
+        }
+    }
 }
 
 @Preview(widthDp = 420, backgroundColor = 0xFF0B0B0B, showBackground = true)
