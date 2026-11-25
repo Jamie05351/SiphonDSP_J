@@ -27,26 +27,24 @@ enum class DspDestination(
 
 /** Geometry of the workspace sidebar rail, shared by the workspaces and the front page's morph. */
 object DspRail {
-    // The head unit is a fixed 1280x480 mdpi display with its own authored dimens; a phone gets a
-    // narrower rail (124dp is too wide on a ~832dp phone). The buffers past the rail (43dp to the
-    // back arrow, +72dp to the status strip) are touch-target spacing and stay the same.
-    private const val PHONE_RAIL_WIDTH_DP = 118f
+    // Every workspace and the launcher morph share the PEQ's tightened sidebar geometry.
+    private const val COMPACT_BREAKPOINT_DP = 720f
+    private const val COMPACT_RAIL_WIDTH_DP = 72f
+    private const val WIDE_RAIL_WIDTH_DP = 104f
     private const val NAV_INSET_DP = 43f
     private const val STATUS_STRIP_GAP_DP = 72f
 
-    /** The rail's width in dp: the head unit's dsp_sidebar_width, or the phone rail. */
-    fun sidebarWidthDp(context: Context): Float =
-        if (context.isHeadUnitDisplay()) {
-            context.resources.getDimension(R.dimen.dsp_sidebar_width) / context.resources.displayMetrics.density
-        } else {
-            PHONE_RAIL_WIDTH_DP
-        }
+    fun sidebarWidthDp(availableWidthDp: Float): Float =
+        if (availableWidthDp < COMPACT_BREAKPOINT_DP) COMPACT_RAIL_WIDTH_DP else WIDE_RAIL_WIDTH_DP
+
+    fun sidebarWidthDp(context: Context): Float = sidebarWidthDp(context.resources.configuration.screenWidthDp.toFloat())
 
     /** Where the status strip and the toolbar actions start, from the screen's left edge, in dp. */
-    fun toolbarActionsStartDp(context: Context): Float =
+    fun toolbarActionsStartDp(context: Context, railWidthDp: Float = sidebarWidthDp(context)): Float =
         if (context.isHeadUnitDisplay()) {
-            context.resources.getDimension(R.dimen.dsp_status_strip_margin_start) / context.resources.displayMetrics.density
+            railWidthDp + (context.resources.getDimension(R.dimen.dsp_status_strip_margin_start) -
+                context.resources.getDimension(R.dimen.dsp_sidebar_width)) / context.resources.displayMetrics.density
         } else {
-            PHONE_RAIL_WIDTH_DP + NAV_INSET_DP + STATUS_STRIP_GAP_DP
+            railWidthDp + NAV_INSET_DP + STATUS_STRIP_GAP_DP
         }
 }
