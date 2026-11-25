@@ -3,6 +3,7 @@ package app.siphondsp.compose.screens
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.test.assertIsNotDisplayed
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
@@ -12,6 +13,21 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.click
+import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.pressKey
+import androidx.compose.ui.platform.LocalInputModeManager
+import androidx.compose.ui.input.InputModeManager
+import androidx.compose.ui.input.InputMode
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.test.swipeLeft
+import androidx.compose.ui.test.swipeRight
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
+import app.siphondsp.compose.nav.DspWorkspaceScaffold
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.semantics.SemanticsActions
@@ -55,6 +71,13 @@ class PeqWorkspaceRenderTest {
     @get:Rule val compose = createEmptyComposeRule()
     private lateinit var controller: ActivityController<ComponentActivity>
     private lateinit var holder: PeqStateHolder
+    private lateinit var inputMode: InputModeManager
+    private val navigator = object : AppNavigator {
+        override fun open(route: String) = Unit
+        override fun openWorkspace(destination: DspDestination, page: Int) = Unit
+        override fun back() = Unit
+        override fun home() = Unit
+    }
 
     @Before
     fun openWorkspace() {
@@ -66,13 +89,9 @@ class PeqWorkspaceRenderTest {
         assertTrue(state.persist(activity))
         holder = PeqStateHolder(activity)
         activity.setContent {
+            inputMode = LocalInputModeManager.current
             BmwDspTheme {
-                CompositionLocalProvider(LocalAppNavigator provides object : AppNavigator {
-                    override fun open(route: String) = Unit
-                    override fun openWorkspace(destination: DspDestination, page: Int) = Unit
-                    override fun back() = Unit
-                    override fun home() = Unit
-                }) { PeqWorkspaceLayout(holder, showSpectrum = false) }
+                CompositionLocalProvider(LocalAppNavigator provides navigator) { PeqWorkspaceLayout(holder, showSpectrum = false) }
             }
         }
         compose.waitForIdle()
@@ -304,11 +323,11 @@ class PeqWorkspaceRenderTest {
     fun channelButtonsPersistTheViewAndTheFullFiltersPageRemainsReachable() {
         compose.onNodeWithText("R").performClick().assertIsSelected()
         assertEquals(PeqChannelDisplay.RIGHT, PeqGraphPreferences(controller.get()).channelDisplay)
-        compose.onNodeWithTag("peq-open-filters").performClick()
+        swipeToFilters()
         compose.onNodeWithText("FREQUENCY").assertIsDisplayed()
         compose.onNodeWithText("648 Hz").assertIsDisplayed()
         saveRender("filters")
-        compose.onNodeWithTag("peq-open-graph").performClick()
+        swipeToGraph()
         compose.onNodeWithTag("peq-response-graph").assertIsDisplayed()
         compose.onNodeWithTag("peq-filter-editor").assertDoesNotExist()
     }
@@ -319,7 +338,7 @@ class PeqWorkspaceRenderTest {
         compose.onNodeWithText("+ Add").performClick()
         compose.onNodeWithText("03").assertIsDisplayed()
         compose.onNodeWithText("Filter 3").assertIsDisplayed()
-        compose.onNodeWithTag("peq-open-filters").performClick()
+        swipeToFilters()
         compose.onNodeWithText("3").assertIsDisplayed()
         listOf("frequency", "gain", "Q").forEach { parameter ->
             compose.onNodeWithContentDescription("Edit Filter 3 $parameter").assertIsDisplayed()
@@ -390,7 +409,7 @@ class PeqWorkspaceRenderTest {
     }
 
     private fun assertFilterButtonsFitWidth(showSteppers: Boolean = true, minTouchWidth: Float = 43f) {
-        compose.onNodeWithTag("peq-open-filters").performClick()
+        swipeToFilters()
         val table = compose.onNodeWithTag("peq-filter-table").fetchSemanticsNode().boundsInRoot
         val center = compose.onNodeWithContentDescription("Edit Filter 1 frequency").fetchSemanticsNode().boundsInRoot.center.y
         listOf("frequency", "gain", "Q").forEach { parameter ->
@@ -417,6 +436,95 @@ class PeqWorkspaceRenderTest {
         assertTrue(selectedGraph.height >= graph.height * 0.5f)
         compose.onNodeWithTag("peq-filter-editor").assertIsDisplayed()
         saveRender("compact-selected")
+    }
+
+    @Test
+    fun dpadLeftFromTheFiltersBoundaryReturnsToTheGraph() {
+        swipeToFilters()
+        compose.runOnIdle { inputMode.requestInputMode(InputMode.Keyboard) }
+        val channel = compose.onAllNodesWithText("L+R")[0]
+        channel.performSemanticsAction(SemanticsActions.RequestFocus) { it() }
+        channel.assertIsFocused()
+        channel.performKeyInput { pressKey(Key.DirectionRight) }
+        val type = compose.onAllNodesWithText("PK")[0]
+        type.assertIsFocused()
+        type.performKeyInput { pressKey(Key.DirectionLeft) }
+        channel.assertIsFocused()
+        compose.onNodeWithTag("peq-filter-table").assertIsDisplayed()
+        channel.performKeyInput { pressKey(Key.DirectionLeft) }
+        compose.waitForIdle()
+        compose.onNodeWithTag("peq-response-graph").assertIsDisplayed()
+        compose.onNodeWithTag("peq-filter-table").assertIsNotDisplayed()
+    }
+
+    @Test
+    fun dpadLeftFromAddFilterReturnsToTheGraph() {
+        swipeToFilters()
+        compose.runOnIdle { inputMode.requestInputMode(InputMode.Keyboard) }
+        val add = compose.onNodeWithText("+ Add filter")
+        add.performSemanticsAction(SemanticsActions.RequestFocus) { it() }
+        add.assertIsFocused()
+        add.performKeyInput { pressKey(Key.DirectionLeft) }
+        compose.waitForIdle()
+        compose.onNodeWithTag("peq-response-graph").assertIsDisplayed()
+    }
+
+    private fun swipeToFilters() {
+        compose.onNodeWithTag("peq-pages").performTouchInput { swipeLeft() }
+        compose.waitForIdle()
+    }
+
+    private fun swipeToGraph() {
+        compose.onNodeWithTag("peq-pages").performTouchInput { swipeRight() }
+        compose.waitForIdle()
+    }
+
+    @Test
+    fun swipeNavigationReclaimsTheFiltersHeaderAndKeepsTheBlueFrame() {
+        compose.onNodeWithTag("peq-open-filters").assertDoesNotExist()
+        val graph = compose.onNodeWithTag("peq-response-graph").fetchSemanticsNode().boundsInRoot
+        val frame = compose.onNodeWithTag("peq-content-frame").fetchSemanticsNode().boundsInRoot
+        compose.runOnIdle {
+            val bitmap = controller.get().window.decorView.drawToBitmap()
+            assertEquals(android.graphics.Color.rgb(10, 142, 223),
+                bitmap.getPixel(frame.center.x.roundToInt(), frame.top.roundToInt() + 1))
+            bitmap.recycle()
+        }
+        swipeToFilters()
+        compose.onNodeWithTag("peq-open-graph").assertDoesNotExist()
+        val table = compose.onNodeWithTag("peq-filter-table").fetchSemanticsNode().boundsInRoot
+        assertEquals("The filter table must start directly below the toolbar", graph.top, table.top, 1f)
+        assertTrue("The removed navigation row must become usable table space", table.height >= graph.height + 43f)
+        saveRender("filters-no-navigation")
+        swipeToGraph()
+        compose.onNodeWithTag("peq-response-graph").assertIsDisplayed()
+    }
+
+    @Test
+    fun headUnitSidebarsHaveIdenticalGeometryAcrossAllSubmenus() = assertSharedSidebarGeometry()
+
+    @Test
+    @Config(qualifiers = "w360dp-h800dp-port-mdpi")
+    fun phoneSidebarsHaveIdenticalGeometryAcrossAllSubmenus() = assertSharedSidebarGeometry()
+
+    private fun assertSharedSidebarGeometry() {
+        val peq = compose.onNodeWithTag("dsp-sidebar").fetchSemanticsNode().boundsInRoot
+        DspDestination.entries.filter { it != DspDestination.PARAMETRIC_EQ }.forEach { destination ->
+            compose.runOnIdle {
+                controller.get().setContent {
+                    BmwDspTheme {
+                        CompositionLocalProvider(LocalAppNavigator provides navigator) {
+                            DspWorkspaceScaffold(destination, {}, {}, showStatusStrip = false) {
+                                Box(Modifier.fillMaxSize().testTag("test-workspace-content"))
+                            }
+                        }
+                    }
+                }
+            }
+            compose.waitForIdle()
+            assertEquals("$destination must match the PEQ sidebar", peq,
+                compose.onNodeWithTag("dsp-sidebar").fetchSemanticsNode().boundsInRoot)
+        }
     }
 
     private fun saveRender(name: String) {

@@ -1,6 +1,7 @@
 package app.siphondsp.compose.nav
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -51,13 +52,13 @@ fun DspWorkspaceScaffold(
 ) {
     val context = LocalContext.current
     val navigator = LocalAppNavigator.current
-    val railWidth = remember(context) { DspRail.sidebarWidthDp(context).dp }
-    val actionsStart = remember(context) { DspRail.toolbarActionsStartDp(context).dp }
     val toolbarHeight = dimensionResource(R.dimen.dsp_workspace_toolbar_height)
     val navInset = dimensionResource(R.dimen.dsp_toolbar_nav_inset)
     val destinations = remember { DspDestination.entries.filter { it.showInPrimaryNav } }
 
-    Box(Modifier.fillMaxSize()) {
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val railWidth = DspRail.sidebarWidthDp(maxWidth.value).dp
+        val actionsStart = DspRail.toolbarActionsStartDp(context, railWidth.value).dp
         DspWorkspaceBackdrop(railWidth, accent = current.cardStyle().first)
 
         DspSidebarRail(

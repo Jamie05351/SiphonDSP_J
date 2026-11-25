@@ -1,6 +1,7 @@
 package app.siphondsp.compose.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -45,6 +46,7 @@ import app.siphondsp.model.ParametricEqBand
 import app.siphondsp.model.ParametricEqChannel
 import app.siphondsp.model.ParametricEqFilterType
 import app.siphondsp.view.DspDestination
+import app.siphondsp.view.DspRail
 
 internal val PeqControlBlue = Color(0xFF0A8EDF)
 internal val PeqControlText = Color(0xFFF3F6FA)
@@ -53,7 +55,6 @@ internal val PeqControlFill = Color(0xFF222530)
 internal val PeqPanelFill = Color(0xFF181A22)
 internal val PeqParameterGap = 20.dp
 internal val PeqBottomClearance = 24.dp
-internal val PeqSidebarWidth = 104.dp
 
 /** The same global numbering used for graph node and filter-shape colours. */
 internal val PeqStateHolder.filterNumberOffset: Int
@@ -64,24 +65,27 @@ internal val PeqStateHolder.filterNumberOffset: Int
         app.siphondsp.fragment.PeqScope.HIGH -> peqState.fullRangeBands.size + peqState.lowBandBands.size + peqState.midBandBands.size
     }
 
-/** PEQ owns its compact chrome; the other DSP workspaces retain their authored geometry. */
+/** PEQ's compact controls use the same rail geometry as the other DSP workspaces. */
 @Composable
 internal fun PeqWorkspaceLayout(holder: PeqStateHolder, showSpectrum: Boolean = true) {
     val navigator = LocalAppNavigator.current
     CompositionLocalProvider(LocalGlassAccent provides PeqControlBlue) {
         BoxWithConstraints(Modifier.fillMaxSize()) {
             val compact = maxWidth < 720.dp
+            val railWidth = DspRail.sidebarWidthDp(maxWidth.value).dp
             Row(Modifier.fillMaxSize().testTag("peq-workspace").background(Color(0xFF101010))) {
                 DspSidebarRail(
                     destinations = DspDestination.entries.filter { it.showInPrimaryNav },
                     current = DspDestination.PARAMETRIC_EQ,
                     canNavigate = { true },
                     onNavigate = { navigator.openWorkspace(it) },
-                    modifier = Modifier.width(if (compact) 72.dp else PeqSidebarWidth).fillMaxHeight(),
-                    facia = 4.dp,
+                    modifier = Modifier.width(railWidth).fillMaxHeight(),
                 )
                 Column(
-                    Modifier.weight(1f).fillMaxHeight().padding(start = 4.dp, end = 4.dp, top = 4.dp),
+                    Modifier.weight(1f).fillMaxHeight()
+                        .testTag("peq-content-frame")
+                        .border(2.dp, PeqControlBlue, RoundedCornerShape(10.dp))
+                        .padding(start = 4.dp, end = 4.dp, top = 4.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     Row(Modifier.fillMaxWidth().height(48.dp), verticalAlignment = Alignment.CenterVertically) {
