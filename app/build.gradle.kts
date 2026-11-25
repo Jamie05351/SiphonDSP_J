@@ -254,6 +254,7 @@ dependencies {
     testImplementation("org.mockito.kotlin:mockito-kotlin:5.4.0")
     testImplementation("org.robolectric:robolectric:4.16.1")
     testImplementation("androidx.test:core:1.6.1")
+    testImplementation("androidx.compose.ui:ui-test-junit4")
     // Robolectric 4.16.1 transitively pulls conscrypt-openjdk-uber:2.5.2, whose signing
     // certificate has since expired with no trusted timestamp -- the JVM's class-load-time
     // jar verifier rejects it (SecurityException at ManifestEntryVerifier), even though it's

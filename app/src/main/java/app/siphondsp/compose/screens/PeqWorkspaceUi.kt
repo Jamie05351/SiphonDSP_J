@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -24,6 +25,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
@@ -64,28 +66,32 @@ internal val PeqStateHolder.filterNumberOffset: Int
 
 /** PEQ owns its compact chrome; the other DSP workspaces retain their authored geometry. */
 @Composable
-internal fun PeqWorkspaceLayout(holder: PeqStateHolder) {
+internal fun PeqWorkspaceLayout(holder: PeqStateHolder, showSpectrum: Boolean = true) {
     val navigator = LocalAppNavigator.current
     CompositionLocalProvider(LocalGlassAccent provides PeqControlBlue) {
-        Row(Modifier.fillMaxSize().background(Color(0xFF101116))) {
+        BoxWithConstraints(Modifier.fillMaxSize()) {
+        val compact = maxWidth < 720.dp
+        Row(Modifier.fillMaxSize().testTag("peq-workspace").background(Color(0xFF101116))) {
             DspSidebarRail(
                 destinations = DspDestination.entries.filter { it.showInPrimaryNav },
                 current = DspDestination.PARAMETRIC_EQ,
                 canNavigate = { true },
                 onNavigate = { navigator.openWorkspace(it) },
-                modifier = Modifier.width(PeqSidebarWidth).fillMaxHeight(),
+                modifier = Modifier.width(if (compact) 72.dp else PeqSidebarWidth).fillMaxHeight(),
                 facia = 4.dp,
             )
             Column(
-                Modifier.weight(1f).fillMaxHeight().padding(start = 20.dp, end = 20.dp, top = 4.dp),
+                Modifier.weight(1f).fillMaxHeight().padding(start = if (compact) 8.dp else 20.dp, end = if (compact) 8.dp else 20.dp, top = 4.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Row(Modifier.fillMaxWidth().height(48.dp), verticalAlignment = Alignment.CenterVertically) {
-                    PeqActionButton("‹ Parametric EQ", navigator::back, Modifier.width(190.dp))
-                    PeqToolbarActions(holder, Modifier.weight(1f))
+                    PeqActionButton(if (compact) "‹" else "‹ Parametric EQ", navigator::back,
+                        Modifier.width(if (compact) 44.dp else 190.dp))
+                    PeqToolbarActions(holder, Modifier.weight(1f), if (compact) 220.dp else 340.dp)
                 }
-                ParametricEqScreen(holder, Modifier.weight(1f).fillMaxWidth())
+                ParametricEqScreen(holder, Modifier.weight(1f).fillMaxWidth(), showSpectrum)
             }
+        }
         }
     }
 }
@@ -228,7 +234,7 @@ internal fun PeqSelectedFilter(holder: PeqStateHolder, index: Int, onClose: () -
     val band = holder.visibleBands.getOrNull(index) ?: return
     val actions = rememberPeqFilterActions(holder, index)
     Column(
-        modifier.clip(RoundedCornerShape(12.dp)).background(PeqPanelFill)
+        modifier.testTag("peq-filter-editor").clip(RoundedCornerShape(12.dp)).background(PeqPanelFill)
             .verticalScroll(rememberScrollState()).padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {

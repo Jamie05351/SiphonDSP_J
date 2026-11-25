@@ -48,6 +48,7 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
@@ -80,7 +81,7 @@ import timber.log.Timber
 
 /** Graph and full-size filters pages share one holder and retain their swipe/rotary navigation. */
 @Composable
-fun ParametricEqScreen(holder: PeqStateHolder, modifier: Modifier = Modifier) {
+fun ParametricEqScreen(holder: PeqStateHolder, modifier: Modifier = Modifier, showSpectrum: Boolean = true) {
     val context = LocalContext.current
     val graphPrefs = remember(context) { PeqGraphPreferences(context) }
     var systemValues by remember { mutableStateOf(NativeBmwDspValues.load(context)) }
@@ -145,20 +146,23 @@ fun ParametricEqScreen(holder: PeqStateHolder, modifier: Modifier = Modifier) {
             if (page == 0) {
                 Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     androidx.compose.foundation.layout.BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
-                        val wide = maxWidth >= 720.dp
+                        val wide = maxWidth >= 720.dp || (maxHeight < 360.dp && maxWidth >= 520.dp)
+                        val editorWidth = (maxWidth * 0.36f).coerceIn(220.dp, 288.dp)
+                        val editorHeight = (maxHeight * 0.45f).coerceAtMost(260.dp)
                         val graph: @Composable (Modifier) -> Unit = { graphModifier ->
                             PeqGraph(
                                 systemValues = systemValues,
                                 peqState = holder.peqState,
                                 activeBank = holder.selectedScope.bank,
                                 selectedBandId = holder.selectedUuid,
-                                modifier = graphModifier,
+                                modifier = graphModifier.testTag("peq-response-graph"),
                                 mode = graphMode,
                                 channelDisplay = channelDisplay,
                                 showIndividualFilters = showOverlays,
                                 showConvolver = showConvolver,
                                 showTiltHandles = true,
                                 showGainMeters = false,
+                                showSpectrum = showSpectrum,
                                 showNodeCallout = false,
                                 keepFilterShapesVisible = true,
                                 onSelectionCleared = { editorId = null },
@@ -182,18 +186,18 @@ fun ParametricEqScreen(holder: PeqStateHolder, modifier: Modifier = Modifier) {
                             Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
                                 graph(Modifier.weight(1f).fillMaxHeight())
                                 if (editorIndex >= 0) PeqSelectedFilter(holder, editorIndex, { editorId = null },
-                                    Modifier.width(288.dp).fillMaxHeight())
+                                    Modifier.width(editorWidth).fillMaxHeight())
                             }
                         } else {
                             Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 graph(Modifier.weight(1f).fillMaxWidth())
                                 if (editorIndex >= 0) PeqSelectedFilter(holder, editorIndex, { editorId = null },
-                                    Modifier.heightIn(max = 260.dp).fillMaxWidth())
+                                    Modifier.heightIn(max = editorHeight).fillMaxWidth())
                             }
                         }
                     }
                     Row(
-                        Modifier.fillMaxWidth().height(44.dp),
+                        Modifier.fillMaxWidth().height(44.dp).testTag("peq-filter-bar"),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
@@ -229,7 +233,7 @@ fun ParametricEqScreen(holder: PeqStateHolder, modifier: Modifier = Modifier) {
 
 /** Compact bank selector and the existing backup/file/filter/overlay menus. */
 @Composable
-fun PeqToolbarActions(holder: PeqStateHolder, modifier: Modifier = Modifier) {
+fun PeqToolbarActions(holder: PeqStateHolder, modifier: Modifier = Modifier, scopeWidth: androidx.compose.ui.unit.Dp = 340.dp) {
     val context = LocalContext.current
 
     val apoImport = remember(context, holder) {
@@ -288,7 +292,7 @@ fun PeqToolbarActions(holder: PeqStateHolder, modifier: Modifier = Modifier) {
         PeqScopeControl(
             selected = holder.selectedScope,
             onSelect = { holder.selectedScope = it },
-            modifier = Modifier.width(340.dp),
+            modifier = Modifier.width(scopeWidth),
         )
         // Four menus, so everything fits on the line: the whole-DSP backup first (the most
         // important, and it covers every page, not only the PEQ), then this scope's files, the
