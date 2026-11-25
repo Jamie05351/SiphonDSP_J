@@ -450,6 +450,7 @@ fun PeqGraph(
                 mode = mode,
                 showTiltHandles = showTiltHandles,
                 showGainMeters = showGainMeters,
+                legendControlsInsetDp = if (graphOptions != null) 220f else 0f,
                 focus = bandFocus,
                 calloutBandId = callout?.band?.uuid,
                 highlightId = tappedNodeId,
@@ -493,6 +494,7 @@ fun PeqGraph(
                         when (channel) { PeqChannelDisplay.BOTH -> "L/R"; PeqChannelDisplay.LEFT -> "L"; PeqChannelDisplay.RIGHT -> "R" },
                         { opts.onChannelDisplayChange(channel) },
                         Modifier.width(48.dp), selected = channelDisplay == channel,
+                        contentPadding = 4.dp,
                     )
                 }
                 PeqGraphOptionsButton(
@@ -605,6 +607,7 @@ private fun staticKeyOf(ctx: PeqDrawContext, w: Int, h: Int): Int {
     k = 31 * k + 961 * ctx.midBands.hashCode()
     k = 31 * k + ctx.mode.ordinal
     k = 31 * k + ctx.channelDisplay.ordinal
+    k = 31 * k + ctx.legendControlsInsetDp.hashCode()
     k = 31 * k + if (ctx.showIndividualFilters) 1 else 0
     k = 31 * k + if (ctx.showTiltHandles) 1 else 0
     k = 31 * k + (ctx.selectedId?.hashCode() ?: 0)
@@ -648,7 +651,7 @@ private fun renderStaticLayers(bg: Canvas, fg: Canvas, ctx: PeqDrawContext) {
     val houseItem = ctx.house?.takeIf { ctx.mode == PeqGraphMode.MAGNITUDE }
     drawLegend(
         fg, g, ctx.paints, ctx.density, ctx.mode, focusedBank = ctx.activeBank.takeIf { ctx.focus >= 0.5f },
-        house = houseItem, houseShown = ctx.houseShown, houseHit = ctx.model.houseLegendHit, housePaint = ctx.glass.houseCurvePaint,
+        house = houseItem, houseShown = ctx.houseShown, houseHit = ctx.model.houseLegendHit, housePaint = ctx.glass.houseCurvePaint, controlsInsetDp = ctx.legendControlsInsetDp,
     )
     drawVignette(fg, ctx)
 }
@@ -764,12 +767,16 @@ private fun drawLegend(
     houseShown: Boolean = true,
     houseHit: RectF? = null,
     housePaint: Paint? = null,
+    controlsInsetDp: Float = 0f,
 ) {
     houseHit?.setEmpty()
     val baseline = g.top - 8f * density
+    val legendRight = (g.right - controlsInsetDp * density).coerceAtLeast(g.left)
     fun tinted(color: Int) = Paint(p.unifiedLegendPaint).apply { this.color = color }
     when (mode) {
         PeqGraphMode.PHASE -> {
+            nc.save()
+            nc.clipRect(g.left, 0f, legendRight, g.top)
             nc.drawText("LOW", g.left, baseline, tinted(p.bankColorLow))
             nc.drawText("MID", g.left + 48f * density, baseline, tinted(p.bankColorMid))
             nc.drawText("HIGH", g.left + 92f * density, baseline, tinted(p.bankColorHigh))
@@ -777,6 +784,7 @@ private fun drawLegend(
                 "FINAL SUM PHASE (L purple / R green) · compressor not shown (nonlinear)",
                 g.left + 146f * density, baseline, p.unifiedLegendPaint,
             )
+            nc.restore()
         }
         PeqGraphMode.MAGNITUDE -> {
             // Left: the bank colour key. Right: what has focus, and its L purple / R green key.
@@ -786,9 +794,12 @@ private fun drawLegend(
                 "MID" to p.bankColorMid, "HIGH" to p.bankColorHigh,
             )) {
                 val paint = tinted(color)
+                if (x + paint.measureText(label) > legendRight) break
                 nc.drawText(label, x, baseline, paint)
                 x += paint.measureText(label) + 14f * density
             }
+            // A compact graph keeps the bank key that fits; the channel buttons provide the rest.
+            if (legendRight - x < 150f * density) return
             val focusLabel = focusedBank?.let { bankShortLabel(it) } ?: "SUM"
             val focusColor = focusedBank?.let { bankColor(p, it) } ?: SumCurveColor
             val sample = 20f * density
@@ -801,7 +812,7 @@ private fun drawLegend(
                 color = focusColor
             }
             val midY = baseline - p.unifiedLegendPaint.textSize * 0.32f
-            var right = g.right - 190f * density
+            var right = legendRight
             right -= keyPaint.measureText("R"); nc.drawText("R", right, baseline, keyPaint)
             right -= gap + sample
             line.color = RightChannelColor
@@ -1634,6 +1645,7 @@ private class PeqDrawContext(
     val mode: PeqGraphMode,
     val showTiltHandles: Boolean = false,
     val showGainMeters: Boolean = false,
+    val legendControlsInsetDp: Float = 0f,
     /** 1 = [activeBank] in focus (its curve, filter shapes, nodes); 0 = the full curve. */
     val focus: Float = 1f,
     val calloutBandId: UUID? = null,

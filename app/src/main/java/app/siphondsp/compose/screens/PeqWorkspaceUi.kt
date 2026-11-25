@@ -70,28 +70,28 @@ internal fun PeqWorkspaceLayout(holder: PeqStateHolder, showSpectrum: Boolean = 
     val navigator = LocalAppNavigator.current
     CompositionLocalProvider(LocalGlassAccent provides PeqControlBlue) {
         BoxWithConstraints(Modifier.fillMaxSize()) {
-        val compact = maxWidth < 720.dp
-        Row(Modifier.fillMaxSize().testTag("peq-workspace").background(Color(0xFF101116))) {
-            DspSidebarRail(
-                destinations = DspDestination.entries.filter { it.showInPrimaryNav },
-                current = DspDestination.PARAMETRIC_EQ,
-                canNavigate = { true },
-                onNavigate = { navigator.openWorkspace(it) },
-                modifier = Modifier.width(if (compact) 72.dp else PeqSidebarWidth).fillMaxHeight(),
-                facia = 4.dp,
-            )
-            Column(
-                Modifier.weight(1f).fillMaxHeight().padding(start = if (compact) 8.dp else 20.dp, end = if (compact) 8.dp else 20.dp, top = 4.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Row(Modifier.fillMaxWidth().height(48.dp), verticalAlignment = Alignment.CenterVertically) {
-                    PeqActionButton(if (compact) "‹" else "‹ Parametric EQ", navigator::back,
-                        Modifier.width(if (compact) 44.dp else 190.dp))
-                    PeqToolbarActions(holder, Modifier.weight(1f), if (compact) 220.dp else 340.dp)
+            val compact = maxWidth < 720.dp
+            Row(Modifier.fillMaxSize().testTag("peq-workspace").background(Color(0xFF101116))) {
+                DspSidebarRail(
+                    destinations = DspDestination.entries.filter { it.showInPrimaryNav },
+                    current = DspDestination.PARAMETRIC_EQ,
+                    canNavigate = { true },
+                    onNavigate = { navigator.openWorkspace(it) },
+                    modifier = Modifier.width(if (compact) 72.dp else PeqSidebarWidth).fillMaxHeight(),
+                    facia = 4.dp,
+                )
+                Column(
+                    Modifier.weight(1f).fillMaxHeight().padding(start = if (compact) 8.dp else 20.dp, end = if (compact) 8.dp else 20.dp, top = 4.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Row(Modifier.fillMaxWidth().height(48.dp), verticalAlignment = Alignment.CenterVertically) {
+                        PeqActionButton(if (compact) "‹" else "‹ Parametric EQ", navigator::back,
+                            Modifier.width(if (compact) 44.dp else 190.dp))
+                        PeqToolbarActions(holder, Modifier.weight(1f), if (compact) 220.dp else 340.dp)
+                    }
+                    ParametricEqScreen(holder, Modifier.weight(1f).fillMaxWidth(), showSpectrum)
                 }
-                ParametricEqScreen(holder, Modifier.weight(1f).fillMaxWidth(), showSpectrum)
             }
-        }
         }
     }
 }
@@ -103,6 +103,7 @@ internal fun PeqActionButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     selected: Boolean = false,
+    contentPadding: androidx.compose.ui.unit.Dp = 12.dp,
 ) {
     val interaction = remember { MutableInteractionSource() }
     Box(
@@ -112,7 +113,7 @@ internal fun PeqActionButton(
             .clickable(interactionSource = interaction, indication = null, role = Role.Button, onClick = onClick)
             .bmwFocusRing(interaction)
             .semantics { this.selected = selected }
-            .padding(horizontal = 12.dp),
+            .padding(horizontal = contentPadding),
         contentAlignment = Alignment.Center,
     ) {
         Text(label, color = PeqControlText, fontSize = 15.sp, fontWeight = FontWeight.Medium, maxLines = 1)
@@ -157,10 +158,25 @@ internal fun PeqNumericControl(
 /** Reuses the holder's validation/preview/save path in both the table and selected-node editor. */
 internal class PeqFilterActions(
     private val holder: PeqStateHolder,
-    private val index: Int,
+    index: Int,
     private val dialogs: PeqDialogs,
 ) {
-    private val band get() = holder.visibleBands.getOrNull(index)
+    private val scope = holder.selectedScope
+    private val identity = holder.visibleBands.getOrNull(index)?.uuid
+    private val currentIndex: Int
+        get() = if (holder.selectedScope != scope || identity == null) -1
+            else holder.visibleBands.indexOfFirst { it.uuid == identity }
+    private val band get() = holder.visibleBands.getOrNull(currentIndex)
+
+    private fun edit(source: String, transform: (ParametricEqBand) -> ParametricEqBand) {
+        val index = currentIndex
+        if (index >= 0) holder.commitBandEdit(index, source, transform)
+    }
+
+    private fun preview(source: String, transform: (ParametricEqBand) -> ParametricEqBand) {
+        val index = currentIndex
+        if (index >= 0) holder.previewBandEdit(index, source, transform)
+    }
 
     fun channel() {
         val current = band ?: return
@@ -169,7 +185,7 @@ internal class PeqFilterActions(
             app.siphondsp.R.string.peq_channel, options.map { it.displayLabel }, options.indexOf(current.channel),
             android.graphics.Color.rgb(10, 142, 223),
         ) { picked -> options.getOrNull(picked)?.let { channel ->
-            holder.commitBandEdit(index, "edit_channel") { it.withChannel(channel) }
+            edit("edit_channel") { it.withChannel(channel) }
         } }
     }
 
@@ -180,42 +196,42 @@ internal class PeqFilterActions(
             app.siphondsp.R.string.peq_col_filter, options.map { it.displayLabel }, options.indexOf(current.filterType),
             android.graphics.Color.rgb(10, 142, 223),
         ) { picked -> options.getOrNull(picked)?.let { type ->
-            holder.commitBandEdit(index, "edit_type") { it.withType(type) }
+            edit("edit_type") { it.withType(type) }
         } }
     }
 
     fun frequency() {
         val current = band ?: return
         dialogs.showValueInput("Frequency", current.frequency, 20.0, 20000.0, "Hz") { value ->
-            holder.commitBandEdit(index, "edit_frequency") { it.withFrequency(value) }
+            edit("edit_frequency") { it.withFrequency(value) }
         }
     }
 
     fun gain() {
         val current = band ?: return
         dialogs.showValueInput("Gain", current.gain, -30.0, 30.0, "dB") { value ->
-            holder.commitBandEdit(index, "edit_gain") { it.withGain(value) }
+            edit("edit_gain") { it.withGain(value) }
         }
     }
 
     fun q() {
         val current = band ?: return
         dialogs.showValueInput("Q", current.q, 0.1, 30.0, null) { value ->
-            holder.commitBandEdit(index, "edit_q") { it.withQ(value) }
+            edit("edit_q") { it.withQ(value) }
         }
     }
 
-    fun stepFrequency(direction: Int, times: Int) = holder.previewBandEdit(index, "step_frequency") { band ->
+    fun stepFrequency(direction: Int, times: Int) = preview("step_frequency") { band ->
         var frequency = band.frequency
         repeat(times) { frequency = StepMath.nextFrequency(frequency, direction) }
         band.withFrequency(frequency.coerceIn(20.0, 20000.0))
     }
 
-    fun stepGain(direction: Int, times: Int) = holder.previewBandEdit(index, "step_gain") {
+    fun stepGain(direction: Int, times: Int) = preview("step_gain") {
         it.withGain((it.gain + direction * times * 0.5).coerceIn(-30.0, 30.0))
     }
 
-    fun stepQ(direction: Int, times: Int) = holder.previewBandEdit(index, "step_q") {
+    fun stepQ(direction: Int, times: Int) = preview("step_q") {
         it.withQ((it.q + direction * times * 0.1).coerceIn(0.1, 30.0))
     }
 
@@ -226,7 +242,7 @@ internal class PeqFilterActions(
 internal fun rememberPeqFilterActions(holder: PeqStateHolder, index: Int): PeqFilterActions {
     val context = androidx.compose.ui.platform.LocalContext.current
     val dialogs = remember(context) { PeqDialogs(context) }
-    return remember(holder, index, holder.selectedScope, dialogs) { PeqFilterActions(holder, index, dialogs) }
+    return remember(holder, holder.visibleBands.getOrNull(index)?.uuid, holder.selectedScope, dialogs) { PeqFilterActions(holder, index, dialogs) }
 }
 
 @Composable

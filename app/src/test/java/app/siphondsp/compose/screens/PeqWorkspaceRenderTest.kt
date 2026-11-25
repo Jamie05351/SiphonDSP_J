@@ -88,11 +88,11 @@ class PeqWorkspaceRenderTest {
     fun channelButtonsPersistTheViewAndTheFullFiltersPageRemainsReachable() {
         compose.onNodeWithText("R").performClick().assertIsSelected()
         assertEquals(PeqChannelDisplay.RIGHT, PeqGraphPreferences(controller.get()).channelDisplay)
-        compose.onNodeWithText("Filters").performClick()
+        compose.onNodeWithTag("peq-open-filters").performClick()
         compose.onNodeWithText("FREQUENCY").assertIsDisplayed()
         compose.onNodeWithText("648 Hz").assertIsDisplayed()
         saveRender("filters")
-        compose.onNodeWithText("Graph").performClick()
+        compose.onNodeWithTag("peq-open-graph").performClick()
         compose.onNodeWithTag("peq-response-graph").assertIsDisplayed()
         compose.onNodeWithTag("peq-filter-editor").assertDoesNotExist()
     }

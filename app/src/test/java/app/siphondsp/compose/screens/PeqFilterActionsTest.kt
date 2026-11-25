@@ -69,6 +69,28 @@ class PeqFilterActionsTest {
     }
 
     @Test
+    fun anOpenEditorFollowsTheFilterIdentityAfterReorderAndIgnoresDeletionOrBankChanges() {
+        val (context, holder) = fixture()
+        val editedId = holder.visibleBands[0].uuid
+        val actions = PeqFilterActions(holder, 0, PeqDialogs(context))
+        val reordered = holder.peqState.deepCopy()
+        reordered.fullRangeBands.add(reordered.fullRangeBands.removeAt(0))
+        holder.setSnapshot(reordered)
+        actions.stepGain(1, 1)
+        actions.commit()
+        assertEquals(-3.0, holder.visibleBands[0].gain, 0.0)
+        assertEquals(editedId, holder.visibleBands[1].uuid)
+        assertEquals(-3.0, holder.visibleBands[1].gain, 0.0)
+        holder.deleteBand(1)
+        val saved = holder.peqState.deepCopy()
+        actions.stepGain(1, 1)
+        assertEquals(saved, holder.peqState)
+        holder.selectedScope = PeqScope.LOW
+        actions.stepGain(1, 1)
+        assertEquals(4.0, holder.visibleBands[0].gain, 0.0)
+    }
+
+    @Test
     fun steppersClampAndBankNumberingMatchesGraphColours() {
         val (context, holder) = fixture()
         val actions = PeqFilterActions(holder, 0, PeqDialogs(context))

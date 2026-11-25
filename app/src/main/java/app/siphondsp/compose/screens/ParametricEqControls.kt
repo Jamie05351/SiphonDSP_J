@@ -22,9 +22,9 @@ fun PeqScopeControl(
     modifier: Modifier = Modifier,
 ) {
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        PeqScope.entries.forEachIndexed { index, scope ->
-            PeqActionButton(listOf("Pre EQ", "Low", "Mid", "High")[index], { onSelect(scope) },
-                Modifier.weight(1f), selected = scope == selected)
+        PeqScope.entries.forEach { scope ->
+            PeqActionButton(scope.label.removeSuffix(" Band"), { onSelect(scope) },
+                Modifier.weight(1f), selected = scope == selected, contentPadding = 4.dp)
         }
     }
 }

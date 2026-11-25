@@ -215,13 +215,13 @@ fun ParametricEqScreen(holder: PeqStateHolder, modifier: Modifier = Modifier, sh
                                 })
                             }
                         }
-                        PeqActionButton("Filters", { scope.launch { pager.animateScrollToPage(1) } })
+                        PeqActionButton("Filters", { scope.launch { pager.animateScrollToPage(1) } }, Modifier.testTag("peq-open-filters"))
                     }
                 }
             } else {
                 Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Row(Modifier.fillMaxWidth().height(44.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        PeqActionButton("Graph", { scope.launch { pager.animateScrollToPage(0) } })
+                        PeqActionButton("Graph", { scope.launch { pager.animateScrollToPage(0) } }, Modifier.testTag("peq-open-graph"))
                         PeqActionButton("Filters", {}, selected = true)
                     }
                     PeqBandList(holder, Modifier.weight(1f).fillMaxWidth())
