@@ -149,7 +149,8 @@ internal fun PeqNumericControl(
                 .bmwFocusRing(source),
             contentAlignment = Alignment.Center,
         ) {
-            Text(value, color = PeqControlText, fontSize = valueFontSize, fontWeight = FontWeight.Medium, maxLines = 1)
+            Text(value, color = PeqControlText, fontSize = valueFontSize, fontWeight = FontWeight.Medium,
+                maxLines = 1, softWrap = false)
         }
         if (showSteppers) HoldStepHalf(
             "+", "Increase $label", PeqControlBlue, true, Modifier.width(stepWidth).fillMaxHeight(),

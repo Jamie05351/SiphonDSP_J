@@ -40,11 +40,11 @@ fun PeqBandList(
         if (selected >= 0) listState.animateScrollToItem(selected)
     }
     BoxWithConstraints(modifier.fillMaxWidth().testTag("peq-filter-table")) {
-        val compact = maxWidth < 640.dp
+        val compact = maxWidth < 720.dp
         val showSteppers = maxWidth >= 480.dp
         val numberWidth = if (compact) 20.dp else 24.dp
         val buttonWidth = if (compact) 32.dp else 44.dp
-        val parameterGap = if (compact) 8.dp else PeqParameterGap
+        val parameterGap = if (maxWidth < 480.dp) 8.dp else PeqParameterGap
         val fontSize = if (compact) 14.sp else if (maxWidth < 900.dp) 16.sp else 20.sp
         val parameterWeights = if (compact) listOf(1f, 1f, 1f) else listOf(1.15f, 1f, .85f)
         val row: @Composable (Modifier, @Composable RowScope.() -> Unit) -> Unit = { rowModifier, cells ->
@@ -79,7 +79,8 @@ fun PeqBandList(
                                 else formatPeqValue(band.frequency)
                             PeqNumericControl("Filter $number frequency", if (compact) frequency else "$frequency Hz",
                                 actions::frequency, actions::stepFrequency, actions::commit, Modifier.weight(parameterWeights[0]),
-                                showSteppers = showSteppers, stepWidth = if (compact) 32.dp else 44.dp, valueFontSize = fontSize)
+                                showSteppers = showSteppers, stepWidth = if (compact) 32.dp else 44.dp,
+                                valueFontSize = fontSize)
                             PeqNumericControl("Filter $number gain", formatPeqValue(band.gain) + if (compact) "" else " dB",
                                 actions::gain, actions::stepGain, actions::commit, Modifier.weight(parameterWeights[1]),
                                 showSteppers = showSteppers, stepWidth = if (compact) 32.dp else 44.dp, valueFontSize = fontSize)
