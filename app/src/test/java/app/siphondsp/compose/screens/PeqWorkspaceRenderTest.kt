@@ -8,6 +8,7 @@ import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performClick
 import androidx.core.view.drawToBitmap
 import app.siphondsp.compose.nav.AppNavigator
@@ -103,6 +104,11 @@ class PeqWorkspaceRenderTest {
         compose.onNodeWithText("+ Add").performClick()
         compose.onNodeWithText("03").assertIsDisplayed()
         compose.onNodeWithText("Filter 3").assertIsDisplayed()
+        compose.onNodeWithTag("peq-open-filters").performClick()
+        compose.onNodeWithText("3").assertIsDisplayed()
+        listOf("frequency", "gain", "Q").forEach { parameter ->
+            compose.onNodeWithContentDescription("Edit Filter 3 $parameter").assertIsDisplayed()
+        }
     }
 
     @Test
