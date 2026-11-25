@@ -168,7 +168,6 @@ fun ParametricEqScreen(holder: PeqStateHolder, modifier: Modifier = Modifier, sh
                                 showGainMeters = false,
                                 showSpectrum = showSpectrum,
                                 showNodeCallout = false,
-                                keepFilterShapesVisible = true,
                                 compactPlotPadding = true,
                                 onSelectionCleared = { editorId = null },
                                 sampleRate = (RootlessAudioProcessorService.nativeBmwPeqSampleRate() ?: 48_000f).toDouble(),
