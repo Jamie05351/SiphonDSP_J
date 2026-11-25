@@ -10,6 +10,9 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.click
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.text.TextLayoutResult
@@ -98,6 +101,67 @@ class PeqWorkspaceRenderTest {
     }
 
     @Test
+    fun nodesFadeAfterFiveIdleSecondsAndInteractionRestartsTheTimer() {
+        compose.onNodeWithText("01").performClick()
+        compose.onNodeWithTag("peq-response-graph").performTouchInput { click(Offset(10f, 100f)) }
+        compose.waitForIdle()
+        compose.mainClock.autoAdvance = false
+        try {
+            compose.mainClock.advanceTimeBy(4900)
+            assertTrue("Nodes must remain visible before five seconds", nodeOverlayPixels() > 20)
+            compose.mainClock.advanceTimeBy(600)
+            compose.mainClock.autoAdvance = true
+            compose.waitForIdle()
+            assertEquals("Nodes must disappear when the combined response takes over", 0, nodeOverlayPixels())
+
+            compose.onNodeWithTag("peq-response-graph").performTouchInput { click(Offset(10f, 100f)) }
+            compose.waitForIdle()
+            compose.mainClock.autoAdvance = false
+            assertTrue("Touching the graph must restore nodes", nodeOverlayPixels() > 20)
+            compose.mainClock.advanceTimeBy(4900)
+            compose.mainClock.autoAdvance = true
+            compose.runOnIdle { holder.previewBandEdit(0, "idle-reset") { it.withGain(it.gain - 0.5) } }
+            compose.waitForIdle()
+            compose.mainClock.autoAdvance = false
+            compose.mainClock.advanceTimeBy(600)
+            assertTrue("Editing must restart the five-second timer", nodeOverlayPixels() > 20)
+            compose.mainClock.advanceTimeBy(5000)
+            compose.mainClock.autoAdvance = true
+            compose.waitForIdle()
+            assertEquals("Nodes must fade again after the edit becomes idle", 0, nodeOverlayPixels())
+        } finally {
+            compose.mainClock.autoAdvance = true
+        }
+    }
+
+    private fun nodeOverlayPixels(): Int {
+        val bitmap = graphBitmap()
+        val range = GraphDbRangeState.read(controller.get())
+        val geometry = PeqPlotGeometry(36f, bitmap.width - 12f, 24f, bitmap.height - 30f,
+            20000.0, range.bottomDb, range.topDb)
+        val band = holder.visibleBands[0]
+        val x = geometry.xForFrequency(band.frequency).roundToInt()
+        val y = geometry.yForGain(band.gain).roundToInt()
+        var count = 0
+        for (py in y - 14..y + 14) for (px in x - 14..x + 14) {
+            if (px !in 0 until bitmap.width || py !in 0 until bitmap.height) continue
+            val color = bitmap.getPixel(px, py)
+            if (android.graphics.Color.green(color) > 130 && android.graphics.Color.blue(color) > 90 &&
+                android.graphics.Color.red(color) < 150) count++
+        }
+        bitmap.recycle()
+        return count
+    }
+
+    private fun settleToCombinedResponse() {
+        val autoAdvance = compose.mainClock.autoAdvance
+        compose.mainClock.autoAdvance = false
+        compose.mainClock.advanceTimeBy(5500)
+        compose.mainClock.autoAdvance = autoAdvance
+        compose.waitForIdle()
+    }
+
+    @Test
     fun combinedResponseTracksCrossoversAndDelayWhileEditingFilters() {
         compose.onNodeWithText("L").performClick()
         compose.onNodeWithText("01").performClick()
@@ -118,6 +182,7 @@ class PeqWorkspaceRenderTest {
             }
         }
         compose.runOnIdle { AppEvents.send(AppEvent.NativeBmwDspUpdated(values.copyOf())) }
+        settleToCombinedResponse()
         val before = graphBitmap()
         values[NativeBmwDspValues.INDEX_MID_DELAY_L] = 3f
         values[NativeBmwDspValues.INDEX_MID_DELAY_R] = 3f
