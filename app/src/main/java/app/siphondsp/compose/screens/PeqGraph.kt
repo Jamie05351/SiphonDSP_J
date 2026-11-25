@@ -280,6 +280,7 @@ fun PeqGraph(
     onSelectionCleared: () -> Unit = {},
     showNodeCallout: Boolean = true,
     keepFilterShapesVisible: Boolean = false,
+    compactPlotPadding: Boolean = false,
     graphOptions: PeqGraphOptions? = null,
     carBaseline: CarBaseline? = null,
     // The house-curve overlay (display only): drawn dashed, offset onto the displayed full curve's
@@ -288,6 +289,10 @@ fun PeqGraph(
     showHouseCurve: Boolean = true,
     onShowHouseCurveChange: ((Boolean) -> Unit)? = null,
 ) {
+    // The full PEQ page needs only its axis labels at the left and a small edge at the right.
+    // Other graph callers retain their original geometry, including room for gain meters.
+    val plotPadLeft = if (compactPlotPadding) 36.dp else PlotPadLeft
+    val plotPadRight = if (compactPlotPadding && !showGainMeters) 12.dp else PlotPadRight
     val paints = rememberPeqSurfacePaints()
     val glass = rememberGlassPaints()
     val model = remember { PeqResponseModel() }
@@ -378,7 +383,7 @@ fun PeqGraph(
         ComposeCanvas(
             Modifier
                 .fillMaxSize()
-                .pointerInput(peqState, activeBank, channelDisplay, mode, maxFrequency, showIndividualFilters, sampleRate) {
+                .pointerInput(peqState, activeBank, channelDisplay, mode, maxFrequency, showIndividualFilters, sampleRate, compactPlotPadding, showGainMeters) {
                     detectTapGestures { offset ->
                         // The legend's house-curve item toggles the overlay, and nothing else.
                         val toggle = onHouseToggle
@@ -394,9 +399,9 @@ fun PeqGraph(
                             callout = null
                             return@detectTapGestures
                         }
-                        val left = PlotPadLeft.toPx()
+                        val left = plotPadLeft.toPx()
                         val top = PlotPadTop.toPx()
-                        val right = size.width - PlotPadRight.toPx()
+                        val right = size.width - plotPadRight.toPx()
                         val bottom = size.height - PlotPadBottom.toPx()
                         if (right <= left || bottom <= top) return@detectTapGestures
                         val geometry = model.geometry(left, right, top, bottom, maxFrequency, GraphDbRangeState.read(rangeContext))
@@ -426,9 +431,9 @@ fun PeqGraph(
             // so the full curve keeps focus instead of dimming to a near-blank graph.
             val selectedSilent = activeBank == BmwPeqBank.HIGH && !model.curves.highBranchActive
             val bandFocus = if (selectedSilent) 0f else focus.value
-            val left = PlotPadLeft.toPx()
+            val left = plotPadLeft.toPx()
             val top = PlotPadTop.toPx()
-            val right = size.width - PlotPadRight.toPx()
+            val right = size.width - plotPadRight.toPx()
             val bottom = size.height - PlotPadBottom.toPx()
             if (right <= left || bottom <= top) return@ComposeCanvas
             val geometry = model.geometry(left, right, top, bottom, maxFrequency, GraphDbRangeState.read(rangeContext))

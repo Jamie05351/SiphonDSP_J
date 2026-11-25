@@ -112,6 +112,35 @@ class PeqWorkspaceRenderTest {
     }
 
     @Test
+    @Config(qualifiers = "w800dp-h480dp-land-mdpi")
+    fun mediumWidthFiltersKeepEveryParameterButtonInsideThePage() {
+        assertFilterButtonsFitWidth()
+        saveRender("filters-medium")
+    }
+
+    @Test
+    @Config(qualifiers = "w360dp-h800dp-port-mdpi")
+    fun phoneFiltersKeepEveryParameterButtonInsideThePage() {
+        assertFilterButtonsFitWidth()
+        saveRender("filters-phone")
+    }
+
+    private fun assertFilterButtonsFitWidth() {
+        compose.onNodeWithTag("peq-open-filters").performClick()
+        val table = compose.onNodeWithTag("peq-filter-table").fetchSemanticsNode().boundsInRoot
+        listOf("frequency", "gain", "Q").forEach { parameter ->
+            listOf("Decrease", "Edit", "Increase").forEach { action ->
+                val button = compose.onNodeWithContentDescription("$action Filter 1 $parameter")
+                button.assertIsDisplayed()
+                val bounds = button.fetchSemanticsNode().boundsInRoot
+                assertTrue("$action $parameter left edge", bounds.left >= table.left)
+                assertTrue("$action $parameter right edge", bounds.right <= table.right)
+                assertTrue("$action $parameter touch width", bounds.width >= 43f)
+            }
+        }
+    }
+
+    @Test
     @Config(qualifiers = "w360dp-h800dp-port-mdpi")
     fun compactEditorLeavesAtLeastHalfTheGraphAreaAndBankControlsRemainReachable() {
         val graph = compose.onNodeWithTag("peq-response-graph").fetchSemanticsNode().boundsInRoot
