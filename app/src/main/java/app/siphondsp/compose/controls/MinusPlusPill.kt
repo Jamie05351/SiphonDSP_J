@@ -99,7 +99,7 @@ internal fun MinusPlusPill(
  * button acts as a tap, and holding it repeats too.
  */
 @Composable
-private fun HoldStepHalf(
+internal fun HoldStepHalf(
     glyph: String,
     description: String?,
     tint: Color,

@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
@@ -159,7 +160,7 @@ private val FilterPalette = intArrayOf(
     AndroidColor.rgb(0xFF, 0xA8, 0x7A), // salmon
 )
 
-private fun filterColor(globalIndex: Int): Int = FilterPalette[globalIndex.mod(FilterPalette.size)]
+internal fun peqFilterColor(globalIndex: Int): Int = FilterPalette[globalIndex.mod(FilterPalette.size)]
 
 // The "SUM" label and the faint full curve behind a focused bank: a cool white, distinct from
 // Pre EQ's pure white and every band. (The bright full curve itself uses the channel colours.)
@@ -276,6 +277,9 @@ fun PeqGraph(
     showGainMeters: Boolean = false,
     sampleRate: Double = 48_000.0,
     onNodeTapped: (ParametricEqBand) -> Unit = {},
+    onSelectionCleared: () -> Unit = {},
+    showNodeCallout: Boolean = true,
+    keepFilterShapesVisible: Boolean = false,
     graphOptions: PeqGraphOptions? = null,
     carBaseline: CarBaseline? = null,
     // The house-curve overlay (display only): drawn dashed, offset onto the displayed full curve's
@@ -349,10 +353,12 @@ fun PeqGraph(
     // fades back to the full curve.
     val focus = remember { Animatable(1f) }
     var interactionTick by remember { mutableIntStateOf(0) }
-    LaunchedEffect(interactionTick, peqState, activeBank) {
+    LaunchedEffect(interactionTick, peqState, activeBank, keepFilterShapesVisible) {
         focus.snapTo(1f)
-        delay(FOCUS_IDLE_MS)
-        focus.animateTo(0f, tween(FOCUS_FADE_MS))
+        if (!keepFilterShapesVisible) {
+            delay(FOCUS_IDLE_MS)
+            focus.animateTo(0f, tween(FOCUS_FADE_MS))
+        }
     }
 
     var callout by remember { mutableStateOf<NodeHit?>(null) }
@@ -400,7 +406,7 @@ fun PeqGraph(
                         )
                         tappedNodeId = hit?.band?.uuid
                         // Keep the callout on-screen: pin its top-left inside the graph bounds.
-                        callout = hit?.let {
+                        callout = if (!showNodeCallout) null else hit?.let {
                             val maxX = (this.size.width - 190.dp.toPx()).coerceAtLeast(0f)
                             val maxY = (this.size.height - 64.dp.toPx()).coerceAtLeast(0f)
                             NodeHit(
@@ -410,6 +416,7 @@ fun PeqGraph(
                         }
                         // Match ParametricEqSurface: only an active-bank node opens in the list.
                         if (hit != null && hit.bank == activeBank) onNodeTapped(hit.band)
+                        else onSelectionCleared()
                     }
                 },
         ) {
@@ -465,7 +472,7 @@ fun PeqGraph(
 
         callout?.let { hit ->
             // Border in the tapped filter's own colour, the same one as its node and shape.
-            val calloutAccent = Color(filterColor((hit.number - 1).coerceAtLeast(0)))
+            val calloutAccent = Color(peqFilterColor((hit.number - 1).coerceAtLeast(0)))
             PeqNodeCallout(
                 hit = hit,
                 accent = calloutAccent,
@@ -476,15 +483,27 @@ fun PeqGraph(
         }
 
         graphOptions?.let { opts ->
-            PeqGraphOptionsButton(
-                mode = mode,
-                channelDisplay = channelDisplay,
-                showIndividualFilters = showIndividualFilters,
-                showConvolver = showConvolver,
-                options = opts,
-                dbRange = dbRange,
-                modifier = Modifier.align(Alignment.TopEnd),
-            )
+            androidx.compose.foundation.layout.Row(
+                Modifier.align(Alignment.TopEnd).padding(6.dp),
+                horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                PeqChannelDisplay.entries.forEach { channel ->
+                    PeqActionButton(
+                        when (channel) { PeqChannelDisplay.BOTH -> "L/R"; PeqChannelDisplay.LEFT -> "L"; PeqChannelDisplay.RIGHT -> "R" },
+                        { opts.onChannelDisplayChange(channel) },
+                        Modifier.width(48.dp), selected = channelDisplay == channel,
+                    )
+                }
+                PeqGraphOptionsButton(
+                    mode = mode,
+                    channelDisplay = channelDisplay,
+                    showIndividualFilters = showIndividualFilters,
+                    showConvolver = showConvolver,
+                    options = opts,
+                    dbRange = dbRange,
+                )
+            }
         }
     }
 }
@@ -782,7 +801,7 @@ private fun drawLegend(
                 color = focusColor
             }
             val midY = baseline - p.unifiedLegendPaint.textSize * 0.32f
-            var right = g.right
+            var right = g.right - 190f * density
             right -= keyPaint.measureText("R"); nc.drawText("R", right, baseline, keyPaint)
             right -= gap + sample
             line.color = RightChannelColor
@@ -1200,7 +1219,7 @@ private fun drawFocusedFilterShapes(nc: Canvas, ctx: PeqDrawContext) {
         shape.lineTo(g.right, zeroY)
         shape.close()
 
-        val color = filterColor(offset + index)
+        val color = peqFilterColor(offset + index)
         val extremeY = g.yForGain(extremeDb).coerceIn(g.top, g.bottom)
         fill.shader = LinearGradient(
             0f, extremeY, 0f, zeroY,
@@ -1301,7 +1320,7 @@ private fun drawFocusedNodes(nc: Canvas, ctx: PeqDrawContext) {
         // crisp ring + border, a top-left highlight arc, the R-channel dark ring and a
         // luminance-contrasted number.
         val channel = channelFor(band, ctx.channelDisplay) ?: return@forEachIndexed
-        val color = filterColor(numberOffset + index)
+        val color = peqFilterColor(numberOffset + index)
         val x = g.xForFrequency(band.frequency)
         val y = g.yForGain(
             nodeDb(ctx.model, band, perChannel[channel], ctx.showIndividualFilters, ctx.sampleRate, ctx.maxFrequency, g),
