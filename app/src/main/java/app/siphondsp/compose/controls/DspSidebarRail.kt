@@ -15,6 +15,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.Dp
 import app.siphondsp.R
 import app.siphondsp.compose.assets.OutputGraphic
 import app.siphondsp.compose.assets.CompressorGraphic
@@ -40,12 +41,13 @@ fun DspSidebarRail(
     canNavigate: () -> Boolean,
     onNavigate: (DspDestination) -> Unit,
     modifier: Modifier = Modifier,
+    facia: Dp = SidebarFacia,
 ) {
     val signal = SidebarSignal
     val density = LocalDensity.current
     BoxWithConstraints(modifier.fillMaxSize()) {
         val count = destinations.size.coerceAtLeast(1)
-        val layout = with(density) { SidebarLayout(maxWidth.toPx(), maxHeight.toPx(), SidebarFacia.toPx(), count) }
+        val layout = with(density) { SidebarLayout(maxWidth.toPx(), maxHeight.toPx(), facia.toPx(), count) }
         Spacer(Modifier.fillMaxSize().drawBehind { drawSidebarScreen(layout, count, signal) })
         val tile = with(density) { layout.tile.toDp() }
         destinations.forEachIndexed { i, dest ->

@@ -43,8 +43,7 @@ import app.siphondsp.compose.screens.CrossoverTiltPage
 import app.siphondsp.compose.screens.GainsDelayScreen
 import app.siphondsp.compose.screens.HeadroomOutputScreen
 import app.siphondsp.compose.screens.NativeTruthScreen
-import app.siphondsp.compose.screens.ParametricEqScreen
-import app.siphondsp.compose.screens.PeqToolbarActions
+import app.siphondsp.compose.screens.PeqWorkspaceLayout
 import app.siphondsp.compose.screens.SignalGeneratorScreen
 import app.siphondsp.compose.screens.SpeakerAlignScreen
 import app.siphondsp.compose.screens.VirtualCentreScreen
@@ -254,12 +253,7 @@ private fun PeqWorkspace() {
     val context = LocalContext.current
     // One holder for the toolbar's scope row and the graph/list, so the two stay in step.
     val holder = remember { PeqStateHolder(context.applicationContext) }
-    Workspace(
-        current = DspDestination.PARAMETRIC_EQ,
-        // The scope switch and action chips take the whole toolbar line on this screen.
-        showStatusStrip = false,
-        toolbarActions = { PeqToolbarActions(holder) },
-    ) { ParametricEqScreen(holder = holder) }
+    PeqWorkspaceLayout(holder)
 }
 
 @Composable
