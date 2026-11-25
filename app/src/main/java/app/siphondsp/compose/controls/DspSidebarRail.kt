@@ -13,6 +13,7 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.Dp
@@ -45,7 +46,7 @@ fun DspSidebarRail(
 ) {
     val signal = SidebarSignal
     val density = LocalDensity.current
-    BoxWithConstraints(modifier.fillMaxSize()) {
+    BoxWithConstraints(modifier.fillMaxSize().testTag("dsp-sidebar")) {
         val count = destinations.size.coerceAtLeast(1)
         val layout = with(density) { SidebarLayout(maxWidth.toPx(), maxHeight.toPx(), facia.toPx(), count) }
         Spacer(Modifier.fillMaxSize().drawBehind { drawSidebarScreen(layout, count, signal) })

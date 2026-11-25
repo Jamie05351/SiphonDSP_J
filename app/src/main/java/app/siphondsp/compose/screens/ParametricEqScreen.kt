@@ -145,7 +145,7 @@ fun ParametricEqScreen(holder: PeqStateHolder, modifier: Modifier = Modifier, sh
                 true
             },
     ) {
-        HorizontalPager(state = pager, modifier = Modifier.fillMaxSize()) { page ->
+        HorizontalPager(state = pager, modifier = Modifier.fillMaxSize().testTag("peq-pages")) { page ->
             if (page == 0) {
                 Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     androidx.compose.foundation.layout.BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
@@ -222,17 +222,10 @@ fun ParametricEqScreen(holder: PeqStateHolder, modifier: Modifier = Modifier, sh
                                 })
                             }
                         }
-                        PeqActionButton("Filters", { scope.launch { pager.animateScrollToPage(1) } }, Modifier.testTag("peq-open-filters"))
                     }
                 }
             } else {
-                Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Row(Modifier.fillMaxWidth().height(44.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        PeqActionButton("Graph", { scope.launch { pager.animateScrollToPage(0) } }, Modifier.testTag("peq-open-graph"))
-                        PeqActionButton("Filters", {}, selected = true)
-                    }
-                    PeqBandList(holder, Modifier.weight(1f).fillMaxWidth())
-                }
+                PeqBandList(holder, Modifier.fillMaxSize())
             }
         }
     }
