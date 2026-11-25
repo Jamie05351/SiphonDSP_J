@@ -41,7 +41,7 @@ fun PeqBandList(
     }
     BoxWithConstraints(modifier.fillMaxWidth().testTag("peq-filter-table")) {
         val compact = maxWidth < 720.dp
-        val showSteppers = maxWidth >= 480.dp
+        val showSteppers = maxWidth >= 520.dp
         val numberWidth = if (compact) 20.dp else 24.dp
         val buttonWidth = if (compact) 32.dp else 44.dp
         val parameterGap = if (maxWidth < 480.dp) 8.dp else PeqParameterGap

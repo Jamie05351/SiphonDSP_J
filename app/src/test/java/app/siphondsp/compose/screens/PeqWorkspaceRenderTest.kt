@@ -194,6 +194,29 @@ class PeqWorkspaceRenderTest {
     }
 
     @Test
+    @Config(qualifiers = "w600dp-h480dp-land-mdpi")
+    fun compactSteppersLeaveRoomForLongValuesAtTheirLowerWidthBoundary() {
+        compose.runOnIdle {
+            holder.commitBandEdit(0, "compact-long-values") {
+                it.withFrequency(999.99).withGain(-29.5).withQ(29.99)
+            }
+        }
+        assertFilterButtonsFitWidth(minTouchWidth = 31f)
+        listOf("999.99", "-29.5", "29.99").forEach { value ->
+            val layouts = mutableListOf<TextLayoutResult>()
+            compose.onNodeWithText(value, useUnmergedTree = true)
+                .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+            assertTrue("$value must fit beside the compact steppers", layouts.isNotEmpty() && layouts.all { layout ->
+                value.indices.all { character ->
+                    val glyph = layout.getBoundingBox(character)
+                    glyph.left >= -0.5f && glyph.right <= layout.size.width + 0.5f
+                }
+            })
+        }
+        saveRender("filters-compact-long-values")
+    }
+
+    @Test
     @Config(qualifiers = "w800dp-h480dp-land-mdpi")
     fun mediumWidthFiltersKeepEveryParameterButtonInsideThePage() {
         assertFilterButtonsFitWidth(minTouchWidth = 31f)
