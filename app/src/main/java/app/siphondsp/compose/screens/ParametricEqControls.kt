@@ -24,7 +24,8 @@ fun PeqScopeControl(
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         PeqScope.entries.forEach { scope ->
             PeqActionButton(scope.label.removeSuffix(" Band"), { onSelect(scope) },
-                Modifier.weight(1f), selected = scope == selected, contentPadding = 4.dp)
+                Modifier.weight(if (scope == PeqScope.FULL) 1.3f else 1f),
+                selected = scope == selected, contentPadding = 4.dp)
         }
     }
 }

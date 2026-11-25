@@ -210,8 +210,11 @@ fun ParametricEqScreen(holder: PeqStateHolder, modifier: Modifier = Modifier, sh
                             }
                             if (holder.visibleBands.size < BmwPeqState.MAX_BANDS) {
                                 PeqActionButton("+ Add", {
+                                    val previousSelection = holder.selectedUuid
                                     holder.addBand()
-                                    editorId = holder.selectedUuid?.toString()
+                                    if (holder.selectedUuid != previousSelection) {
+                                        editorId = holder.selectedUuid?.toString()
+                                    }
                                 })
                             }
                         }
