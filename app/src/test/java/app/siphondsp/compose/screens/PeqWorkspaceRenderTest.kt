@@ -10,6 +10,9 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.click
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.text.TextLayoutResult
@@ -21,6 +24,14 @@ import app.siphondsp.compose.theme.BmwDspTheme
 import app.siphondsp.fragment.PeqGraphPreferences
 import app.siphondsp.model.BmwPeqState
 import app.siphondsp.model.ParametricEqBand
+import app.siphondsp.model.NativeBmwDspValues
+import app.siphondsp.utils.AppEvent
+import app.siphondsp.utils.AppEvents
+import app.siphondsp.dsp.BmwResponseCalculator
+import app.siphondsp.dsp.BmwResponseCurves
+import app.siphondsp.dsp.BmwOutputChannel
+import app.siphondsp.compose.state.GraphDbRangeState
+import app.siphondsp.view.PeqPlotGeometry
 import app.siphondsp.view.DspDestination
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -87,6 +98,154 @@ class PeqWorkspaceRenderTest {
         val filterBar = compose.onNodeWithTag("peq-filter-bar").fetchSemanticsNode().boundsInRoot
         assertTrue(workspace.bottom - filterBar.bottom >= 23f)
         saveRender("graph")
+    }
+
+    @Test
+    fun nodesFadeAfterFiveIdleSecondsAndInteractionRestartsTheTimer() {
+        compose.onNodeWithText("01").performClick()
+        compose.onNodeWithTag("peq-response-graph").performTouchInput { click(Offset(10f, 100f)) }
+        compose.waitForIdle()
+        compose.mainClock.autoAdvance = false
+        try {
+            compose.mainClock.advanceTimeBy(4900)
+            assertTrue("Nodes must remain visible before five seconds", nodeOverlayPixels() > 20)
+            compose.mainClock.advanceTimeBy(600)
+            compose.mainClock.autoAdvance = true
+            compose.waitForIdle()
+            assertEquals("Nodes must disappear when the combined response takes over", 0, nodeOverlayPixels())
+
+            compose.onNodeWithTag("peq-response-graph").performTouchInput { click(Offset(10f, 100f)) }
+            compose.waitForIdle()
+            compose.mainClock.autoAdvance = false
+            assertTrue("Touching the graph must restore nodes", nodeOverlayPixels() > 20)
+            compose.mainClock.advanceTimeBy(4900)
+            compose.mainClock.autoAdvance = true
+            compose.runOnIdle { holder.previewBandEdit(0, "idle-reset") { it.withGain(it.gain - 0.5) } }
+            compose.waitForIdle()
+            compose.mainClock.autoAdvance = false
+            compose.mainClock.advanceTimeBy(600)
+            assertTrue("Editing must restart the five-second timer", nodeOverlayPixels() > 20)
+            compose.mainClock.advanceTimeBy(5000)
+            compose.mainClock.autoAdvance = true
+            compose.waitForIdle()
+            assertEquals("Nodes must fade again after the edit becomes idle", 0, nodeOverlayPixels())
+        } finally {
+            compose.mainClock.autoAdvance = true
+        }
+    }
+
+    private fun nodeOverlayPixels(): Int {
+        val bitmap = graphBitmap()
+        val range = GraphDbRangeState.read(controller.get())
+        val geometry = PeqPlotGeometry(36f, bitmap.width - 12f, 24f, bitmap.height - 30f,
+            20000.0, range.bottomDb, range.topDb)
+        val band = holder.visibleBands[0]
+        val x = geometry.xForFrequency(band.frequency).roundToInt()
+        val y = geometry.yForGain(band.gain).roundToInt()
+        var count = 0
+        for (py in y - 14..y + 14) for (px in x - 14..x + 14) {
+            if (px !in 0 until bitmap.width || py !in 0 until bitmap.height) continue
+            val color = bitmap.getPixel(px, py)
+            if (android.graphics.Color.green(color) > 130 && android.graphics.Color.blue(color) > 90 &&
+                android.graphics.Color.red(color) < 150) count++
+        }
+        bitmap.recycle()
+        return count
+    }
+
+    private fun settleToCombinedResponse() {
+        val autoAdvance = compose.mainClock.autoAdvance
+        compose.mainClock.autoAdvance = false
+        compose.mainClock.advanceTimeBy(5500)
+        compose.mainClock.autoAdvance = autoAdvance
+        compose.waitForIdle()
+    }
+
+    @Test
+    fun combinedResponseTracksCrossoversAndDelayWhileEditingFilters() {
+        compose.onNodeWithText("L").performClick()
+        compose.onNodeWithText("01").performClick()
+        val values = NativeBmwDspValues.load(controller.get()).apply {
+            this[NativeBmwDspValues.INDEX_HEADROOM_AUTO] = 0f
+            this[NativeBmwDspValues.INDEX_HEADROOM] = 0f
+            this[NativeBmwDspValues.INDEX_CROSSOVER_BYPASS] = 0f
+            this[NativeBmwDspValues.INDEX_HIGH_XO_PASS] = 1f
+            this[NativeBmwDspValues.INDEX_LOW_DELAY_L] = 0f
+            this[NativeBmwDspValues.INDEX_LOW_DELAY_R] = 0f
+            this[NativeBmwDspValues.INDEX_MID_DELAY_L] = 0f
+            this[NativeBmwDspValues.INDEX_MID_DELAY_R] = 0f
+            repeat(4) { output ->
+                this[NativeBmwDspValues.outputIndex(output, NativeBmwDspValues.FIELD_CROSSOVER_FREQ)] = 150f
+                this[NativeBmwDspValues.outputIndex(output, NativeBmwDspValues.FIELD_CROSSOVER_TYPE)] = 2f
+                this[NativeBmwDspValues.outputIndex(output, NativeBmwDspValues.FIELD_MUTE)] = 0f
+                this[NativeBmwDspValues.outputIndex(output, NativeBmwDspValues.FIELD_INVERT)] = 0f
+            }
+        }
+        compose.runOnIdle { AppEvents.send(AppEvent.NativeBmwDspUpdated(values.copyOf())) }
+        settleToCombinedResponse()
+        val before = graphBitmap()
+        values[NativeBmwDspValues.INDEX_MID_DELAY_L] = 3f
+        values[NativeBmwDspValues.INDEX_MID_DELAY_R] = 3f
+        compose.runOnIdle { AppEvents.send(AppEvent.NativeBmwDspUpdated(values.copyOf())) }
+        val delayed = graphBitmap()
+        saveRender("combined-response-delayed")
+        assertMainCurveMatchesCombinedResponse(delayed, values)
+        assertTrue("Branch delay must change the main purple combined response",
+            !responsePixels(before).contentEquals(responsePixels(delayed)))
+        values[NativeBmwDspValues.outputIndex(0, NativeBmwDspValues.FIELD_CROSSOVER_FREQ)] = 400f
+        values[NativeBmwDspValues.outputIndex(1, NativeBmwDspValues.FIELD_CROSSOVER_FREQ)] = 400f
+        compose.runOnIdle { AppEvents.send(AppEvent.NativeBmwDspUpdated(values.copyOf())) }
+        val crossed = graphBitmap()
+        assertMainCurveMatchesCombinedResponse(crossed, values)
+        assertTrue("Crossover edits must change the main purple combined response",
+            !responsePixels(delayed).contentEquals(responsePixels(crossed)))
+        saveRender("combined-response")
+        compose.onNodeWithText("R").performClick()
+        val right = graphBitmap()
+        assertMainCurveMatchesCombinedResponse(right, values, BmwOutputChannel.RIGHT)
+        before.recycle()
+        delayed.recycle()
+        crossed.recycle()
+        right.recycle()
+        saveRender("combined-response-right")
+    }
+
+    private fun assertMainCurveMatchesCombinedResponse(
+        bitmap: android.graphics.Bitmap,
+        values: FloatArray,
+        channel: BmwOutputChannel = BmwOutputChannel.LEFT,
+    ) {
+        val curves = BmwResponseCurves(192)
+        BmwResponseCalculator(192).apply {
+            configureAxis(48000.0, 20.0, 20000.0)
+            compute(values, holder.peqState, curves)
+        }
+        val range = GraphDbRangeState.read(controller.get())
+        val left = channel.ordinal
+        val sample = curves.frequencies.indices.filter { i ->
+            curves.frequencies[i] in 80.0..500.0 &&
+                curves.sumDb[left][i] in (range.bottomDb + 4)..(range.topDb - 4)
+        }.maxBy { kotlin.math.abs(curves.sumDb[left][it] - curves.preSplitDb[left][it]) }
+        assertTrue("Fixture must distinguish the combined response from Pre EQ",
+            kotlin.math.abs(curves.sumDb[left][sample] - curves.preSplitDb[left][sample]) > 3.0)
+        val geometry = PeqPlotGeometry(36f, bitmap.width - 12f, 24f, bitmap.height - 30f,
+            20000.0, range.bottomDb, range.topDb)
+        val x = geometry.xForFrequency(curves.frequencies[sample]).roundToInt()
+        val y = geometry.yForGain(curves.sumDb[left][sample]).roundToInt()
+        assertTrue("Main $channel curve must follow the full crossover/delay sum, not Pre EQ: " +
+            "f=${curves.frequencies[sample]} gain=${curves.sumDb[left][sample]} x=$x y=$y size=${bitmap.width}x${bitmap.height}",
+            (y - 4..y + 4).any { py -> (x - 3..x + 3).any { px ->
+                if (px !in 0 until bitmap.width || py !in 0 until bitmap.height) false else {
+                    val color = bitmap.getPixel(px, py)
+                    if (channel == BmwOutputChannel.LEFT) {
+                        android.graphics.Color.red(color) > 100 && android.graphics.Color.blue(color) > 170 &&
+                            android.graphics.Color.green(color) < 150
+                    } else {
+                        android.graphics.Color.green(color) > 170 && android.graphics.Color.red(color) < 140 &&
+                            android.graphics.Color.blue(color) < 140
+                    }
+                }
+            } })
     }
 
     @Test
