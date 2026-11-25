@@ -155,7 +155,8 @@ fun ParametricEqScreen(holder: PeqStateHolder, modifier: Modifier = Modifier, sh
                                 peqState = holder.peqState,
                                 activeBank = holder.selectedScope.bank,
                                 selectedBandId = holder.selectedUuid,
-                                modifier = graphModifier.testTag("peq-response-graph"),
+                                modifier = graphModifier.testTag("peq-response-graph")
+                                    .border(1.dp, Color(0xFF353535), RoundedCornerShape(10.dp)),
                                 mode = graphMode,
                                 channelDisplay = channelDisplay,
                                 showIndividualFilters = showOverlays,
@@ -165,6 +166,7 @@ fun ParametricEqScreen(holder: PeqStateHolder, modifier: Modifier = Modifier, sh
                                 showSpectrum = showSpectrum,
                                 showNodeCallout = false,
                                 keepFilterShapesVisible = true,
+                                compactPlotPadding = true,
                                 onSelectionCleared = { editorId = null },
                                 sampleRate = (RootlessAudioProcessorService.nativeBmwPeqSampleRate() ?: 48_000f).toDouble(),
                                 onNodeTapped = ::select,

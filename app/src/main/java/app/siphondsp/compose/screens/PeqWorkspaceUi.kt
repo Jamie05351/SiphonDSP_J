@@ -71,7 +71,7 @@ internal fun PeqWorkspaceLayout(holder: PeqStateHolder, showSpectrum: Boolean = 
     CompositionLocalProvider(LocalGlassAccent provides PeqControlBlue) {
         BoxWithConstraints(Modifier.fillMaxSize()) {
             val compact = maxWidth < 720.dp
-            Row(Modifier.fillMaxSize().testTag("peq-workspace").background(Color(0xFF101116))) {
+            Row(Modifier.fillMaxSize().testTag("peq-workspace").background(Color(0xFF101010))) {
                 DspSidebarRail(
                     destinations = DspDestination.entries.filter { it.showInPrimaryNav },
                     current = DspDestination.PARAMETRIC_EQ,
@@ -81,7 +81,7 @@ internal fun PeqWorkspaceLayout(holder: PeqStateHolder, showSpectrum: Boolean = 
                     facia = 4.dp,
                 )
                 Column(
-                    Modifier.weight(1f).fillMaxHeight().padding(start = if (compact) 8.dp else 20.dp, end = if (compact) 8.dp else 20.dp, top = 4.dp),
+                    Modifier.weight(1f).fillMaxHeight().padding(start = 4.dp, end = 4.dp, top = 4.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     Row(Modifier.fillMaxWidth().height(48.dp), verticalAlignment = Alignment.CenterVertically) {
