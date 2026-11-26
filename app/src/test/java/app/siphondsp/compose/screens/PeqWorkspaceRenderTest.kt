@@ -7,6 +7,7 @@ import androidx.compose.ui.test.assertIsNotDisplayed
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
+import androidx.compose.ui.test.onParent
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -27,6 +28,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import app.siphondsp.compose.dialogs.AppDialog
+import app.siphondsp.compose.dialogs.AppDialogs
 import app.siphondsp.compose.nav.DspWorkspaceScaffold
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.performSemanticsAction
@@ -346,6 +349,72 @@ class PeqWorkspaceRenderTest {
     }
 
     @Test
+    fun selectingAClippedRowRevealsTheWholeRow() {
+        compose.runOnIdle {
+            repeat(8) { holder.addBand() }
+            holder.selectedUuid = null
+        }
+        swipeToFilters()
+        val row = compose.onNodeWithTag("peq-filter-row-1")
+        val original = row.fetchSemanticsNode().boundsInRoot
+        row.onParent()
+            .performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, 28f) }
+        compose.waitForIdle()
+        assertTrue(row.fetchSemanticsNode().boundsInRoot.height < original.height)
+        compose.runOnIdle { holder.selectedUuid = holder.visibleBands.first().uuid }
+        compose.waitForIdle()
+        assertEquals(original.height, row.fetchSemanticsNode().boundsInRoot.height, 0.5f)
+    }
+
+    @Test
+    fun wideTableSeparatesAdjacentParameterSteppers() {
+        swipeToFilters()
+        val plus = compose.onNodeWithContentDescription("Increase Filter 1 frequency").fetchSemanticsNode()
+        val minus = compose.onNodeWithContentDescription("Decrease Filter 1 gain").fetchSemanticsNode()
+        assertEquals(20f, minus.boundsInRoot.left - plus.boundsInRoot.right, 1f)
+    }
+
+    @Test
+    fun adjustingAnotherVisibleFilterKeepsItsRowInPlace() {
+        compose.runOnIdle {
+            repeat(8) { holder.addBand() }
+            holder.selectedUuid = holder.visibleBands.first().uuid
+        }
+        swipeToFilters()
+        val row = compose.onNodeWithTag("peq-filter-row-3")
+        val top = row.fetchSemanticsNode().boundsInRoot.top
+        val gain = holder.visibleBands[2].gain
+        compose.onNodeWithContentDescription("Increase Filter 3 gain").performTouchInput { click() }
+        compose.waitForIdle()
+        assertEquals(gain + 0.5, holder.visibleBands[2].gain, 0.001)
+        assertEquals(top, row.fetchSemanticsNode().boundsInRoot.top, 0.5f)
+    }
+
+    @Test
+    fun tapsNearTheValueStillStepTheFilter() {
+        swipeToFilters()
+        val row = compose.onNodeWithTag("peq-filter-row-1")
+        val rowBounds = row.fetchSemanticsNode().boundsInRoot
+        val decrease = compose.onNodeWithContentDescription("Decrease Filter 1 gain").fetchSemanticsNode().boundsInRoot
+        val increase = compose.onNodeWithContentDescription("Increase Filter 1 gain").fetchSemanticsNode().boundsInRoot
+
+        try {
+            row.performTouchInput { click(Offset(decrease.left + 46f - rowBounds.left, center.y)) }
+            assertEquals(-4.0, holder.visibleBands[0].gain, 0.001)
+            row.performTouchInput { click(Offset(increase.right - 46f - rowBounds.left, center.y)) }
+            assertEquals(-3.5, holder.visibleBands[0].gain, 0.001)
+            compose.runOnIdle { assertEquals(null, AppDialogs.current) }
+
+            compose.onNodeWithContentDescription("Edit Filter 1 gain").performTouchInput { click() }
+            compose.runOnIdle {
+                assertEquals("Gain", (AppDialogs.current as? AppDialog.NumberInput)?.title)
+            }
+        } finally {
+            compose.runOnIdle { AppDialogs.dismiss() }
+        }
+    }
+
+    @Test
     @Config(qualifiers = "w832dp-h480dp-land-mdpi")
     fun longFilterValuesFitOnTheSmallestFullStepperRow() {
         compose.runOnIdle {
@@ -379,7 +448,7 @@ class PeqWorkspaceRenderTest {
                 it.withFrequency(999.99).withGain(-29.5).withQ(29.99)
             }
         }
-        assertFilterButtonsFitWidth(minTouchWidth = 31f)
+        assertFilterButtonsFitWidth(minTouchWidth = 35f)
         listOf("999.99", "-29.5", "29.99").forEach { value ->
             val layouts = mutableListOf<TextLayoutResult>()
             compose.onNodeWithText(value, useUnmergedTree = true)
@@ -397,7 +466,7 @@ class PeqWorkspaceRenderTest {
     @Test
     @Config(qualifiers = "w800dp-h480dp-land-mdpi")
     fun mediumWidthFiltersKeepEveryParameterButtonInsideThePage() {
-        assertFilterButtonsFitWidth(minTouchWidth = 31f)
+        assertFilterButtonsFitWidth()
         saveRender("filters-medium")
     }
 
@@ -408,7 +477,7 @@ class PeqWorkspaceRenderTest {
         saveRender("filters-phone")
     }
 
-    private fun assertFilterButtonsFitWidth(showSteppers: Boolean = true, minTouchWidth: Float = 43f) {
+    private fun assertFilterButtonsFitWidth(showSteppers: Boolean = true, minTouchWidth: Float = 47f) {
         swipeToFilters()
         val table = compose.onNodeWithTag("peq-filter-table").fetchSemanticsNode().boundsInRoot
         val center = compose.onNodeWithContentDescription("Edit Filter 1 frequency").fetchSemanticsNode().boundsInRoot.center.y
@@ -421,7 +490,11 @@ class PeqWorkspaceRenderTest {
                 val bounds = button.fetchSemanticsNode().boundsInRoot
                 assertTrue("$action $parameter left edge", bounds.left >= table.left)
                 assertTrue("$action $parameter right edge", bounds.right <= table.right)
-                assertTrue("$action $parameter touch width", bounds.width >= minTouchWidth)
+                val requiredWidth = if (action == "Edit") minOf(minTouchWidth, 43f) else minTouchWidth
+                assertTrue("$action $parameter touch width", bounds.width >= requiredWidth)
+                if (action != "Edit") {
+                    assertTrue("$action $parameter touch height", bounds.height >= 47f)
+                }
             }
         }
     }
