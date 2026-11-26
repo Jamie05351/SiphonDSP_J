@@ -1,5 +1,6 @@
 package app.siphondsp.compose.screens
 
+import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -37,14 +38,30 @@ fun PeqBandList(
     val bands = holder.visibleBands
     LaunchedEffect(holder.selectedScope, holder.selectedUuid) {
         val selected = bands.indexOfFirst { it.uuid == holder.selectedUuid }
-        if (selected >= 0) listState.animateScrollToItem(selected)
+        if (selected < 0) return@LaunchedEffect
+        val layout = listState.layoutInfo
+        val row = layout.visibleItemsInfo.firstOrNull { it.key == holder.selectedUuid.toString() }
+        if (row == null) {
+            listState.animateScrollToItem(selected)
+        } else if (row.offset < layout.viewportStartOffset) {
+            listState.animateScrollBy((row.offset - layout.viewportStartOffset).toFloat())
+        } else if (row.offset + row.size > layout.viewportEndOffset) {
+            listState.animateScrollBy((row.offset + row.size - layout.viewportEndOffset).toFloat())
+        }
     }
     BoxWithConstraints(modifier.fillMaxWidth().testTag("peq-filter-table")) {
         val compact = maxWidth < 720.dp
-        val showSteppers = maxWidth >= 520.dp
+        val minStepperTableWidth = 520.dp
+        val showSteppers = maxWidth >= minStepperTableWidth
+        // Share extra compact-table width across all six buttons so the values keep their space.
+        val stepWidth = if (compact) {
+            (36.dp + (maxWidth - minStepperTableWidth) / 6).coerceIn(36.dp, 48.dp)
+        } else {
+            48.dp
+        }
         val numberWidth = if (compact) 20.dp else 24.dp
         val buttonWidth = if (compact) 32.dp else 44.dp
-        val parameterGap = if (maxWidth < 480.dp) 8.dp else PeqParameterGap
+        val parameterGap = if (maxWidth >= 900.dp) 20.dp else 8.dp
         val fontSize = if (compact) 14.sp else if (maxWidth < 900.dp) 16.sp else 20.sp
         val parameterWeights = if (compact) listOf(1f, 1f, 1f) else listOf(1.15f, 1f, .85f)
         val row: @Composable (Modifier, @Composable RowScope.() -> Unit) -> Unit = { rowModifier, cells ->
@@ -79,14 +96,14 @@ fun PeqBandList(
                                 else formatPeqValue(band.frequency)
                             PeqNumericControl("Filter $number frequency", if (compact) frequency else "$frequency Hz",
                                 actions::frequency, actions::stepFrequency, actions::commit, Modifier.weight(parameterWeights[0]),
-                                showSteppers = showSteppers, stepWidth = if (compact) 32.dp else 44.dp,
+                                showSteppers = showSteppers, stepWidth = stepWidth,
                                 valueFontSize = fontSize)
                             PeqNumericControl("Filter $number gain", formatPeqValue(band.gain) + if (compact) "" else " dB",
                                 actions::gain, actions::stepGain, actions::commit, Modifier.weight(parameterWeights[1]),
-                                showSteppers = showSteppers, stepWidth = if (compact) 32.dp else 44.dp, valueFontSize = fontSize)
+                                showSteppers = showSteppers, stepWidth = stepWidth, valueFontSize = fontSize)
                             PeqNumericControl("Filter $number Q", formatPeqValue(band.q),
                                 actions::q, actions::stepQ, actions::commit, Modifier.weight(parameterWeights[2]),
-                                showSteppers = showSteppers, stepWidth = if (compact) 32.dp else 44.dp, valueFontSize = fontSize)
+                                showSteppers = showSteppers, stepWidth = stepWidth, valueFontSize = fontSize)
                         }
                         PeqActionButton("×", { holder.deleteBand(index) }, Modifier.width(buttonWidth), contentPadding = 2.dp)
                     }
