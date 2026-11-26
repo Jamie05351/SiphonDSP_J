@@ -348,6 +348,22 @@ class PeqWorkspaceRenderTest {
     }
 
     @Test
+    fun adjustingAnotherVisibleFilterKeepsItsRowInPlace() {
+        compose.runOnIdle {
+            repeat(8) { holder.addBand() }
+            holder.selectedUuid = holder.visibleBands.first().uuid
+        }
+        swipeToFilters()
+        val row = compose.onNodeWithTag("peq-filter-row-3")
+        val top = row.fetchSemanticsNode().boundsInRoot.top
+        val gain = holder.visibleBands[2].gain
+        compose.onNodeWithContentDescription("Increase Filter 3 gain").performTouchInput { click() }
+        compose.waitForIdle()
+        assertEquals(gain + 0.5, holder.visibleBands[2].gain, 0.001)
+        assertEquals(top, row.fetchSemanticsNode().boundsInRoot.top, 0.5f)
+    }
+
+    @Test
     fun tapsNearTheValueStillStepTheFilter() {
         swipeToFilters()
         val row = compose.onNodeWithTag("peq-filter-row-1")

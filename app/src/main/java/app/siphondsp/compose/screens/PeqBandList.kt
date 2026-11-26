@@ -37,7 +37,9 @@ fun PeqBandList(
     val bands = holder.visibleBands
     LaunchedEffect(holder.selectedScope, holder.selectedUuid) {
         val selected = bands.indexOfFirst { it.uuid == holder.selectedUuid }
-        if (selected >= 0) listState.animateScrollToItem(selected)
+        if (selected >= 0 && listState.layoutInfo.visibleItemsInfo.none { it.index == selected }) {
+            listState.animateScrollToItem(selected)
+        }
     }
     BoxWithConstraints(modifier.fillMaxWidth().testTag("peq-filter-table")) {
         val compact = maxWidth < 720.dp
