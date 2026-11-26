@@ -7,6 +7,7 @@ import androidx.compose.ui.test.assertIsNotDisplayed
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
+import androidx.compose.ui.test.onParent
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -345,6 +346,32 @@ class PeqWorkspaceRenderTest {
         listOf("frequency", "gain", "Q").forEach { parameter ->
             compose.onNodeWithContentDescription("Edit Filter 3 $parameter").assertIsDisplayed()
         }
+    }
+
+    @Test
+    fun selectingAClippedRowRevealsTheWholeRow() {
+        compose.runOnIdle {
+            repeat(8) { holder.addBand() }
+            holder.selectedUuid = null
+        }
+        swipeToFilters()
+        val row = compose.onNodeWithTag("peq-filter-row-1")
+        val original = row.fetchSemanticsNode().boundsInRoot
+        row.onParent()
+            .performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, 28f) }
+        compose.waitForIdle()
+        assertTrue(row.fetchSemanticsNode().boundsInRoot.height < original.height)
+        compose.runOnIdle { holder.selectedUuid = holder.visibleBands.first().uuid }
+        compose.waitForIdle()
+        assertEquals(original.height, row.fetchSemanticsNode().boundsInRoot.height, 0.5f)
+    }
+
+    @Test
+    fun wideTableSeparatesAdjacentParameterSteppers() {
+        swipeToFilters()
+        val plus = compose.onNodeWithContentDescription("Increase Filter 1 frequency").fetchSemanticsNode()
+        val minus = compose.onNodeWithContentDescription("Decrease Filter 1 gain").fetchSemanticsNode()
+        assertEquals(20f, minus.boundsInRoot.left - plus.boundsInRoot.right, 1f)
     }
 
     @Test

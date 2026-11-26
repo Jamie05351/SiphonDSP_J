@@ -52,6 +52,7 @@ internal val PeqControlBlue = Color(0xFF0A8EDF)
 internal val PeqControlText = Color(0xFFF3F6FA)
 internal val PeqMutedText = Color(0xFF9AA1AB)
 internal val PeqControlFill = Color(0xFF222530)
+internal val PeqValueFill = Color(0xFF090C12)
 internal val PeqPanelFill = Color(0xFF181A22)
 internal val PeqBottomClearance = 24.dp
 
@@ -147,7 +148,8 @@ internal fun PeqNumericControl(
         val source = remember { MutableInteractionSource() }
         Box(
             Modifier.weight(1f).fillMaxHeight()
-                .background(PeqPanelFill)
+                .background(PeqValueFill)
+                .border(1.dp, PeqMutedText.copy(alpha = .55f))
                 .clickable(interactionSource = source, indication = null, role = Role.Button, onClick = onValueClick)
                 .semantics { contentDescription = "Edit $label" }
                 .bmwFocusRing(source),
