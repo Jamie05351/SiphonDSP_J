@@ -88,7 +88,7 @@ private fun sideName(side: BmwOutputChannel) = if (side == BmwOutputChannel.LEFT
  * other way to tune the bands' phase) open from "All-pass…" in the top row, via [onOpenAllPass]. How to measure is a dialog. The column scrolls if its content runs long.
  */
 @Composable
-fun BandAlignScreen(model: BandAlignViewModel = viewModel(), onOpenAllPass: (() -> Unit)? = null) {
+fun BandAlignScreen(model: BandAlignViewModel = rememberBandAlignModel(), onOpenAllPass: (() -> Unit)? = null) {
     val context = LocalContext.current
     val dsp = rememberBmwDspState()
     var seatIndex by rememberSaveable { mutableIntStateOf(0) }
@@ -104,17 +104,18 @@ fun BandAlignScreen(model: BandAlignViewModel = viewModel(), onOpenAllPass: (() 
             Row(Modifier.fillMaxWidth().height(40.dp), verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 BmwSegmentedControl(
-                    options = BmwOutputChannel.entries.map { sideName(it).uppercase() },
+                    // L / R, as on the graphs: full words don't fit beside the seat on a phone.
+                    options = listOf("L", "R"),
                     selectedIndex = sideIndex, onSelect = { sideIndex = it },
                     optionAccents = listOf(Color(LeftChannelColor), Color(RightChannelColor)),
-                    modifier = Modifier.width(200.dp), segmentHeight = 36.dp, segmentGap = 6.dp,
+                    modifier = Modifier.weight(0.5f), segmentHeight = 36.dp, segmentGap = 6.dp,
                 )
                 BmwSegmentedControl(
                     options = BandAlignViewModel.Seat.entries.map { it.label.substringBefore(' ').uppercase() },
                     selectedIndex = seatIndex, onSelect = { seatIndex = it },
-                    modifier = Modifier.width(260.dp), segmentHeight = 36.dp, segmentGap = 6.dp,
+                    modifier = Modifier.weight(1.2f), segmentHeight = 36.dp, segmentGap = 6.dp,
                 )
-                Spacer(Modifier.weight(1f))
+                // Selectors share the width, so both chips stay on screen on a phone in landscape too.
                 GlassChip("How to measure", onClick = { showHowTo = true }, arrow = false)
                 // The other way to tune the bands' phase, always in reach rather than under the column.
                 if (onOpenAllPass != null) GlassChip("All-pass…", onClick = onOpenAllPass, arrow = false)
@@ -156,7 +157,7 @@ fun BandAlignScreen(model: BandAlignViewModel = viewModel(), onOpenAllPass: (() 
                     Text("Band Align", fontSize = 19.sp, fontWeight = FontWeight.SemiBold,
                         style = TextStyle(brush = Brush.horizontalGradient(listOf(LowColor, MidColor))))
                     for (slot in BandAlignViewModel.Slot.entries) {
-                        ImportRow(model, BandAlignViewModel.Key(seat, side, slot))
+                        ImportRow(model, BandAlignViewModel.Key(seat, side, slot)) { dsp.values }
                     }
                     val ready = model.readySides()
                     GlassChip(if (model.analysing) "Analysing…" else "Analyse", onClick = {
@@ -215,10 +216,11 @@ private fun PageColumn(modifier: Modifier, content: @Composable ColumnScope.() -
  * by side, the two buttons left the text almost no width: "Low only" broke a letter per line.
  */
 @Composable
-private fun ImportRow(model: BandAlignViewModel, key: BandAlignViewModel.Key) {
+private fun ImportRow(model: BandAlignViewModel, key: BandAlignViewModel.Key, currentValues: () -> FloatArray) {
     val context = LocalContext.current
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) model.import(key, uri)
+        // With the settings it was measured at, so the measured curves can follow later changes.
+        if (uri != null) model.import(key, uri, currentValues())
     }
     val imported = model.imports[key]
     val err = model.importErrors[key]

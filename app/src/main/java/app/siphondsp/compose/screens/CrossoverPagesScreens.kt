@@ -1,5 +1,9 @@
 package app.siphondsp.compose.screens
 
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -70,6 +74,7 @@ fun CrossoverLowMidPage(
     graphMode: CrossoverGraphMode,
     onGraphModeChange: (CrossoverGraphMode) -> Unit,
     modifier: Modifier = Modifier,
+    onSplit: ((Int) -> Unit)? = null,
 ) {
     val dsp = rememberBmwDspState()
     val subsonicLabel = stringResource(R.string.bmw_dsp_subsonic_freq)
@@ -154,7 +159,7 @@ fun CrossoverLowMidPage(
         }
     }
 
-    CrossoverPage(dsp, graphMode, onGraphModeChange, modifier, controls)
+    CrossoverPage(dsp, graphMode, onGraphModeChange, modifier, controls, split = 0, onSplit = onSplit)
 }
 
 /** See [CrossoverLowMidPage]. The 3-way switch is the master 3-way on/off: off is bit-identical
@@ -164,6 +169,7 @@ fun CrossoverMidHighPage(
     graphMode: CrossoverGraphMode,
     onGraphModeChange: (CrossoverGraphMode) -> Unit,
     modifier: Modifier = Modifier,
+    onSplit: ((Int) -> Unit)? = null,
 ) {
     val dsp = rememberBmwDspState()
     val midSlider = Color(BmwDashboardSkin.SLIDER_MID_BAND_COLOR)
@@ -201,7 +207,7 @@ fun CrossoverMidHighPage(
         SlopeRow(highCrossoverType, onHighType, row(272, 40))
     }
 
-    CrossoverPage(dsp, graphMode, onGraphModeChange, modifier, controls)
+    CrossoverPage(dsp, graphMode, onGraphModeChange, modifier, controls, split = 1, onSplit = onSplit)
 }
 
 /**
@@ -251,12 +257,60 @@ private fun CrossoverPage(
     onGraphModeChange: (CrossoverGraphMode) -> Unit,
     modifier: Modifier,
     controls: @Composable (ControlRow) -> Unit,
+    split: Int = -1,
+    onSplit: ((Int) -> Unit)? = null,
 ) {
     if (LocalContext.current.isHeadUnitDisplay()) {
-        HeadUnitCrossoverPage(dsp, graphMode, onGraphModeChange, modifier, controls)
+        HeadUnitCrossoverPage(dsp, graphMode, onGraphModeChange, modifier, controls, split, onSplit)
     } else {
-        PhoneCrossoverPage(dsp, graphMode, onGraphModeChange, modifier, controls)
+        PhoneCrossoverPage(dsp, graphMode, onGraphModeChange, modifier, controls, split, onSplit)
     }
+}
+
+/**
+ * The Crossover page: one graph, one split at a time. [split] 0 shows the Low / Mid controls
+ * ([CrossoverLowMidPage]), 1 the Mid / High ones ([CrossoverMidHighPage]); the selector beside the
+ * graph-mode picker switches them, and the graph picks the chosen split's markers out.
+ */
+@Composable
+fun CrossoverSplitsPage(
+    graphMode: CrossoverGraphMode,
+    onGraphModeChange: (CrossoverGraphMode) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var split by rememberSaveable { mutableIntStateOf(0) }
+    if (split == 0) CrossoverLowMidPage(graphMode, onGraphModeChange, modifier, onSplit = { split = it })
+    else CrossoverMidHighPage(graphMode, onGraphModeChange, modifier, onSplit = { split = it })
+}
+
+/**
+ * What the Crossovers graph draws besides the DSP model: the car baseline and house curve (as the
+ * PEQ graph shows them, with the same Graph menu switches) and the car's measured Low + Mid sum
+ * from Band Align's imports, re-timed for today's delays.
+ */
+private class SystemContext(
+    val peqState: BmwPeqState,
+    val carBaseline: app.siphondsp.dsp.CarBaseline?,
+    val houseCurve: app.siphondsp.dsp.HouseCurve?,
+    val measured: (DoubleArray, app.siphondsp.dsp.BmwOutputChannel) -> app.siphondsp.dsp.bandalign.MeasuredLowMid.Result?,
+)
+
+@Composable
+private fun rememberSystemContext(dsp: BmwDspState): SystemContext {
+    val context = LocalContext.current
+    val holder = remember(context) { app.siphondsp.compose.state.PeqStateHolder(context.applicationContext) }
+    androidx.compose.runtime.LaunchedEffect(holder) { holder.loadCarBaseline(); holder.loadHouseCurve() }
+    val bandAlign = rememberBandAlignModel()
+    return SystemContext(
+        peqState = holder.peqState,
+        carBaseline = holder.graphBaseline,
+        houseCurve = holder.houseCurve?.takeIf { holder.showHouseCurve },
+        // Driver seat when it has files, else passenger; the legend names which.
+        measured = { f, side ->
+            bandAlign.measured(BandAlignViewModel.Seat.DRIVER, side, dsp.values, f)
+                ?: bandAlign.measured(BandAlignViewModel.Seat.PASSENGER, side, dsp.values, f)
+        },
+    )
 }
 
 /** Head unit: the graph and its mode picker on the left, [controls] placed at their editor
@@ -269,20 +323,41 @@ private fun HeadUnitCrossoverPage(
     onGraphModeChange: (CrossoverGraphMode) -> Unit,
     modifier: Modifier,
     controls: @Composable (ControlRow) -> Unit,
+    split: Int,
+    onSplit: ((Int) -> Unit)?,
 ) {
-    val context = LocalContext.current
-    val peqState = remember { BmwPeqState.load(context) }
+    val system = rememberSystemContext(dsp)
 
     BmwDspTheme {
         WorkspaceArtBox(modifier.fillMaxSize()) {
             CrossoverResponseGraph(
                 mode = graphMode,
                 systemValues = dsp.values,
-                peqState = peqState,
+                peqState = system.peqState,
                 modifier = Modifier.artRect(artDp(GraphX, 76, GraphWidth, 305)),
+                carBaseline = system.carBaseline,
+                houseCurve = system.houseCurve,
+                measured = system.measured,
+                highlightSplit = split,
             )
-            Box(Modifier.artRect(artDp(GraphX, 388, GraphWidth, 42)), contentAlignment = Alignment.Center) {
-                GraphModePicker(graphMode, onGraphModeChange)
+            if (onSplit != null) {
+                // The split selector, in the pair's band colours, beside the graph modes.
+                BmwSegmentedControl(
+                    options = listOf("LOW / MID", "MID / HIGH"),
+                    selectedIndex = split,
+                    onSelect = onSplit,
+                    optionAccents = listOf(Color(BmwDashboardSkin.SLIDER_LOW_BAND_COLOR), Color(BmwDashboardSkin.SLIDER_HIGH_BAND_COLOR)),
+                    modifier = Modifier.artRect(artDp(GraphX, 388, SplitWidth, 42)),
+                    segmentHeight = 34.dp,
+                    segmentGap = 4.dp,
+                )
+                Box(Modifier.artRect(artDp(GraphX + SplitWidth + 12, 388, GraphWidth - SplitWidth - 12, 42)), contentAlignment = Alignment.Center) {
+                    GraphModePicker(graphMode, onGraphModeChange)
+                }
+            } else {
+                Box(Modifier.artRect(artDp(GraphX, 388, GraphWidth, 42)), contentAlignment = Alignment.Center) {
+                    GraphModePicker(graphMode, onGraphModeChange)
+                }
             }
             controls { y, h -> Modifier.artRect(artDp(ControlX, y, ControlColumnWidth, h)) }
         }
@@ -299,9 +374,10 @@ private fun PhoneCrossoverPage(
     onGraphModeChange: (CrossoverGraphMode) -> Unit,
     modifier: Modifier,
     controls: @Composable (ControlRow) -> Unit,
+    split: Int = -1,
+    onSplit: ((Int) -> Unit)? = null,
 ) {
-    val context = LocalContext.current
-    val peqState = remember { BmwPeqState.load(context) }
+    val system = rememberSystemContext(dsp)
 
     BmwDspTheme {
         Row(
@@ -314,10 +390,27 @@ private fun PhoneCrossoverPage(
                 CrossoverResponseGraph(
                     mode = graphMode,
                     systemValues = dsp.values,
-                    peqState = peqState,
+                    peqState = system.peqState,
                     modifier = Modifier.fillMaxWidth().weight(1f),
+                    carBaseline = system.carBaseline,
+                    houseCurve = system.houseCurve,
+                    measured = system.measured,
+                    highlightSplit = split,
                 )
                 Spacer(Modifier.height(8.dp))
+                // Phones in landscape: the split selector above the graph modes (one page holds both splits).
+                if (onSplit != null) {
+                    BmwSegmentedControl(
+                        options = listOf("LOW / MID", "MID / HIGH"),
+                        selectedIndex = split,
+                        onSelect = onSplit,
+                        optionAccents = listOf(Color(BmwDashboardSkin.SLIDER_LOW_BAND_COLOR), Color(BmwDashboardSkin.SLIDER_HIGH_BAND_COLOR)),
+                        modifier = Modifier.fillMaxWidth(),
+                        segmentHeight = 34.dp,
+                        segmentGap = 4.dp,
+                    )
+                    Spacer(Modifier.height(6.dp))
+                }
                 GraphModePicker(graphMode, onGraphModeChange)
             }
             Column(
@@ -364,6 +457,7 @@ private const val GraphWidth = 719
 private const val ControlX = 917
 private const val ControlColumnWidth = 333
 private val ControlLabelWidth = 150.dp
+private const val SplitWidth = 260
 
 private fun lowPair(field: Int) = intArrayOf(
     NativeBmwDspValues.outputIndex(NativeBmwDspValues.OUTPUT_LOW_LEFT, field),

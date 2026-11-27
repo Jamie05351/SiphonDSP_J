@@ -103,7 +103,10 @@ fun AllPassPage(modifier: Modifier = Modifier, onBack: (() -> Unit)? = null) {
             }
         } else {
             Column(modifier.fillMaxSize().padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 12.dp)) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically) {
+                    // Opened from the Phase page: back to Band Align (phones in landscape too).
+                    if (onBack != null) app.siphondsp.compose.controls.GlassChip("‹ Back", onClick = onBack, arrow = false)
                     sides(Modifier.width(150.dp).height(44.dp))
                     bands(Modifier.weight(1f).height(44.dp))
                 }
