@@ -13,9 +13,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.border
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableLongStateOf
-import androidx.compose.runtime.mutableStateListOf
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -331,8 +331,9 @@ private fun CompressorCurveGraph(
         }
         // Knee region and threshold.
         if (knee > 0) {
-            drawRect(color.copy(alpha = .08f), androidx.compose.ui.geometry.Offset(x(threshold - knee / 2), padT),
-                androidx.compose.ui.geometry.Size(x(threshold + knee / 2) - x(threshold - knee / 2), h))
+            val k0 = x(threshold - knee / 2).coerceIn(padL, padL + w)
+            val k1 = x(threshold + knee / 2).coerceIn(padL, padL + w)
+            drawRect(color.copy(alpha = .08f), androidx.compose.ui.geometry.Offset(k0, padT), androidx.compose.ui.geometry.Size(k1 - k0, h))
         }
         val dash = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(4.dp.toPx(), 4.dp.toPx()))
         drawLine(color, androidx.compose.ui.geometry.Offset(x(threshold), padT), androidx.compose.ui.geometry.Offset(x(threshold), padT + h), 1.5.dp.toPx(), pathEffect = dash)
@@ -516,22 +517,9 @@ private typealias BusRow = (y: Int, h: Int) -> Modifier
 @Composable
 fun CompressorDriverPage(modifier: Modifier = Modifier) {
     val dsp = rememberBmwDspState()
-    val busMeter = rememberMeterPoll(NativeDsp.METER_BUS_LIMITER, BusMeterSize)
-    // When each bus last limited (uptime ms), sampled 5x a second off the same meter, so the chip
-    // under each meter can say "limited 3 s ago" after the meter itself has fallen back.
-    val lastLimited = remember { mutableStateListOf(0L, 0L, 0L) }
-    var now by remember { mutableLongStateOf(android.os.SystemClock.uptimeMillis()) }
-    LaunchedEffect(busMeter) {
-        while (true) {
-            now = android.os.SystemClock.uptimeMillis()
-            for (i in 0 until BusMeterSize) {
-                if (busMeter.valid && busMeter.values[i] > LimitingDb) lastLimited[i] = now
-            }
-            kotlinx.coroutines.delay(200)
-        }
-    }
+    val busMeter = rememberMeterPoll(NativeDsp.METER_BUS_LIMITER, BusMeterSize, holdAboveDb = LimitingDb)
     val bus: @Composable (Int, BusRow) -> Unit = { i, row ->
-        BusLimiterColumn(dsp, BusColumns[i], { busMeter.value(i, 0f) }, row, lastLimited[i], now)
+        BusLimiterColumn(dsp, BusColumns[i], { busMeter.value(i, 0f) }, row) { busMeter.lastAbove[i] }
     }
 
     BmwDspTheme {
@@ -549,7 +537,7 @@ fun CompressorDriverPage(modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun BusLimiterColumn(dsp: BmwDspState, col: BusColumn, gainReductionDb: () -> Float, row: BusRow, lastLimitedMs: Long = 0L, nowMs: Long = 0L) {
+private fun BusLimiterColumn(dsp: BmwDspState, col: BusColumn, gainReductionDb: () -> Float, row: BusRow, lastLimitedMs: () -> Long) {
     ArtGroupHeader(
         title = col.title,
         accent = Color(col.accent),
@@ -563,7 +551,7 @@ private fun BusLimiterColumn(dsp: BmwDspState, col: BusColumn, gainReductionDb: 
         ArtLabel("Gain reduction")
         BmwGrMeter(gainReductionDb, Modifier.fillMaxWidth().height(36.dp), stage = MbcBandGrMeter.Stage.LIMITER)
     }
-    LimiterActivityChip(lastLimitedMs, nowMs, row(304, 30))
+    LimiterActivityChip(lastLimitedMs, row(304, 30))
 }
 
 /** Phone: the three columns side by side, centred; a phone too narrow for them stacks them and
@@ -604,8 +592,11 @@ private const val BusMeterSize = 3
  * nothing (NativeDsp.readNativeBmwMeter fills [values] in place).
  */
 @Stable
-private class MeterPoll(size: Int) {
+private class MeterPoll(size: Int, val holdAboveDb: Float = Float.NaN) {
     val values = FloatArray(size)
+
+    /** Uptime (ms) each value last read above [holdAboveDb], recorded on every ~33 ms poll so a brief hit isn't missed; 0 = never. */
+    val lastAbove = LongArray(size)
     val tick = mutableIntStateOf(0)
     var valid = false
 
@@ -623,13 +614,17 @@ private class MeterPoll(size: Int) {
 }
 
 @Composable
-private fun rememberMeterPoll(kind: Int, size: Int): MeterPoll {
-    val poll = remember(kind, size) { MeterPoll(size) }
+private fun rememberMeterPoll(kind: Int, size: Int, holdAboveDb: Float = Float.NaN): MeterPoll {
+    val poll = remember(kind, size, holdAboveDb) { MeterPoll(size, holdAboveDb) }
     LifecycleStartEffect(poll) {
         val handler = Handler(Looper.getMainLooper())
         val tick = object : Runnable {
             override fun run() {
                 poll.valid = RootlessAudioProcessorService.readNativeBmwMeter(kind, poll.values)
+                if (poll.valid && !poll.holdAboveDb.isNaN()) {
+                    val t = SystemClock.uptimeMillis()
+                    for (i in poll.values.indices) if (poll.values[i] > poll.holdAboveDb) poll.lastAbove[i] = t
+                }
                 poll.tick.intValue++
                 handler.postDelayed(this, MeterTickMs)
             }
@@ -719,8 +714,17 @@ private const val LimitedHoldMs = 10_000L
  * has dropped back.
  */
 @Composable
-private fun LimiterActivityChip(lastLimitedMs: Long, nowMs: Long, modifier: Modifier) {
-    val age = if (lastLimitedMs == 0L) Long.MAX_VALUE else nowMs - lastLimitedMs
+private fun LimiterActivityChip(lastLimitedMs: () -> Long, modifier: Modifier) {
+    // The clock lives here so its 5 Hz tick recomposes only this chip, not the page's steppers.
+    var nowMs by remember { mutableLongStateOf(SystemClock.uptimeMillis()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            kotlinx.coroutines.delay(200)
+            nowMs = SystemClock.uptimeMillis()
+        }
+    }
+    val last = lastLimitedMs()
+    val age = if (last == 0L) Long.MAX_VALUE else nowMs - last
     val (text, color) = when {
         age < 400 -> "limiting now" to DspColors.Comp
         age < LimitedHoldMs -> "limited ${age / 1000 + 1} s ago" to Color(0xFFFFA24C)
