@@ -11,6 +11,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -33,7 +34,7 @@ import app.siphondsp.compose.controls.DspColors
 import app.siphondsp.compose.controls.WorkspaceArt
 import app.siphondsp.compose.screens.AllPassPage
 import app.siphondsp.compose.screens.BandAlignScreen
-import app.siphondsp.compose.screens.CompressorBandPage
+import app.siphondsp.compose.screens.CompressorBandsPage
 import app.siphondsp.compose.screens.CompressorDriverPage
 import app.siphondsp.compose.screens.CompressorVisualiserPage
 import app.siphondsp.compose.screens.ConvolverScreen
@@ -88,8 +89,8 @@ object Routes {
     /** Not a page of its own: opens Phase with its all-pass sections showing. */
     const val ALIGNMENT_PAGE_ALLPASS = 100
 
-    /** Dynamics: the visualiser, one page per MBC band, then the bus limiters. */
-    val DYNAMICS_PAGE_COUNT = 2 + NativeBmwDspValues.MBC_BAND_COUNT
+    /** Dynamics: the overview, one Bands page (a selector picks the band), then the bus limiters. */
+    const val DYNAMICS_PAGE_COUNT = 3
 
     /** Crossover (one split at a time) and Tilt. */
     const val CROSSOVER_PAGE_COUNT = 2
@@ -318,21 +319,22 @@ internal fun CrossoverWorkspace() {
 }
 
 @Composable
-private fun DynamicsWorkspace() {
-    val pageCount = Routes.DYNAMICS_PAGE_COUNT
-    val pagerState = rememberPagerState { pageCount }
-    val labels = remember { listOf("OVERVIEW") + List(NativeBmwDspValues.MBC_BAND_COUNT) { "B${it + 1}" } + "LIMITERS" }
+internal fun DynamicsWorkspace() {
+    val pagerState = rememberPagerState { Routes.DYNAMICS_PAGE_COUNT }
+    val scope = rememberCoroutineScope()
+    // The band the BANDS page shows, also set by tapping a band on OVERVIEW.
+    var band by rememberSaveable { mutableIntStateOf(0) }
     Workspace(
         current = DspDestination.DYNAMICS,
-        toolbarActions = { PagerControls(pagerState, labels, WorkspaceArt.finder6) },
+        toolbarActions = { PagerControls(pagerState, listOf("OVERVIEW", "BANDS", "LIMITERS"), WorkspaceArt.finder3, DspColors.Comp) },
     ) {
         // Top-aligned: a page shorter than the pane (the visualiser) would otherwise float in the
         // middle and push its bottom slider toward the bezel.
         HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize(), verticalAlignment = Alignment.Top) { page ->
             when (page) {
-                0 -> CompressorVisualiserPage()
-                pageCount - 1 -> CompressorDriverPage()
-                else -> CompressorBandPage(page - 1)
+                0 -> CompressorVisualiserPage(onOpenBand = { b -> band = b; scope.launch { pagerState.scrollToPage(1) } })
+                1 -> CompressorBandsPage(band, { band = it })
+                else -> CompressorDriverPage()
             }
         }
     }

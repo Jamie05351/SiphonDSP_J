@@ -1,5 +1,8 @@
 package app.siphondsp.compose.screens
 
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectTapGestures
 import android.content.Context
 import android.graphics.BlurMaskFilter
 import android.graphics.Canvas
@@ -66,15 +69,23 @@ private val FreqScale = doubleArrayOf(
     25.0, 40.0, 63.0, 100.0, 160.0, 250.0, 400.0, 630.0,
     1000.0, 1600.0, 2500.0, 4000.0, 6300.0, 10000.0, 16000.0,
 )
-private val BandTints = intArrayOf(
-    BmwDashboardSkin.M_BLUE, 0xFF6E7BFF.toInt(), 0xFFF2B33D.toInt(), 0xFFE86A4A.toInt(),
+/**
+ * The four compressor bands' colours: coral, amber, teal, violet -- kept apart from the Low / Mid
+ * / High speaker-band colours so a compressor band never reads as a crossover band. Shared with
+ * the Bands page's selector, curve and meter.
+ */
+internal val MbcBandColors = intArrayOf(
+    0xFFFF6B6B.toInt(), 0xFFFFB347.toInt(), 0xFF2EC4B6.toInt(), 0xFF9B7BFF.toInt(),
 )
+private val BandTints = MbcBandColors
 
 @Composable
 fun CompressorGraph(
     systemValues: FloatArray,
     mbcMeter: () -> FloatArray?,
     modifier: Modifier = Modifier,
+    /** Tapping a band's region (a tap, never a drag) opens it; null leaves the graph display-only. */
+    onBandTap: ((Int) -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val density = LocalDensity.current.density
@@ -151,6 +162,10 @@ fun CompressorGraph(
 
     // Reused paths / scratch arrays, like the View's members.
     val scratch = remember { CompressorGraphScratch() }
+    val grBarPaint = remember { Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL } }
+    val grTrackPaint = remember { Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL; color = 0x8C0B0C0F.toInt() } }
+    val currentTap by rememberUpdatedState(onBandTap)
+    val valuesNow by rememberUpdatedState(systemValues)
 
     // Live spectrum poll, scoped to composition (the HorizontalPager only composes the current page).
     val spectrumTick = remember { mutableIntStateOf(0) }
@@ -166,7 +181,23 @@ fun CompressorGraph(
         }
     }
 
-    ComposeCanvas(modifier.graphPanel()) {
+    ComposeCanvas(
+        modifier.graphPanel().then(
+            if (onBandTap == null) Modifier else Modifier.pointerInput(Unit) {
+                detectTapGestures { offset ->
+                    val left = PAD_LEFT_DP * density
+                    val right = size.width - PAD_RIGHT_DP * density
+                    if (right <= left || valuesNow.size < NativeBmwDspValues.SIZE) return@detectTapGestures
+                    val splits = CompressorSurfaceMath.splitFrequencies(valuesNow)
+                    val band = (0 until CompressorSurfaceMath.BAND_COUNT).firstOrNull { b ->
+                        val (lo, hi) = CompressorSurfaceMath.bandRange(b, splits)
+                        offset.x >= xForFrequency(lo, left, right) && offset.x <= xForFrequency(hi, left, right)
+                    }
+                    if (band != null) currentTap?.invoke(band)
+                }
+            },
+        ),
+    ) {
         if (systemValues.size < NativeBmwDspValues.SIZE) return@ComposeCanvas
         val left = PAD_LEFT_DP * density
         val right = size.width - PAD_RIGHT_DP * density
@@ -192,6 +223,7 @@ fun CompressorGraph(
             if (mbcOn) {
                 drawGainCurve(nc, meter, left, right, top, bottom, splits, scratch, gridPaint, gainCurvePaint, gainGlowPaint)
             }
+            if (mbcOn) drawGainReductionBars(nc, systemValues, meter, left, right, top, bottom, density, splits, grBarPaint, grTrackPaint)
             drawBandReadouts(nc, systemValues, meter, left, right, top, density, splits, readoutPaint)
         }
     }
@@ -426,10 +458,50 @@ private fun drawBandReadouts(
         val enabled = mbcOn &&
             values[NativeBmwDspValues.mbcBandIndex(band, NativeBmwDspValues.MBC_FIELD_ENABLED)] >= .5f
         val gr = mbcMeter?.getOrNull(band * 3 + 2) ?: 0f
-        val text = if (enabled) "GR ${"%.1f".format(gr)} dB" else "—"
+        val text = if (enabled) "B${band + 1}  ${"%.1f".format(gr)} dB" else "B${band + 1}  —"
+        readoutPaint.color = if (enabled) BandTints[band] else Color.rgb(150, 152, 160)
         nc.drawText(text, cx, top + 17f * density, readoutPaint)
     }
 }
+
+/**
+ * Each enabled band's live gain reduction as a bar hanging from the top of its region, in its
+ * colour (full height = [GR_BAR_FULL_SCALE_DB]), so which band is working, and how hard, reads at
+ * a glance.
+ */
+private fun drawGainReductionBars(
+    nc: Canvas,
+    values: FloatArray,
+    mbcMeter: FloatArray?,
+    left: Float,
+    right: Float,
+    top: Float,
+    bottom: Float,
+    density: Float,
+    splits: DoubleArray,
+    bar: Paint,
+    track: Paint,
+) {
+    val barTop = top + 24f * density
+    val maxH = (bottom - barTop) * 0.55f
+    for (band in 0 until CompressorSurfaceMath.BAND_COUNT) {
+        if (values[NativeBmwDspValues.mbcBandIndex(band, NativeBmwDspValues.MBC_FIELD_ENABLED)] < .5f) continue
+        val (lowHz, highHz) = CompressorSurfaceMath.bandRange(band, splits)
+        val x0 = xForFrequency(lowHz, left, right)
+        val x1 = xForFrequency(highHz, left, right)
+        val w = minOf(36f * density, (x1 - x0) * 0.5f)
+        if (w < 4f * density) continue
+        val cx = (x0 + x1) / 2f
+        val r = 6f * density
+        nc.drawRoundRect(cx - w / 2, barTop, cx + w / 2, barTop + maxH, r, r, track)
+        val gr = (mbcMeter?.getOrNull(band * 3 + 2) ?: 0f).coerceIn(0f, GR_BAR_FULL_SCALE_DB)
+        if (gr <= 0.05f) continue
+        bar.color = ColorUtils.setAlphaComponent(BandTints[band], 220)
+        nc.drawRoundRect(cx - w / 2, barTop, cx + w / 2, barTop + maxH * gr / GR_BAR_FULL_SCALE_DB, r, r, bar)
+    }
+}
+
+private const val GR_BAR_FULL_SCALE_DB = 12f
 
 // --- coordinate mapping, 1:1 with CompressorSurface.xForFrequency / yForDb -----------------
 
