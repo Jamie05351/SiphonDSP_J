@@ -1,5 +1,14 @@
 package app.siphondsp.compose.screens
 
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.text.TextStyle
+import app.siphondsp.compose.controls.DspColors
 import android.content.ActivityNotFoundException
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -12,14 +21,12 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -71,17 +78,17 @@ private val Panel = Color(0xFF101318)
 private fun sideName(side: BmwOutputChannel) = if (side == BmwOutputChannel.LEFT) "Left" else "Right"
 
 /**
- * Band Align, a page of the Alignment workspace: import REW measurements of each side's Low band
- * alone and Mid band alone at each seat, and it works out the Low delay and polarity that make the
- * two bands add up best through their crossover at those seats -- shows the before and after, and
- * applies it (with undo). See [BandAlignSolver] for the method.
+ * The Alignment workspace's PHASE page, built around Band Align: import REW measurements of each
+ * side's Low band alone and Mid band alone at each seat, and it works out the Low delay and
+ * polarity that make the two bands add up best through their crossover at those seats -- shows
+ * the before and after, and applies it (with undo). See [BandAlignSolver] for the method.
  *
- * Three columns like the other pages: Import (seat, side, the three files), the before / after
- * graph for that seat and side, then Analyse, the result and Apply / Undo. How to measure is a
- * dialog, so the page itself stays short. Each column scrolls if its content runs long.
+ * Side and seat across the top; the before / after graph large on the left; one column on the
+ * right with the three measurements, Analyse, the result and Apply. The all-pass sections (the
+ * other way to tune the bands' phase) open from "All-pass…" in the top row, via [onOpenAllPass]. How to measure is a dialog. The column scrolls if its content runs long.
  */
 @Composable
-fun BandAlignScreen(model: BandAlignViewModel = viewModel()) {
+fun BandAlignScreen(model: BandAlignViewModel = viewModel(), onOpenAllPass: (() -> Unit)? = null) {
     val context = LocalContext.current
     val dsp = rememberBmwDspState()
     var seatIndex by rememberSaveable { mutableIntStateOf(0) }
@@ -90,88 +97,107 @@ fun BandAlignScreen(model: BandAlignViewModel = viewModel()) {
     val seat = BandAlignViewModel.Seat.entries[seatIndex]
     val side = BmwOutputChannel.entries[sideIndex]
     BmwDspTheme {
-        Row(
-            Modifier.fillMaxSize().padding(start = 24.dp, end = 24.dp, top = 8.dp, bottom = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(28.dp),
+        Column(
+            Modifier.fillMaxSize().padding(start = 24.dp, end = 20.dp, top = 8.dp, bottom = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            PageColumn(Modifier.weight(0.31f)) {
-                ArtGroupHeader("Import", Accent, Modifier.fillMaxWidth().height(40.dp))
-                BmwSegmentedControl(
-                    options = BandAlignViewModel.Seat.entries.map { it.label.substringBefore(' ').uppercase() },
-                    selectedIndex = seatIndex, onSelect = { seatIndex = it },
-                    modifier = Modifier.fillMaxWidth(), segmentHeight = 36.dp,
-                )
+            Row(Modifier.fillMaxWidth().height(40.dp), verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 BmwSegmentedControl(
                     options = BmwOutputChannel.entries.map { sideName(it).uppercase() },
                     selectedIndex = sideIndex, onSelect = { sideIndex = it },
-                    modifier = Modifier.fillMaxWidth(), segmentHeight = 36.dp,
+                    optionAccents = listOf(Color(LeftChannelColor), Color(RightChannelColor)),
+                    modifier = Modifier.width(200.dp), segmentHeight = 36.dp, segmentGap = 6.dp,
                 )
-                for (slot in BandAlignViewModel.Slot.entries) {
-                    ImportRow(model, BandAlignViewModel.Key(seat, side, slot))
-                }
+                BmwSegmentedControl(
+                    options = BandAlignViewModel.Seat.entries.map { it.label.substringBefore(' ').uppercase() },
+                    selectedIndex = seatIndex, onSelect = { seatIndex = it },
+                    modifier = Modifier.width(260.dp), segmentHeight = 36.dp, segmentGap = 6.dp,
+                )
+                Spacer(Modifier.weight(1f))
+                GlassChip("How to measure", onClick = { showHowTo = true }, arrow = false)
+                // The other way to tune the bands' phase, always in reach rather than under the column.
+                if (onOpenAllPass != null) GlassChip("All-pass…", onClick = onOpenAllPass, arrow = false)
             }
-            PageColumn(Modifier.weight(0.38f)) {
-                ArtGroupHeader("${seat.label.substringBefore(' ')} seat · ${sideName(side)} side", Color.White, Modifier.fillMaxWidth().height(40.dp))
-                val result = model.results?.firstOrNull { it.side == side }
-                val seatResult = result?.seats?.firstOrNull { it.name.equals(seat.label, ignoreCase = true) }
-                    ?: result?.seats?.firstOrNull { it.name.contains(seat.label.substringBefore(' '), ignoreCase = true) }
-                if (result != null && seatResult != null) {
-                    BeforeAfterChart(seatResult, result.bandHz, Modifier.fillMaxWidth().height(190.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                        Legend(Before, "Low + Mid now")
-                        if (result.proposal != null) Legend(Accent, "with Band Align")
-                    }
-                    Column(
-                        Modifier.fillMaxWidth().background(Panel, RoundedCornerShape(12.dp)).padding(horizontal = 14.dp, vertical = 10.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp),
-                    ) { SeatNotes(seatResult) }
-                } else {
-                    Box(
-                        Modifier.fillMaxWidth().height(190.dp).background(Panel, RoundedCornerShape(12.dp)),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            if (model.results == null) "Import Low only and Mid only, then Analyse" else "No result for this seat and side",
-                            color = Before, fontSize = 13.sp, lineHeight = 18.sp, textAlign = TextAlign.Center,
-                            modifier = Modifier.padding(horizontal = 20.dp),
-                        )
+            Row(Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                // The graph: the summed response through the crossover, before and with Band Align.
+                Column(
+                    Modifier.weight(1f).fillMaxHeight().bandPairPanel().padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text("LOW + MID · ${sideName(side).uppercase()} · ${seat.label.substringBefore(' ').uppercase()} SEAT",
+                        color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                    val result = model.results?.firstOrNull { it.side == side }
+                    val seatResult = result?.seats?.firstOrNull { it.name.equals(seat.label, ignoreCase = true) }
+                        ?: result?.seats?.firstOrNull { it.name.contains(seat.label.substringBefore(' '), ignoreCase = true) }
+                    if (result != null && seatResult != null) {
+                        BeforeAfterChart(seatResult, result.bandHz, Modifier.fillMaxWidth().weight(1f))
+                        Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                            Legend(Before, "Low + Mid now")
+                            if (result.proposal != null) Legend(Accent, "with Band Align")
+                        }
+                        SeatNotes(seatResult)
+                    } else {
+                        Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
+                            Text(
+                                if (model.results == null) "Import Low only and Mid only, then Analyse" else "No result for this seat and side",
+                                color = Before, fontSize = 14.sp, lineHeight = 18.sp, textAlign = TextAlign.Center,
+                                modifier = Modifier.padding(horizontal = 20.dp),
+                            )
+                        }
                     }
                 }
-            }
-            PageColumn(Modifier.weight(0.31f)) {
-                ArtGroupHeader("Analyse", Accent, Modifier.fillMaxWidth().height(40.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                // Band Align: the measurements, Analyse, the result and Apply.
+                Column(
+                    Modifier.width(ColumnWidth).fillMaxHeight().bandPairPanel()
+                        .verticalScroll(rememberScrollState()).padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text("Band Align", fontSize = 19.sp, fontWeight = FontWeight.SemiBold,
+                        style = TextStyle(brush = Brush.horizontalGradient(listOf(LowColor, MidColor))))
+                    for (slot in BandAlignViewModel.Slot.entries) {
+                        ImportRow(model, BandAlignViewModel.Key(seat, side, slot))
+                    }
                     val ready = model.readySides()
                     GlassChip(if (model.analysing) "Analysing…" else "Analyse", onClick = {
                         if (ready.isNotEmpty() && !model.analysing) model.analyse(dsp.values, BmwPeqState.load(context))
                     }, arrow = false)
-                    GlassChip("How to measure", onClick = { showHowTo = true }, arrow = false)
-                }
-                if (model.analysing) LinearProgressIndicator(modifier = Modifier.fillMaxWidth(), color = Accent)
-                model.failure?.let { Body(it, color = Warn, small = true) }
-                if (model.measuredBeforeApply) {
-                    Body("Applied. The imported files were measured before that, so they've been cleared. Measure again to analyse or confirm.", color = Accent, small = true)
-                }
-                val ready = model.readySides()
-                if (model.results == null && !model.analysing) {
-                    Body(
-                        if (ready.isEmpty()) "Import at least one side's Low only and Mid only at a seat."
-                        else ready.entries.joinToString(" ") { (s, seats) -> "${sideName(s)}: ${seats.joinToString(" and ") { it.seat.lowercase() }}." },
-                        small = true,
-                    )
-                }
-                model.results?.let { results -> ResultSummary(model, results, dsp.values, dsp.isOn(NativeBmwDspValues.INDEX_DELAY_LINKED)) { dsp.commitAll(it) } }
-                if (model.undo != null) {
-                    GlassChip("Undo Band Align", onClick = {
-                        val message = model.undoApply(dsp.values) { dsp.commitAll(it) }
-                        Toast.makeText(context, message ?: model.failure ?: "Couldn't restore", Toast.LENGTH_LONG).show()
-                    }, arrow = false)
+                    if (model.analysing) LinearProgressIndicator(modifier = Modifier.fillMaxWidth(), color = Accent)
+                    model.failure?.let { Body(it, color = Warn, small = true) }
+                    if (model.measuredBeforeApply) {
+                        Body("Applied. The imported files were measured before that, so they've been cleared. Measure again to analyse or confirm.", color = Accent, small = true)
+                    }
+                    if (model.results == null && !model.analysing) {
+                        Body(
+                            if (ready.isEmpty()) "Import at least one side's Low only and Mid only at a seat."
+                            else ready.entries.joinToString(" ") { (s, seats) -> "${sideName(s)}: ${seats.joinToString(" and ") { it.seat.lowercase() }}." },
+                            small = true,
+                        )
+                    }
+                    model.results?.let { results -> ResultSummary(model, results, dsp.values, dsp.isOn(NativeBmwDspValues.INDEX_DELAY_LINKED)) { dsp.commitAll(it) } }
+                    if (model.undo != null) {
+                        GlassChip("Undo Band Align", onClick = {
+                            val message = model.undoApply(dsp.values) { dsp.commitAll(it) }
+                            Toast.makeText(context, message ?: model.failure ?: "Couldn't restore", Toast.LENGTH_LONG).show()
+                        }, arrow = false)
+                    }
                 }
             }
         }
         if (showHowTo) HowToMeasure { showHowTo = false }
     }
 }
+
+/** A dark panel edged and washed in the band pair's colours (Low blue into Mid yellow). */
+private fun Modifier.bandPairPanel(): Modifier = this
+    .clip(RoundedCornerShape(14.dp))
+    .background(Panel)
+    .background(Brush.verticalGradient(listOf(LowColor.copy(alpha = 0.10f), MidColor.copy(alpha = 0.06f))))
+    .border(1.5.dp, Brush.horizontalGradient(listOf(LowColor.copy(alpha = 0.7f), MidColor.copy(alpha = 0.7f))), RoundedCornerShape(14.dp))
+
+private val LowColor = Color(BmwDashboardSkin.LIGHT_BLUE)
+private val MidColor = Color(BmwDashboardSkin.MID_BAND_YELLOW)
+private val ColumnWidth = 360.dp
 
 /** One of the page's three columns, scrolling if its content is taller than the page. */
 @Composable
@@ -196,34 +222,34 @@ private fun ImportRow(model: BandAlignViewModel, key: BandAlignViewModel.Key) {
     }
     val imported = model.imports[key]
     val err = model.importErrors[key]
-    Column(
-        Modifier.fillMaxWidth().background(Panel, RoundedCornerShape(12.dp)).padding(horizontal = 14.dp, vertical = 10.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
+    val dot = when (key.slot.ordinal) { 0 -> LowColor; 1 -> MidColor; else -> Color.White }
+    Row(
+        Modifier.fillMaxWidth().background(Color(0xFF090C12), RoundedCornerShape(10.dp)).padding(start = 12.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Text(key.slot.label, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
-        when {
-            err != null -> Text(err, color = Warn, fontSize = 12.sp, lineHeight = 16.sp, maxLines = 4, overflow = TextOverflow.Ellipsis)
-            imported != null -> {
-                Text(imported.fileName, color = Color(0xFFB8C0CA), fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                if (imported.measurement.heavilySmoothed) {
-                    Text("Smoothed ${imported.measurement.smoothing}: export at 1/48 oct", color = Warn, fontSize = 12.sp, lineHeight = 16.sp)
+        Box(Modifier.size(10.dp).background(if (imported != null) dot else dot.copy(alpha = 0.25f), CircleShape))
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(key.slot.label, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+            when {
+                err != null -> Text(err, color = Warn, fontSize = 11.sp, lineHeight = 14.sp, maxLines = 3, overflow = TextOverflow.Ellipsis)
+                imported != null -> {
+                    Text(imported.fileName, color = Color(0xFFB8C0CA), fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    if (imported.measurement.heavilySmoothed) {
+                        Text("Smoothed ${imported.measurement.smoothing}: export at 1/48 oct", color = Warn, fontSize = 11.sp, lineHeight = 14.sp)
+                    }
                 }
+                key.slot.hint.isNotEmpty() -> Text(key.slot.hint, color = Before, fontSize = 11.sp, lineHeight = 14.sp, maxLines = 2)
             }
-            key.slot.hint.isNotEmpty() -> Text(key.slot.hint, color = Before, fontSize = 12.sp, lineHeight = 16.sp)
         }
-        Row(
-            Modifier.fillMaxWidth().padding(top = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
-        ) {
-            if (imported != null) GlassChip("Clear", onClick = { model.clear(key) }, arrow = false)
-            GlassChip(if (imported != null) "Replace" else "Import", onClick = {
-                try {
-                    launcher.launch(arrayOf("text/*", "application/octet-stream"))
-                } catch (_: ActivityNotFoundException) {
-                    Toast.makeText(context, "No file picker on this device -- import the files on a phone", Toast.LENGTH_LONG).show()
-                }
-            }, arrow = false)
-        }
+        if (imported != null) GlassChip("Clear", onClick = { model.clear(key) }, arrow = false)
+        GlassChip(if (imported != null) "Replace" else "Import", onClick = {
+            try {
+                launcher.launch(arrayOf("text/*", "application/octet-stream"))
+            } catch (_: ActivityNotFoundException) {
+                Toast.makeText(context, "No file picker on this device -- import the files on a phone", Toast.LENGTH_LONG).show()
+            }
+        }, arrow = false)
     }
 }
 
@@ -300,7 +326,7 @@ private fun ResultSummary(
         )
     }
     if (model.appliedResults !== results) {
-        GlassChip("Apply", onClick = {
+        GlassChip("Apply", accent = DspColors.Delay, onClick = {
             val ok = model.apply(values, BmwPeqState.load(context), commit)
             Toast.makeText(context, if (ok) "Band Align applied" else model.failure ?: "Couldn't save the change", Toast.LENGTH_LONG).show()
         }, arrow = false)

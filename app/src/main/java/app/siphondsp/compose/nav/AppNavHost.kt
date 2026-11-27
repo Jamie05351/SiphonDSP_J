@@ -28,6 +28,7 @@ import androidx.navigation.navArgument
 import app.siphondsp.R
 import app.siphondsp.compose.controls.ArtPagerFinder
 import app.siphondsp.compose.controls.DspPagerArrows
+import app.siphondsp.compose.controls.DspColors
 import app.siphondsp.compose.controls.WorkspaceArt
 import app.siphondsp.compose.screens.AllPassPage
 import app.siphondsp.compose.screens.BandAlignScreen
@@ -45,7 +46,6 @@ import app.siphondsp.compose.screens.HeadroomOutputScreen
 import app.siphondsp.compose.screens.NativeTruthScreen
 import app.siphondsp.compose.screens.PeqWorkspaceLayout
 import app.siphondsp.compose.screens.SignalGeneratorScreen
-import app.siphondsp.compose.screens.SpeakerAlignScreen
 import app.siphondsp.compose.screens.VirtualCentreScreen
 import app.siphondsp.compose.onboarding.OnboardingRoute
 import app.siphondsp.compose.screens.AppCompatRequest
@@ -81,9 +81,12 @@ object Routes {
     fun onboarding(fixPerms: Boolean = false, redoAdbSetup: Boolean = false) =
         "$ONBOARDING?$ARG_FIX_PERMS=$fixPerms&$ARG_REDO_ADB_SETUP=$redoAdbSetup"
 
-    /** Alignment's pages, a finder segment each. */
-    const val ALIGNMENT_PAGE_COUNT = 5
-    const val ALIGNMENT_PAGE_ALLPASS = 2
+    /** Alignment's pages, a finder segment each: Delay, Phase (Band Align), Centre. */
+    const val ALIGNMENT_PAGE_COUNT = 3
+    const val ALIGNMENT_PAGE_PHASE = 1
+
+    /** Not a page of its own: opens Phase with its all-pass sections showing. */
+    const val ALIGNMENT_PAGE_ALLPASS = 100
 
     /** Dynamics: the visualiser, one page per MBC band, then the bus limiters. */
     val DYNAMICS_PAGE_COUNT = 2 + NativeBmwDspValues.MBC_BAND_COUNT
@@ -257,10 +260,13 @@ private fun PeqWorkspace() {
 }
 
 @Composable
-private fun AlignmentWorkspace(startPage: Int) {
-    val pagerState = rememberPagerState(initialPage = startPage.coerceIn(0, Routes.ALIGNMENT_PAGE_COUNT - 1)) {
+internal fun AlignmentWorkspace(startPage: Int) {
+    val initialPage = if (startPage == Routes.ALIGNMENT_PAGE_ALLPASS) Routes.ALIGNMENT_PAGE_PHASE else startPage
+    val pagerState = rememberPagerState(initialPage = initialPage.coerceIn(0, Routes.ALIGNMENT_PAGE_COUNT - 1)) {
         Routes.ALIGNMENT_PAGE_COUNT
     }
+    // Phase shows Band Align, or the all-pass sections when opened from it (or from Home's ALLPASS).
+    var allPassOpen by rememberSaveable { mutableStateOf(startPage == Routes.ALIGNMENT_PAGE_ALLPASS) }
     val scope = rememberCoroutineScope()
     Workspace(
         current = DspDestination.ALIGNMENT,
@@ -268,10 +274,12 @@ private fun AlignmentWorkspace(startPage: Int) {
             if (LocalContext.current.isHeadUnitDisplay()) {
                 ArtPagerFinder(
                     pagerState = pagerState,
-                    labels = listOf("DELAY", "ALIGN", "ALLPASS", "CENTRE", "BAND"),
-                    frac = WorkspaceArt.finder5,
+                    labels = listOf("DELAY", "PHASE", "CENTRE"),
+                    frac = WorkspaceArt.finder3,
                     selected = pagerState.currentPage,
                     onSelect = { page -> scope.launch { pagerState.scrollToPage(page) } },
+                    // The Align sidebar tile's green.
+                    accent = DspColors.Delay,
                 )
             } else {
                 DspPagerArrows(pagerState)
@@ -281,11 +289,10 @@ private fun AlignmentWorkspace(startPage: Int) {
         HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
             when (page) {
                 0 -> GainsDelayScreen()
-                1 -> SpeakerAlignScreen()
-                Routes.ALIGNMENT_PAGE_ALLPASS -> AllPassPage()
-                3 -> VirtualCentreScreen()
-                // Band Align: Low against Mid from REW measurements (was its own screen off a link).
-                else -> BandAlignScreen()
+                Routes.ALIGNMENT_PAGE_PHASE ->
+                    if (allPassOpen) AllPassPage(onBack = { allPassOpen = false })
+                    else BandAlignScreen(onOpenAllPass = { allPassOpen = true })
+                else -> VirtualCentreScreen()
             }
         }
     }

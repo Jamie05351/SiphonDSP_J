@@ -27,6 +27,19 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.drawscope.scale
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import app.siphondsp.compose.controls.GlassButton
+import app.siphondsp.compose.controls.GlassButtonKind
+import app.siphondsp.compose.controls.GlassDialog
+import app.siphondsp.compose.controls.MinusPlusGlyphColor
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -162,24 +175,84 @@ private fun HeadUnitDelayPage(
     inactive: Boolean,
     modifier: Modifier,
 ) {
+    val accent = Color(band.accent)
+    var showMore by rememberSaveable { mutableStateOf(false) }
     WorkspaceArtBox(modifier.fillMaxSize()) {
-        // Drawn first so everything else sits over it. White, not the band colour: the drivers
-        // show as themselves, lit against the dimmed car.
+        // A soft glow in the selected band's colour behind the car, so the page takes the band's
+        // colour as a whole rather than only in its value boxes.
+        Box(Modifier.artRect(GlowRect).drawBehind {
+            scale(1f, size.height / size.width) {
+                drawCircle(
+                    Brush.radialGradient(listOf(accent.copy(alpha = 0.45f), accent.copy(alpha = 0.14f), Color.Transparent)),
+                    radius = size.width / 2f,
+                )
+            }
+        })
+        // The car is the band picker too: tap a driver to select its band. The lit pair show their
+        // delays. No seats: the Delay page has no path lines (alignment comes from Band Align).
         CarSpeakerDiagram(
             selected = band.speaker,
-            accent = Color.White,
-            onSelect = {},
+            accent = accent,
+            onSelect = { setBand(GainsBand.forSpeaker(it)) },
             modifier = Modifier.artRect(CarRect),
-            interactive = false,
+            seats = emptyList(),
+            label = { kind, left ->
+                if (kind == band.speaker) "${DelayFormat.format(dsp.get(if (left) band.delayL else band.delayR))} ms" else null
+            },
             carAlpha = CarAlpha,
         )
-        BandTabs(band, setBand, Modifier.artRect(TabsRect))
         if (inactive) ThreeWayOffNote(band, Modifier.artRect(NoteRect))
-        DriverCard(dsp, band, left = true, mirrored = false, linked, inactive, LargeSizing, fill = true, Modifier.artRect(LeftCardRect))
-        DriverCard(dsp, band, left = false, mirrored = true, linked, inactive, LargeSizing, fill = true, Modifier.artRect(RightCardRect))
+        DriverCard(dsp, band, left = true, mirrored = false, linked, inactive, LargeSizing, fill = true,
+            Modifier.artRect(LeftCardRect).bandPanel(accent, edgeOnLeft = true))
+        DriverCard(dsp, band, left = false, mirrored = true, linked, inactive, LargeSizing, fill = true,
+            Modifier.artRect(RightCardRect).bandPanel(accent, edgeOnLeft = false))
+        BandTabs(band, setBand, Modifier.artRect(TabsRect))
         StereoLinkRow(dsp, linked, true, Modifier.artRect(LinkRect))
-        MonoBassSwitchRow(dsp, true, Modifier.artRect(MonoBassSwitchRect))
-        MonoBassFreqRow(dsp, HeadUnitSizing, true, Modifier.artRect(MonoBassFreqRect))
+        MoreButton({ showMore = true }, Modifier.artRect(MoreRect))
+    }
+    if (showMore) MoreDialog(dsp) { showMore = false }
+}
+
+/** The band card's panel: a wash of the band colour, strongest at the outer edge, which is drawn solid. */
+private fun Modifier.bandPanel(accent: Color, edgeOnLeft: Boolean): Modifier {
+    val wash = listOf(accent.copy(alpha = 0.16f), accent.copy(alpha = 0.02f))
+    return this
+        .clip(BandPanelShape)
+        .background(BandPanelFill)
+        .background(Brush.horizontalGradient(if (edgeOnLeft) wash else wash.reversed()))
+        .border(1.dp, accent.copy(alpha = 0.45f), BandPanelShape)
+        .drawBehind {
+            val edge = 4.dp.toPx()
+            drawRect(accent, Offset(if (edgeOnLeft) 0f else size.width - edge, 0f), Size(edge, size.height))
+        }
+        .padding(horizontal = 10.dp, vertical = 8.dp)
+}
+
+/** "⋯": the page's less-used global settings (Mono Bass), out of the way in a dialog. */
+@Composable
+private fun MoreButton(onClick: () -> Unit, modifier: Modifier) {
+    val interaction = remember { MutableInteractionSource() }
+    Box(
+        modifier.clip(RoundedCornerShape(10.dp)).background(Color(0xFF222530))
+            .clickable(interactionSource = interaction, indication = LocalIndication.current, onClick = onClick)
+            .bmwFocusRing(interaction)
+            .semantics { contentDescription = "More delay settings" },
+        contentAlignment = Alignment.Center,
+    ) { Text("⋯", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold) }
+}
+
+@Composable
+private fun MoreDialog(dsp: BmwDspState, onClose: () -> Unit) {
+    GlassDialog(
+        title = "Delay settings",
+        icon = app.siphondsp.R.drawable.ic_twotone_settings_backup_restore_24dp,
+        onDismissRequest = onClose,
+        buttons = listOf(GlassButton("Done", GlassButtonKind.Primary, onClick = onClose)),
+    ) {
+        Column(Modifier.width(420.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            MonoBassSwitchRow(dsp, true, Modifier.fillMaxWidth().height(48.dp))
+            MonoBassFreqRow(dsp, HeadUnitSizing, true, Modifier.fillMaxWidth().height(48.dp))
+        }
     }
 }
 
@@ -402,7 +475,7 @@ private fun DriverCard(
                     }
                 }
                 BoxAndStepper(mirrored, box) { gapAfter ->
-                    Stepper("$cardName delay", sizing, dsp, delayIndex, DelayStepMs, DelayRange, gapAfter, delayMirror)
+                    Stepper("$cardName delay", sizing, dsp, delayIndex, DelayStepMs, DelayRange, gapAfter, delayMirror, glyphColor = accent)
                 }
             }
             CardRow("GAIN", sizing, mirrored) {
@@ -414,7 +487,7 @@ private fun DriverCard(
                     }
                 }
                 BoxAndStepper(mirrored, box) { gapAfter ->
-                    Stepper("$cardName gain", sizing, dsp, gainIndex, GainStep, GainRange, gapAfter, snap = ::snapGain)
+                    Stepper("$cardName gain", sizing, dsp, gainIndex, GainStep, GainRange, gapAfter, snap = ::snapGain, glyphColor = accent)
                 }
             }
             CardRow("POLARITY", sizing, mirrored) {
@@ -524,9 +597,11 @@ internal fun Stepper(
     gapAfter: Boolean = false,
     mirrors: IntArray = IntArray(0),
     snap: (Float) -> Float = { it },
+    glyphColor: Color? = null,
 ) {
     if (!gapAfter) Spacer(Modifier.width(StepperGap))
     MinusPlusPill(
+        glyphColor = glyphColor ?: MinusPlusGlyphColor,
         // Every step previews (live in the engine, not saved); the pill commits once after a tap
         // or at the end of a hold, so a long hold doesn't write the config file on every repeat.
         onStep = { direction, times ->
@@ -601,21 +676,22 @@ private fun snapGain(raw: Float): Float {
     return snapped.coerceIn(GainRange.start, GainRange.endInclusive)
 }
 
-// Head unit art rects (dp on the 1280x480 art; content authored from x = 140; Figma "Delay page ·
-// Mid · PROPOSED"). Band tabs across the top, the 3-way note under them while High is off, the car
-// in the middle with the Left and Right cards either side of it, then the stereo link.
-private val TabsRect = artDp(487, 76, 420, 40)
-private val NoteRect = artDp(447, 118, 500, 22)
-private val CarRect = artDp(447, 140, 500, 251)
-private val LeftCardRect = artDp(152, 150, 320, 240)
-private val RightCardRect = artDp(922, 150, 320, 240)
-private val LinkRect = artDp(560, 400, 280, 48)
-// Under the Left and Right cards, either side of Stereo Link.
-private val MonoBassSwitchRect = artDp(152, 400, 320, 48)
-private val MonoBassFreqRect = artDp(882, 400, 360, 48)
+// Head unit art rects (dp on the 1280x480 art; content authored from x = 152; Figma "Align · DELAY
+// v2"). The car in the middle (tap a driver to pick its band) with its glow, the Left and Right
+// cards either side, the band tabs under the car, Stereo Link and "⋯" (Mono Bass) top right.
+private val NoteRect = artDp(447, 112, 500, 22)
+private val GlowRect = artDp(392, 100, 610, 330)
+private val CarRect = artDp(447, 136, 500, 251)
+private val LeftCardRect = artDp(152, 132, 320, 260)
+private val RightCardRect = artDp(922, 132, 320, 260)
+private val TabsRect = artDp(487, 404, 420, 48)
+private val LinkRect = artDp(906, 76, 290, 44)
+private val MoreRect = artDp(1206, 76, 56, 44)
 
 /** The backdrop car photo's opacity, so the cards read over it. */
-private const val CarAlpha = 0.5f
+private const val CarAlpha = 0.85f
+private val BandPanelShape = RoundedCornerShape(14.dp)
+private val BandPanelFill = Color(0x8C0B0C0F)
 private val HeadingColor = Color(0xFFE5E7EB)
 private val HeadingRuleWidth = 48.dp
 private val HeadingRuleShape = RoundedCornerShape(2.dp)
