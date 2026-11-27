@@ -36,10 +36,12 @@ class ParametricEqBandList : ArrayList<ParametricEqBand>() {
 
     /**
      * Internal serialization format for SharedPreferences.
-     * Format: "PEQ: freq gain q type channel uuid; ..."
+     * Format: "PEQ: freq gain q type channel uuid [0]; ..."
      *
      * Channel and UUID are optional when reading, so legacy four/five-field
-     * states remain compatible. New writes preserve stable graph/list identity
+     * states remain compatible. A trailing `0` marks a bypassed band; it is only
+     * written for bypassed bands, so enabled states serialize exactly as before
+     * (and an older build reading a bypassed band just ignores the extra field). New writes preserve stable graph/list identity
      * across process and service restarts.
      */
     fun serialize(): String {
@@ -47,7 +49,8 @@ class ParametricEqBandList : ArrayList<ParametricEqBand>() {
         for (band in this) {
             sb.append(
                 "${dfFreq.format(band.frequency)} ${dfGain.format(band.gain)} " +
-                    "${dfQ.format(band.q)} ${band.filterType.code} ${band.channel.code} ${band.uuid}; "
+                    "${dfQ.format(band.q)} ${band.filterType.code} ${band.channel.code} ${band.uuid}" +
+                    (if (band.enabled) "" else " 0") + "; "
             )
         }
         return sb.toString()
@@ -70,6 +73,7 @@ class ParametricEqBandList : ArrayList<ParametricEqBand>() {
                 val channel = parts.getOrNull(4)?.toIntOrNull() ?: ParametricEqChannel.LEFT_RIGHT.code
                 val uuid = parts.getOrNull(5)?.let { runCatching { UUID.fromString(it) }.getOrNull() }
                     ?: UUID.randomUUID()
+                val enabled = parts.getOrNull(6) != "0"
 
                 if (freq != null && gain != null && q != null && type != null) {
                     add(
@@ -80,6 +84,7 @@ class ParametricEqBandList : ArrayList<ParametricEqBand>() {
                             ParametricEqFilterType.fromCode(type),
                             ParametricEqChannel.fromCode(channel),
                             uuid,
+                            enabled,
                         )
                     )
                 }
@@ -110,7 +115,7 @@ class ParametricEqBandList : ArrayList<ParametricEqBand>() {
             sb.appendLine("Channel: ${channel.apoLabel()}")
             for (band in channelBands) {
                 sb.appendLine(
-                    "Filter ${index++}: ON ${band.filterType.apoLabel} " +
+                    "Filter ${index++}: ${if (band.enabled) "ON" else "OFF"} ${band.filterType.apoLabel} " +
                         "Fc ${dfFreq.format(band.frequency)} Hz " +
                         "Gain ${dfGain.format(band.gain)} dB Q ${dfQ.format(band.q)}"
                 )
@@ -127,7 +132,7 @@ class ParametricEqBandList : ArrayList<ParametricEqBand>() {
         var activeChannel = ParametricEqChannel.LEFT_RIGHT
 
         val filterRegex = Regex(
-            """Filter\s+\d+:\s+ON\s+(\S+)\s+Fc\s+([-+]?\d*\.?\d+)\s+Hz\s+Gain\s+([-+]?\d*\.?\d+)\s+dB\s+Q\s+([-+]?\d*\.?\d+)""",
+            """Filter\s+\d+:\s+(ON|OFF)\s+(\S+)\s+Fc\s+([-+]?\d*\.?\d+)\s+Hz\s+Gain\s+([-+]?\d*\.?\d+)\s+dB\s+Q\s+([-+]?\d*\.?\d+)""",
             RegexOption.IGNORE_CASE
         )
         val preampRegex = Regex(
@@ -176,10 +181,11 @@ class ParametricEqBandList : ArrayList<ParametricEqBand>() {
                 continue
             }
 
-            val filterType = ParametricEqFilterType.fromApoLabel(match.groupValues[1])
-            val freq = match.groupValues[2].toDoubleOrNull()
-            val gain = match.groupValues[3].toDoubleOrNull()
-            val q = match.groupValues[4].toDoubleOrNull()
+            val enabled = match.groupValues[1].equals("ON", ignoreCase = true)
+            val filterType = ParametricEqFilterType.fromApoLabel(match.groupValues[2])
+            val freq = match.groupValues[3].toDoubleOrNull()
+            val gain = match.groupValues[4].toDoubleOrNull()
+            val q = match.groupValues[5].toDoubleOrNull()
 
             if (filterType == null || freq == null || gain == null || q == null ||
                 !freq.isFinite() || !gain.isFinite() || !q.isFinite() ||
@@ -190,7 +196,7 @@ class ParametricEqBandList : ArrayList<ParametricEqBand>() {
                 continue
             }
 
-            add(ParametricEqBand(freq, gain, q, filterType, activeChannel))
+            add(ParametricEqBand(freq, gain, q, filterType, activeChannel, enabled = enabled))
         }
 
         return ApoImportResult(skippedFilters = skipped, preampDb = preampDb, preampInFileDb = preampInFileDb)
@@ -205,6 +211,7 @@ class ParametricEqBandList : ArrayList<ParametricEqBand>() {
         val types = bundle.getIntArray(STATE_TYPE) ?: return
         val channels = bundle.getIntArray(STATE_CHANNEL)
         val uuids = bundle.getSerializableAs<Array<UUID>>(STATE_UUID)
+        val enabled = bundle.getBooleanArray(STATE_ENABLED)
 
         val count = minOf(freq.size, gain.size, q.size, types.size)
         for (i in 0 until count) {
@@ -216,6 +223,7 @@ class ParametricEqBandList : ArrayList<ParametricEqBand>() {
                     ParametricEqFilterType.fromCode(types[i]),
                     ParametricEqChannel.fromCode(channels?.getOrNull(i) ?: 0),
                     uuids?.getOrNull(i) ?: UUID.randomUUID(),
+                    enabled?.getOrNull(i) ?: true,
                 )
             )
         }
@@ -229,6 +237,7 @@ class ParametricEqBandList : ArrayList<ParametricEqBand>() {
         val typeArr = IntArray(size)
         val channelArr = IntArray(size)
         val uuidArr = arrayListOf<UUID>()
+        val enabledArr = BooleanArray(size)
 
         for ((i, band) in withIndex()) {
             freqArr[i] = band.frequency
@@ -237,6 +246,7 @@ class ParametricEqBandList : ArrayList<ParametricEqBand>() {
             typeArr[i] = band.filterType.code
             channelArr[i] = band.channel.code
             uuidArr.add(band.uuid)
+            enabledArr[i] = band.enabled
         }
 
         bundle.putDoubleArray(STATE_FREQ, freqArr)
@@ -245,6 +255,7 @@ class ParametricEqBandList : ArrayList<ParametricEqBand>() {
         bundle.putIntArray(STATE_TYPE, typeArr)
         bundle.putIntArray(STATE_CHANNEL, channelArr)
         bundle.putSerializable(STATE_UUID, uuidArr.toTypedArray())
+        bundle.putBooleanArray(STATE_ENABLED, enabledArr)
         return bundle
     }
 
@@ -276,5 +287,6 @@ class ParametricEqBandList : ArrayList<ParametricEqBand>() {
         private const val STATE_TYPE = "peq_type"
         private const val STATE_CHANNEL = "peq_channel"
         private const val STATE_UUID = "peq_uuid"
+        private const val STATE_ENABLED = "peq_enabled"
     }
 }

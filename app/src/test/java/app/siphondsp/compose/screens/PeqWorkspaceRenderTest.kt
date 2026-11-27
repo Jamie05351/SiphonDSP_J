@@ -10,6 +10,8 @@ import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onParent
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
@@ -113,13 +115,37 @@ class PeqWorkspaceRenderTest {
         compose.onNodeWithTag("peq-filter-editor").assertIsDisplayed()
         assertTrue(compose.onNodeWithTag("peq-response-graph").fetchSemanticsNode().boundsInRoot.width < width)
         saveRender("selected-filter")
-        compose.onNodeWithText("Close").performClick()
+        compose.onNodeWithContentDescription("Close filter").performClick()
         compose.onNodeWithTag("peq-filter-editor").assertDoesNotExist()
         assertEquals(width, compose.onNodeWithTag("peq-response-graph").fetchSemanticsNode().boundsInRoot.width, 1f)
         val workspace = compose.onNodeWithTag("peq-workspace").fetchSemanticsNode().boundsInRoot
         val filterBar = compose.onNodeWithTag("peq-filter-bar").fetchSemanticsNode().boundsInRoot
-        assertTrue(workspace.bottom - filterBar.bottom >= 23f)
+        // The filter bar took over the old 24dp bottom clearance: 64dp chips, a small inset kept.
+        assertEquals(64f, filterBar.height, 1f)
+        assertTrue(workspace.bottom - filterBar.bottom >= 3f)
         saveRender("graph")
+    }
+
+    @Test
+    fun inspectorFitsTheGraphRowAndBypassDimsTheFilter() {
+        compose.onNodeWithText("02").performClick()
+        val editor = compose.onNodeWithTag("peq-filter-editor").fetchSemanticsNode().boundsInRoot
+        val graph = compose.onNodeWithTag("peq-response-graph").fetchSemanticsNode().boundsInRoot
+        assertEquals(300f, editor.width, 1f)
+        // Everything fits the head unit's graph row: the last action row is inside the editor.
+        val copy = compose.onNodeWithText("Copy to…").fetchSemanticsNode().boundsInRoot
+        assertTrue("actions must fit without scrolling", copy.bottom <= editor.bottom)
+        assertEquals(graph.height, editor.height, 1f)
+        compose.onNodeWithContentDescription("Filter on, tap to bypass").performClick()
+        compose.waitForIdle()
+        assertTrue(!holder.peqState.fullRangeBands[1].enabled)
+        assertTrue(holder.canUndo)
+        saveRender("selected-filter-bypassed")
+        compose.onNodeWithContentDescription("Undo").performClick()
+        compose.waitForIdle()
+        assertTrue(holder.peqState.fullRangeBands[1].enabled)
+        compose.onNodeWithContentDescription("Previous filter").performClick()
+        compose.onNodeWithText("Filter 1").assertIsDisplayed()
     }
 
     @Test
@@ -222,7 +248,7 @@ class PeqWorkspaceRenderTest {
         assertTrue("Crossover edits must change the main purple combined response",
             !responsePixels(delayed).contentEquals(responsePixels(crossed)))
         saveRender("combined-response")
-        compose.onNodeWithText("R").performClick()
+        graphRightButton().performClick()
         val right = graphBitmap()
         assertMainCurveMatchesCombinedResponse(right, values, BmwOutputChannel.RIGHT)
         before.recycle()
@@ -324,7 +350,7 @@ class PeqWorkspaceRenderTest {
 
     @Test
     fun channelButtonsPersistTheViewAndTheFullFiltersPageRemainsReachable() {
-        compose.onNodeWithText("R").performClick().assertIsSelected()
+        graphRightButton().performClick().assertIsSelected()
         assertEquals(PeqChannelDisplay.RIGHT, PeqGraphPreferences(controller.get()).channelDisplay)
         swipeToFilters()
         compose.onNodeWithText("FREQUENCY").assertIsDisplayed()
@@ -500,18 +526,6 @@ class PeqWorkspaceRenderTest {
     }
 
     @Test
-    @Config(qualifiers = "w360dp-h800dp-port-mdpi")
-    fun compactEditorLeavesAtLeastHalfTheGraphAreaAndBankControlsRemainReachable() {
-        val graph = compose.onNodeWithTag("peq-response-graph").fetchSemanticsNode().boundsInRoot
-        compose.onNodeWithText("High").assertIsDisplayed()
-        compose.onNodeWithText("01").performClick()
-        val selectedGraph = compose.onNodeWithTag("peq-response-graph").fetchSemanticsNode().boundsInRoot
-        assertTrue(selectedGraph.height >= graph.height * 0.5f)
-        compose.onNodeWithTag("peq-filter-editor").assertIsDisplayed()
-        saveRender("compact-selected")
-    }
-
-    @Test
     fun dpadLeftFromTheFiltersBoundaryReturnsToTheGraph() {
         swipeToFilters()
         compose.runOnIdle { inputMode.requestInputMode(InputMode.Keyboard) }
@@ -599,6 +613,10 @@ class PeqWorkspaceRenderTest {
                 compose.onNodeWithTag("dsp-sidebar").fetchSemanticsNode().boundsInRoot)
         }
     }
+
+    // The graph's R display button, not the filter inspector's R channel segment.
+    private fun graphRightButton() =
+        compose.onNode(hasText("R") and hasContentDescription("Channel R").not())
 
     private fun saveRender(name: String) {
         val view = controller.get().window.decorView

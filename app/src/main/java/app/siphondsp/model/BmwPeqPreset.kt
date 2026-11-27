@@ -27,6 +27,8 @@ data class BmwPeqPreset(
         val q: Double,
         val type: Int,
         val channel: Int,
+        // Defaulted (and so omitted from JSON while true): older presets load as all-enabled.
+        val enabled: Boolean = true,
     )
 
     fun toState(): BmwPeqState {
@@ -52,6 +54,7 @@ data class BmwPeqPreset(
                         ParametricEqFilterType.fromCode(saved.type),
                         ParametricEqChannel.fromCode(saved.channel),
                         id,
+                        saved.enabled,
                     )
                 )
             }
@@ -79,7 +82,7 @@ data class BmwPeqPreset(
             fun encode(bands: List<ParametricEqBand>) = bands.map {
                 PresetBand(
                     it.uuid.toString(), it.frequency, it.gain, it.q,
-                    it.filterType.code, it.channel.code,
+                    it.filterType.code, it.channel.code, it.enabled,
                 )
             }
             return BmwPeqPreset(

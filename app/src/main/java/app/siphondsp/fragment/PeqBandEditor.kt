@@ -144,6 +144,7 @@ object PeqBandEditor {
                     band.filterType,
                     destination,
                     UUID.randomUUID(),
+                    band.enabled,
                 )
             )
             if (replaceBoth) {
@@ -155,6 +156,7 @@ object PeqBandEditor {
                         band.filterType,
                         ParametricEqChannel.RIGHT,
                         UUID.randomUUID(),
+                        band.enabled,
                     )
                 )
             }
@@ -176,7 +178,7 @@ object PeqBandEditor {
         routed.forEach { r ->
             val destination = bandsFor(candidate, r.scope)
             r.bands.forEach {
-                destination.add(ParametricEqBand(it.frequency, it.gain, it.q, it.filterType, r.channel, UUID.randomUUID()))
+                destination.add(ParametricEqBand(it.frequency, it.gain, it.q, it.filterType, r.channel, UUID.randomUUID(), it.enabled))
             }
         }
 
@@ -218,6 +220,6 @@ object PeqBandEditor {
     }
 
     private fun ParametricEqBand.copyWithUuid(uuid: UUID) = ParametricEqBand(
-        frequency, gain, q, filterType, channel, uuid,
+        frequency, gain, q, filterType, channel, uuid, enabled,
     )
 }

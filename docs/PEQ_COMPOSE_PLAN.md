@@ -229,7 +229,7 @@ backup-restore `BroadcastReceiver`. Plus **expand `PeqDiagnosticReport`** (§8).
 | Dropped | Consequence |
 |---|---|
 | **Portrait layout** | Delete `fragment_parametric_eq.xml` + `collapsePreview` + weighted-chain + orientation branching. Landscape-only. |
-| **Undo / Redo** | No `PeqStateHistory` in the port. `applyCandidate` loses `recordHistory` + `history.push`; no `performUndo/Redo`, no `refreshActionChips`. Reword the "This can be undone" lines in the reset / backup-restore confirms. |
+| **Undo / Redo** | ~~No `PeqStateHistory` in the port.~~ Restored with the filter-editor redesign: `PeqStateHolder` keeps a `PeqStateHistory` of committed states (previews never enter it) behind toolbar ↶ / ↷ buttons; a state changed elsewhere (restore, another screen) restarts it. |
 | **Edit as string** (`chip_edit_string`) | `performEditAsString` gone. `ParametricEqBandList.toApoString` / `fromApoString` stay (file import/export use them). |
 | **Preset export / import** (`chip_preset_*`) | `performPresetImport/Export` + launchers gone. `BmwPeqPreset` class stays — `PrivatePeqBackup` uses it. |
 | **Drag-to-reorder (list & graph)** | Filter tools' Move up/down is the reorder path. Kills the reorderable-`LazyColumn` risk. |
