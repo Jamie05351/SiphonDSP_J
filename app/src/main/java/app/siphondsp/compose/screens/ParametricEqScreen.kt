@@ -203,9 +203,6 @@ fun ParametricEqScreen(holder: PeqStateHolder, modifier: Modifier = Modifier, sh
                         }
                     }
                     // 64dp: the filter bar took over the old 24dp bottom clearance for bigger chips.
-                    androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxWidth()) {
-                    // Preamp + peak only where there's room beside the chips (the head unit, not a phone).
-                    val showPreamp = holder.selectedScope == PeqScope.FULL && maxWidth >= 720.dp
                     Row(
                         Modifier.fillMaxWidth().height(64.dp).testTag("peq-filter-bar"),
                         verticalAlignment = Alignment.CenterVertically,
@@ -232,11 +229,10 @@ fun ParametricEqScreen(holder: PeqStateHolder, modifier: Modifier = Modifier, sh
                                 }, Modifier.fillMaxHeight())
                             }
                         }
-                        if (showPreamp) {
+                        if (holder.selectedScope == PeqScope.FULL) {
                             PeqPreampControl(holder, systemValues,
                                 (RootlessAudioProcessorService.nativeBmwPeqSampleRate() ?: 48_000f).toDouble())
                         }
-                    }
                     }
                 }
             } else {
