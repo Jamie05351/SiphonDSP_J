@@ -144,6 +144,7 @@ object PeqBandEditor {
                     band.filterType,
                     destination,
                     UUID.randomUUID(),
+                    band.enabled,
                 )
             )
             if (replaceBoth) {

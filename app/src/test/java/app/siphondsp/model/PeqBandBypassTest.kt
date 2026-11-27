@@ -3,6 +3,9 @@ package app.siphondsp.model
 import app.siphondsp.dsp.BmwOutputChannel
 import app.siphondsp.dsp.BmwSignalChain
 import app.siphondsp.compose.screens.bandwidthOctaves
+import app.siphondsp.fragment.PeqBandEditResult
+import app.siphondsp.fragment.PeqBandEditor
+import app.siphondsp.fragment.PeqScope
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -70,6 +73,19 @@ class PeqBandBypassTest {
         val state = BmwPeqState(true, 0f, listOf(off), ParametricEqBandList(), ParametricEqBandList(), ParametricEqBandList())
         val restored = BmwPeqPreset.decode(BmwPeqPreset.encode(BmwPeqPreset.fromState(state))).toState()
         assertFalse(restored.fullRangeBands.single().enabled)
+    }
+
+    @Test
+    fun copyingAndSplittingChannelsKeepsBypass() {
+        val both = ParametricEqBand(500.0, 2.0, 1.0, ParametricEqFilterType.PEAKING, ParametricEqChannel.LEFT_RIGHT, enabled = false)
+        val state = BmwPeqState(true, 0f, listOf(off), ParametricEqBandList(), ParametricEqBandList(), ParametricEqBandList())
+        val copied = PeqBandEditor.copyChannelFilters(state, PeqScope.FULL, ParametricEqChannel.LEFT, ParametricEqChannel.RIGHT, replaceBoth = false)
+        assertTrue((copied as PeqBandEditResult.Changed).candidate.fullRangeBands.none { it.enabled })
+        val split = PeqBandEditor.copyChannelFilters(state.copy(fullRangeBands = listOf(both)), PeqScope.FULL,
+            ParametricEqChannel.LEFT_RIGHT, ParametricEqChannel.LEFT, replaceBoth = true)
+        val bands = (split as PeqBandEditResult.Changed).candidate.fullRangeBands
+        assertEquals(2, bands.size)
+        assertTrue(bands.none { it.enabled })
     }
 
     @Test
