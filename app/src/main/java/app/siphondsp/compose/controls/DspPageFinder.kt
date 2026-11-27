@@ -63,7 +63,11 @@ fun DspPageFinder(
     selected: Int,
     onSelect: (Int) -> Unit,
     modifier: Modifier = Modifier,
+    accent: Color? = null,
 ) {
+    // A workspace can tint its finder with its own sidebar colour (Align: green); default purple.
+    val border = accent ?: FinderPurple
+    val selectedFill = accent?.copy(alpha = 0.55f) ?: FinderSelectedFill
     BoxWithConstraints(modifier.fillMaxSize()) {
         // One size for every segment, from the widest label (in its bold, selected form) at full size.
         val measurer = rememberTextMeasurer()
@@ -81,20 +85,20 @@ fun DspPageFinder(
                 .fillMaxSize()
                 .clip(FinderShape)
                 .background(FinderFill)
-                .border(FinderBorder, FinderPurple, FinderShape),
+                .border(FinderBorder, border, FinderShape),
         ) {
             labels.forEachIndexed { index, label ->
-                if (index > 0) Box(Modifier.width(FinderBorder).fillMaxHeight().background(FinderPurple))
+                if (index > 0) Box(Modifier.width(FinderBorder).fillMaxHeight().background(border))
                 val isSelected = index == selected
                 Box(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxHeight()
-                        .background(if (isSelected) FinderSelectedFill else Color.Transparent)
+                        .background(if (isSelected) selectedFill else Color.Transparent)
                         .semantics { this.selected = isSelected }
                         .clickable(
                             interactionSource = remember { MutableInteractionSource() },
-                            indication = ripple(color = FinderPurple),
+                            indication = ripple(color = border),
                             role = Role.Tab,
                             onClick = { if (!isSelected) onSelect(index) },
                         ),
@@ -127,6 +131,7 @@ fun ArtPagerFinder(
     frac: WorkspaceArt.Frac,
     selected: Int = pagerState.currentPage,
     onSelect: ((Int) -> Unit)? = null,
+    accent: Color? = null,
 ) {
     val scope = rememberCoroutineScope()
     val select: (Int) -> Unit = onSelect ?: { page -> scope.launch { pagerState.scrollToPage(page) } }
@@ -140,6 +145,7 @@ fun ArtPagerFinder(
             selected = selected,
             onSelect = select,
             modifier = Modifier.artRect(frac),
+            accent = accent,
         )
     }
 }
