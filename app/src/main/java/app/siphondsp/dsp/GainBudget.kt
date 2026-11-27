@@ -7,7 +7,8 @@ import kotlin.math.min
 
 /**
  * The worst-case level through the chain, step by step in the engine's order, worked out from the
- * settings (not measured): the loudest point of the preamp + EQ + crossover response, then
+ * settings (not measured): the loudest point of the preamp + EQ + crossover response (each band
+ * alone, or the bands summed where they overlap, whichever is louder), then
  * headroom, tilt, post gain, the master limiter and finally the master volume with Deep bass.
  *
  * Each step's worst case is added as if they all landed on the same frequency, so the total is an
@@ -65,6 +66,30 @@ class GainBudget(
             add(Kind.VOLUME, value(values, NativeBmwDspValues.INDEX_MASTER_VOLUME_DB) + NativeBmwDspValues.deepBassCurve(values).gainDb)
             return GainBudget(steps, intoLimiter, ceiling, level)
         }
+
+        /**
+         * The loudest point of the bands summed to each output ([BmwResponseCurves.sumDb]) at 0 dB
+         * headroom, with the stages this budget counts separately -- tilt, Deep bass, post gain --
+         * left out. Where bands overlap they add, so this can exceed every band on its own, which
+         * is all [AutoHeadroomCalculator.peakDb] looks at. Blocking: off the main thread.
+         */
+        fun bandSumPeakDb(values: FloatArray, peq: app.siphondsp.model.BmwPeqState, sampleRate: Double): Double {
+            val v = values.copyOf()
+            v[NativeBmwDspValues.INDEX_HEADROOM] = 0f
+            v[NativeBmwDspValues.INDEX_TILT_ENABLED] = 0f
+            v[NativeBmwDspValues.INDEX_DEEP_BASS_ENABLED] = 0f
+            v[NativeBmwDspValues.INDEX_POST_GAIN_L] = 0f
+            v[NativeBmwDspValues.INDEX_POST_GAIN_R] = 0f
+            val calculator = BmwResponseCalculator(SUM_POINTS)
+            calculator.configureAxis(sampleRate, 20.0, min(20_000.0, sampleRate * 0.5 * 0.999))
+            val curves = BmwResponseCurves(SUM_POINTS)
+            calculator.compute(v, peq, curves)
+            var peak = Double.NEGATIVE_INFINITY
+            for (ch in 0..1) for (db in curves.sumDb[ch]) if (db.isFinite() && db > peak) peak = db
+            return if (peak.isFinite()) peak else Double.NEGATIVE_INFINITY
+        }
+
+        private const val SUM_POINTS = 512
 
         /** The tilt's boost at its louder end (a tilt boosts one end and cuts the other), 0 when off. */
         fun tiltBoostDb(values: FloatArray): Double =

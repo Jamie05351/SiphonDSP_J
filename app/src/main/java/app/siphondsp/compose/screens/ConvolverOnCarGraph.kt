@@ -52,9 +52,11 @@ import kotlin.math.pow
  * The convolver on your car: the running IR's magnitude (cyan, at the gain the engine applies),
  * the car baseline it corrects (dashed grey) and the two together (white). Per-band mode draws the
  * three band FIRs in their band colours instead. Says what's missing rather than drawing a guess.
+ * With the convolver off the engine bypasses it (the IR stays loaded), so the IR is drawn faded and
+ * dashed as "not applied" and the result is the car as it is.
  */
 @Composable
-internal fun ConvolverOnCarGraph(gainDb: Float, modifier: Modifier = Modifier) {
+internal fun ConvolverOnCarGraph(gainDb: Float, enabled: Boolean, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val holder = remember(context) { PeqStateHolder(context.applicationContext) }
     LaunchedEffect(holder) { holder.loadCarBaseline() }
@@ -68,7 +70,11 @@ internal fun ConvolverOnCarGraph(gainDb: Float, modifier: Modifier = Modifier) {
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text("CONVOLVER ON YOUR CAR", color = DspColors.Output, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            Text("CONVOLVER ON YOUR CAR", color = DspColors.Output, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+            if (!enabled && response != null) {
+                Text("  · OFF: IR not applied", color = Color(0xFFFFA24C), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            }
+            Box(Modifier.weight(1f))
             BmwSegmentedControl(
                 options = listOf("L", "R"), selectedIndex = side, onSelect = { side = it },
                 optionAccents = listOf(Color(LeftChannelColor), Color(RightChannelColor)),
@@ -86,14 +92,14 @@ internal fun ConvolverOnCarGraph(gainDb: Float, modifier: Modifier = Modifier) {
         }
         val applied = ConvolverResponse.appliedGainDb(gainDb.toDouble(), response.peakGainDb)
         val measurer = rememberTextMeasurer()
-        Canvas(Modifier.fillMaxWidth().weight(1f)) { drawConvolverOnCar(response, baseline, side, applied, measurer) }
+        Canvas(Modifier.fillMaxWidth().weight(1f)) { drawConvolverOnCar(response, baseline, side, applied, enabled, measurer) }
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
             if (response.bands != null) {
                 Text("— Low", color = LowColor, fontSize = 10.sp)
                 Text("— Mid", color = MidColor, fontSize = 10.sp)
                 Text("— High", color = HighColor, fontSize = 10.sp)
             } else {
-                Text("— IR", color = DspColors.Output, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                Text(if (enabled) "— IR" else "- - IR (off)", color = DspColors.Output, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                 if (baseline != null) {
                     Text("- - car baseline", color = Muted, fontSize = 10.sp)
                     Text("— result", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
@@ -116,6 +122,7 @@ private fun DrawScope.drawConvolverOnCar(
     baseline: CarBaseline?,
     side: Int,
     appliedGainDb: Double,
+    enabled: Boolean,
     measurer: androidx.compose.ui.text.TextMeasurer,
 ) {
     val left = 30.dp.toPx()
@@ -146,17 +153,21 @@ private fun DrawScope.drawConvolverOnCar(
     }
     val bands = response.bands
     if (bands != null) {
-        listOf(LowColor, MidColor, HighColor).forEachIndexed { i, c -> curve(magnitudeDb(bands[i]), c, 2.dp.toPx()) }
+        listOf(LowColor, MidColor, HighColor).forEachIndexed { i, c ->
+            curve(magnitudeDb(bands[i]), if (enabled) c else c.copy(alpha = .35f), 2.dp.toPx(), dash = !enabled)
+        }
         return
     }
     val ir = magnitudeDb(response)
+    val irColor = if (enabled) DspColors.Output else DspColors.Output.copy(alpha = .35f)
     if (baseline != null) {
         val car = baseline.offsetsFor(side, Grid)
         curve(car, Muted, 1.5.dp.toPx(), dash = true)
-        curve(ir, DspColors.Output, 2.dp.toPx())
-        curve(DoubleArray(Grid.size) { car[it] + ir[it] }, Color.White, 2.5.dp.toPx())
+        curve(ir, irColor, 2.dp.toPx(), dash = !enabled)
+        // Off, the engine bypasses the IR: what you hear is the car as it is.
+        curve(if (enabled) DoubleArray(Grid.size) { car[it] + ir[it] } else car, Color.White, 2.5.dp.toPx())
     } else {
-        curve(ir, DspColors.Output, 2.5.dp.toPx())
+        curve(ir, irColor, 2.5.dp.toPx(), dash = !enabled)
     }
 }
 

@@ -75,4 +75,23 @@ class GainBudgetTest {
         assertTrue(b.steps.last().db < 0)
         assertNull(b.limiterCeilingDb)
     }
+
+    @Test
+    fun theBandSumIsComputedWithTheSeparatelyCountedStagesLeftOut() {
+        val peq = app.siphondsp.model.BmwPeqState(
+            true, 0f, app.siphondsp.model.ParametricEqBandList(), app.siphondsp.model.ParametricEqBandList(),
+            app.siphondsp.model.ParametricEqBandList(), app.siphondsp.model.ParametricEqBandList(),
+        )
+        val base = values()
+        val sum = GainBudget.bandSumPeakDb(base, peq, 48_000.0)
+        assertTrue(sum.isFinite())
+        // Tilt, post gain and headroom are their own steps: they must not move the band sum.
+        val loud = values {
+            this[NativeBmwDspValues.INDEX_TILT_ENABLED] = 1f
+            this[NativeBmwDspValues.INDEX_TILT_AMOUNT] = 4f
+            this[NativeBmwDspValues.INDEX_POST_GAIN_L] = 6f
+            this[NativeBmwDspValues.INDEX_HEADROOM] = -12f
+        }
+        assertEquals(sum, GainBudget.bandSumPeakDb(loud, peq, 48_000.0), 1e-9)
+    }
 }

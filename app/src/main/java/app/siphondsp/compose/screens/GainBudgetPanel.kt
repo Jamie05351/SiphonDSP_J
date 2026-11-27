@@ -78,7 +78,9 @@ internal fun GainBudgetPanel(dsp: BmwDspState, peq: PeqStateHolder, modifier: Mo
             val peak = AutoHeadroomCalculator().peakDb(values, peqState, sampleRate.toDouble())
             val headroom = if (AutoHeadroom.isAuto(values)) AutoHeadroom.headroomForPeak(peak).toDouble()
             else values[NativeBmwDspValues.INDEX_HEADROOM].toDouble()
-            GainBudget.compute(values, peqState.preampDb.toDouble(), peak, headroom)
+            // Overlapping bands add: the budget takes the louder of any band alone and the sum.
+            val summed = GainBudget.bandSumPeakDb(values, peqState, sampleRate.toDouble())
+            GainBudget.compute(values, peqState.preampDb.toDouble(), maxOf(peak, summed), headroom)
         }
     }
     val shape = RoundedCornerShape(14.dp)
@@ -167,7 +169,7 @@ private fun stepName(kind: GainBudget.Kind) = when (kind) {
 
 private fun stepNote(s: GainBudget.Step, values: FloatArray, b: GainBudget): String = when (s.kind) {
     GainBudget.Kind.PREAMP -> ""
-    GainBudget.Kind.EQ -> "loudest point"
+    GainBudget.Kind.EQ -> "loudest point, bands summed"
     GainBudget.Kind.HEADROOM -> if (AutoHeadroom.isAuto(values)) "auto" else "manual"
     GainBudget.Kind.TILT -> if (values[NativeBmwDspValues.INDEX_TILT_ENABLED] < .5f) "off" else "boosted end"
     GainBudget.Kind.POST_GAIN -> "L ${signed1(values[NativeBmwDspValues.INDEX_POST_GAIN_L].toDouble())} · R ${signed1(values[NativeBmwDspValues.INDEX_POST_GAIN_R].toDouble())}"

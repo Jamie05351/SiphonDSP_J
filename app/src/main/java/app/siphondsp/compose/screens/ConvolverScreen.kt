@@ -81,13 +81,16 @@ fun ConvolverScreen(modifier: Modifier = Modifier) {
     BmwDspTheme {
         if (LocalContext.current.isHeadUnitDisplay()) {
             WorkspaceArtBox(modifier.fillMaxSize()) {
-                ConvolverOnCarGraph(dsp.get(NativeBmwDspValues.INDEX_CONVOLVER_GAIN), Modifier.artRect(artDp(GraphX, GroupTop, GraphWidth, GraphHeight)))
+                ConvolverOnCarGraph(
+                    dsp.get(NativeBmwDspValues.INDEX_CONVOLVER_GAIN), dsp.isOn(NativeBmwDspValues.INDEX_CONVOLVER_ENABLED),
+                    Modifier.artRect(artDp(GraphX, GroupTop, GraphWidth, GraphHeight)),
+                )
                 controls { y, h -> Modifier.artRect(artDp(LeftX, GroupTop + y, HeadGroupWidth, h)) }
                 impulse { y, h -> Modifier.artRect(artDp(RightX, GroupTop + y, HeadGroupWidth, h)) }
             }
         } else {
             PhoneConvolverPage(controls, impulse, modifier) { m ->
-                ConvolverOnCarGraph(dsp.get(NativeBmwDspValues.INDEX_CONVOLVER_GAIN), m)
+                ConvolverOnCarGraph(dsp.get(NativeBmwDspValues.INDEX_CONVOLVER_GAIN), dsp.isOn(NativeBmwDspValues.INDEX_CONVOLVER_ENABLED), m)
             }
         }
     }
