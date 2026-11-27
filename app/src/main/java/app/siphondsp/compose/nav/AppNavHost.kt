@@ -341,11 +341,11 @@ internal fun DynamicsWorkspace() {
 }
 
 @Composable
-private fun OutputWorkspace() {
+internal fun OutputWorkspace() {
     val pagerState = rememberPagerState { Routes.OUTPUT_PAGE_COUNT }
     Workspace(
         current = DspDestination.OUTPUT,
-        toolbarActions = { PagerControls(pagerState, listOf("OUTPUT", "CONVOLVER", "DEEP BASS"), WorkspaceArt.finder3) },
+        toolbarActions = { PagerControls(pagerState, listOf("OUTPUT", "CONVOLVER", "DEEP BASS"), WorkspaceArt.finder3, DspColors.Output) },
     ) {
         HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
             when (page) {

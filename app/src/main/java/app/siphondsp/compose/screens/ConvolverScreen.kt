@@ -1,5 +1,6 @@
 package app.siphondsp.compose.screens
 
+import androidx.compose.foundation.layout.widthIn
 import app.siphondsp.R
 import app.siphondsp.compose.controls.BmwSegmentedControl
 import app.siphondsp.compose.controls.GlassButton
@@ -80,11 +81,14 @@ fun ConvolverScreen(modifier: Modifier = Modifier) {
     BmwDspTheme {
         if (LocalContext.current.isHeadUnitDisplay()) {
             WorkspaceArtBox(modifier.fillMaxSize()) {
-                controls { y, h -> Modifier.artRect(artDp(LeftX, GroupTop + y, GroupWidth, h)) }
-                impulse { y, h -> Modifier.artRect(artDp(RightX, GroupTop + y, GroupWidth, h)) }
+                ConvolverOnCarGraph(dsp.get(NativeBmwDspValues.INDEX_CONVOLVER_GAIN), Modifier.artRect(artDp(GraphX, GroupTop, GraphWidth, GraphHeight)))
+                controls { y, h -> Modifier.artRect(artDp(LeftX, GroupTop + y, HeadGroupWidth, h)) }
+                impulse { y, h -> Modifier.artRect(artDp(RightX, GroupTop + y, HeadGroupWidth, h)) }
             }
         } else {
-            PhoneConvolverPage(controls, impulse, modifier)
+            PhoneConvolverPage(controls, impulse, modifier) { m ->
+                ConvolverOnCarGraph(dsp.get(NativeBmwDspValues.INDEX_CONVOLVER_GAIN), m)
+            }
         }
     }
 }
@@ -254,7 +258,7 @@ private fun ConvolverGroup(dsp: BmwDspState, ir: ConvolverIrUiState, row: Convol
                 }
             }
         },
-        enabled = !ir.busy, modifier = row(104, 48), labelWidth = 110.dp,
+        enabled = !ir.busy, modifier = row(104, 48), labelWidth = 96.dp,
     )
     InfoLine(if (ir.mode == 0) "Stereo IR after the band sum" else "Low / Mid / High IRs before the band sum", row(164, 28))
     val bypassed = dsp.isOn(NativeBmwDspValues.INDEX_CROSSOVER_BYPASS)
@@ -334,8 +338,9 @@ private fun IrGroup(ir: ConvolverIrUiState, dsp: BmwDspState, row: ConvolverRow)
         )
     }
     lines.forEachIndexed { i, text -> InfoLine(text, row(164 + 26 * i, 26)) }
-    Row(row(248, 48), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        GlassChip(if (ir.busy) "Loading…" else "Load WAV…", arrow = false, enabled = !ir.busy, onClick = {
+    Row(row(248, 48), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        // "Load…" fills the selected slot with a WAV: short enough that all three fit a 296dp column.
+        GlassChip(if (ir.busy) "Loading…" else "Load…", arrow = false, enabled = !ir.busy, onClick = {
             pickerSlot = ir.slot
             picker.launch(arrayOf("audio/wav", "audio/x-wav", "audio/wave", "audio/*", "application/octet-stream"))
         })
@@ -378,12 +383,13 @@ private fun SlotTile(label: String, file: String?, selected: Boolean, enabled: B
     }
 }
 
-/** Phone: the two groups side by side when they fit, else stacked; scrolls if too tall. */
+/** Phone: the two groups side by side when they fit, else stacked, then the graph; scrolls. */
 @Composable
 private fun PhoneConvolverPage(
     left: @Composable (ConvolverRow) -> Unit,
     right: @Composable (ConvolverRow) -> Unit,
     modifier: Modifier,
+    graph: @Composable (Modifier) -> Unit,
 ) {
     val stack: ConvolverRow = { _, h -> Modifier.fillMaxWidth().height(h.dp) }
     val group: @Composable (@Composable (ConvolverRow) -> Unit) -> Unit = { content ->
@@ -395,10 +401,14 @@ private fun PhoneConvolverPage(
             Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).heightIn(min = maxHeight).padding(vertical = 12.dp),
             contentAlignment = Alignment.Center,
         ) {
-            if (sideBySide) {
-                Row(horizontalArrangement = Arrangement.spacedBy(PhoneGroupGap)) { group(left); group(right) }
-            } else {
-                Column(verticalArrangement = Arrangement.spacedBy(24.dp)) { group(left); group(right) }
+            Column(verticalArrangement = Arrangement.spacedBy(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                if (sideBySide) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(PhoneGroupGap)) { group(left); group(right) }
+                } else {
+                    group(left)
+                    group(right)
+                }
+                graph(Modifier.widthIn(max = GroupWidth.dp * 2 + PhoneGroupGap).fillMaxWidth().height(300.dp))
             }
         }
     }
@@ -413,11 +423,16 @@ private val CapColor = Color(BmwDashboardSkin.SLIDER_LIMITER_COLOR)
 private const val StatusPollMs = 1000L
 private const val MaxIrSeconds = "1.36"
 
-// Head-unit layout, in the 1280x480 editor's dp: the Output page's two 333dp columns, starting
-// under the 69dp toolbar line (status strip + OUTPUT/CONVOLVER finder).
+// Head-unit layout, in the 1280x480 editor's dp: the IR-on-your-car graph on the left (x 152..626,
+// like the Output page's gain budget), then the two 296dp columns (x 646..1250), all starting
+// under the toolbar line. The phone keeps 370dp columns.
 private const val GroupWidth = 370
-private const val LeftX = 317
-private const val RightX = 760
+private const val HeadGroupWidth = 296
+private const val GraphX = 152
+private const val GraphWidth = 474
+private const val GraphHeight = 384
+private const val LeftX = 646
+private const val RightX = 954
 private const val GroupTop = 76
 private const val HeaderHeight = 40
 // The four slot tiles, two by two.

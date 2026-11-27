@@ -108,15 +108,42 @@ object SpectrumEngine {
      */
     fun publishWet(interleaved: FloatBuffer, sampleRate: Int) {
         val frame = takeDryFrame() ?: return
-        for (i in 0 until frame.length) frame.wet[i] = interleaved.get(i)
+        var peak = 0f
+        for (i in 0 until frame.length) {
+            val s = interleaved.get(i)
+            frame.wet[i] = s
+            val a = abs(s)
+            if (a > peak) peak = a
+        }
+        noteClip(peak)
         publish(frame, sampleRate)
     }
 
     fun publishWet(interleaved: ShortBuffer, sampleRate: Int) {
         val frame = takeDryFrame() ?: return
-        for (i in 0 until frame.length) frame.wet[i] = interleaved.get(i) / 32768f
+        var peak = 0f
+        for (i in 0 until frame.length) {
+            val s = interleaved.get(i) / 32768f
+            frame.wet[i] = s
+            val a = abs(s)
+            if (a > peak) peak = a
+        }
+        noteClip(peak)
         publish(frame, sampleRate)
     }
+
+    // Checked here, on every published buffer, rather than on the analyser thread, which only
+    // sees the newest buffer per 16 ms tick and would miss a clip in the ones it skips.
+    private fun noteClip(peak: Float) {
+        if (peak >= CLIP_AMPLITUDE) lastClipNanos = System.nanoTime()
+    }
+
+    /** Full scale, less rounding: a 16-bit sample of 32767 reads 0.99997. */
+    private const val CLIP_AMPLITUDE = 0.9999f
+
+    /** [System.nanoTime] of the last output buffer that reached full scale, or 0 for none, while a meter is up. */
+    @Volatile var lastClipNanos = 0L
+        private set
 
     private fun producerFrame(): Frame? {
         // A graph or a level meter is showing (the meters need the buffers, not the FFTs).
@@ -148,6 +175,20 @@ object SpectrumEngine {
     @Volatile private var publishedLeftRmsDb = LEVEL_FLOOR_DB
     @Volatile private var publishedRightPeakDb = LEVEL_FLOOR_DB
     @Volatile private var publishedRightRmsDb = LEVEL_FLOOR_DB
+    // The dry (pre-DSP) peak over both channels: what comes in, for the Output page's In meter.
+    @Volatile private var publishedInputPeakDb = LEVEL_FLOOR_DB
+
+    /** The smoothed input (pre-DSP) peak in dBFS, both channels; [LEVEL_FLOOR_DB] when idle. */
+    fun inputPeakDb(): Float = publishedInputPeakDb
+
+    private fun peakOf(samples: FloatArray, length: Int): Float {
+        var peak = 0f
+        for (i in 0 until length) {
+            val a = abs(samples[i])
+            if (a > peak) peak = a
+        }
+        return peak
+    }
 
     @Synchronized
     fun acquire() {
@@ -209,6 +250,7 @@ object SpectrumEngine {
             publishedLeftRmsDb = LEVEL_FLOOR_DB
             publishedRightPeakDb = LEVEL_FLOOR_DB
             publishedRightRmsDb = LEVEL_FLOOR_DB
+            publishedInputPeakDb = LEVEL_FLOOR_DB
         }
     }
 
@@ -223,6 +265,7 @@ object SpectrumEngine {
                     wetChannel.feed(wetDrain, consumed, fft)
                 }
                 updateLevelsFromInterleaved(wetDrain, consumed)
+                publishedInputPeakDb = smoothLevel(publishedInputPeakDb, amplitudeToDbFs(peakOf(dryDrain, consumed)))
             }
             try {
                 Thread.sleep(16L)
