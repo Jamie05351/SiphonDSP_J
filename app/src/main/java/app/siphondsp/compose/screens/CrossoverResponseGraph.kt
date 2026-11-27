@@ -24,6 +24,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
@@ -54,6 +56,9 @@ import app.siphondsp.dsp.AutoHeadroomCalculator
 import app.siphondsp.dsp.BmwOutputChannel
 import app.siphondsp.dsp.BmwResponseCalculator
 import app.siphondsp.dsp.BmwResponseCurves
+import app.siphondsp.dsp.bandalign.MeasuredLowMid
+import app.siphondsp.dsp.HouseCurve
+import app.siphondsp.dsp.CarBaseline
 import app.siphondsp.dsp.BmwSignalChain
 import app.siphondsp.model.BmwPeqState
 import app.siphondsp.model.NativeBmwDspValues
@@ -165,6 +170,14 @@ fun CrossoverResponseGraph(
     peqState: BmwPeqState,
     modifier: Modifier = Modifier,
     showSpectrum: Boolean = true,
+    /** The car measured flat, added to every magnitude curve so they show what you'll hear (as on the PEQ graph). */
+    carBaseline: CarBaseline? = null,
+    /** The target to compare against, dashed, aligned to the curves as the PEQ graph aligns it. */
+    houseCurve: HouseCurve? = null,
+    /** The car's measured Low + Mid sum (REW, re-timed for today's delays) on the graph's axis, or null. */
+    measured: ((frequencies: DoubleArray, side: BmwOutputChannel) -> MeasuredLowMid.Result?)? = null,
+    /** The split whose markers stand out: 0 = Low / Mid, 1 = Mid / High, -1 = none. */
+    highlightSplit: Int = -1,
 ) {
     val context = LocalContext.current
     val density = LocalDensity.current.density
@@ -292,6 +305,7 @@ fun CrossoverResponseGraph(
         }
     }
 
+    val overlays = remember(density) { OverlayPaints(density) }
     // Response curves -- same shared engine the View and the full PEQ visualiser use. Recomputed
     // only when the DSP values / PEQ snapshot change (not per spectrum frame).
     val calculator = remember { BmwResponseCalculator(pointCount = POINT_COUNT) }
@@ -304,19 +318,25 @@ fun CrossoverResponseGraph(
     // or no IR is running).
     val convolverGrid = remember { responseGrid(POINT_COUNT, SAMPLE_RATE, 20.0, 20_000.0) }
     val convolver = rememberConvolverResponse(rememberShowConvolverInGraphs(), convolverGrid)
-    val generation = remember(valuesKey, peqState, convolver) {
+    val generation = remember(valuesKey, peqState, convolver, carBaseline) {
         if (systemValues.size == BmwSignalChain.VALUE_COUNT) {
             morph.freeze()
             calculator.configureAxis(SAMPLE_RATE, 20.0, 20_000.0)
             calculator.convolver = convolver
             calculator.invalidateAll()
             calculator.compute(autoHeadroom.effectiveValues(systemValues, peqState, SAMPLE_RATE), peqState, curves)
+            // The car itself: magnitude only (its phase stays modelled), as the PEQ graph adds it.
+            carBaseline?.applyTo(curves)
             // Only new curves start a morph. (Like the compute itself, this runs while composing; a
             // discarded composition just freezes the same on-screen shape again.)
             morph.generation++
         }
         morph.generation
     }
+    // Reads the imported files (state) during composition, so a new import redraws it. The side
+    // follows the graph's channel toggle (Left unless only Right is showing).
+    val measuredSide = if (CrossoverGraphView.channels == GraphChannels.RIGHT) BmwOutputChannel.RIGHT else BmwOutputChannel.LEFT
+    val measuredResult = measured?.invoke(curves.frequencies, measuredSide)
     // Runs from generation - 1 to generation for each new set of curves; until it starts, the
     // morph sits at the shape last drawn (see the draw below).
     val morphClock = remember { Animatable(0f) }
@@ -383,7 +403,7 @@ fun CrossoverResponseGraph(
                 nc, left, right, top, bottom, density, gridLines,
                 gridPaint, gridOctavePaint, gridZeroPaint, labelPaint, toY,
             )
-            drawCrossoverMarkers(nc, systemValues, left, right, top, bottom, density, markerPaint, markerLabelPaint)
+            drawCrossoverMarkers(nc, systemValues, left, right, top, bottom, density, markerPaint, markerLabelPaint, highlightSplit, overlays)
             if (showSpectrum && mode.showsSpectrum()) {
                 spectrumBars.draw(
                     nc, frame, top, bottom, spectrumSignalArgb, HomePalette.MeterHot.toArgb(), SPECTRUM_ALPHA, density,
@@ -409,9 +429,18 @@ fun CrossoverResponseGraph(
                 rightPhasePaints, phaseOverlayLeft, phaseOverlayRight,
                 showLeft, showRight, bandLines,
             )
+            if (mode == CrossoverGraphMode.MAGNITUDE || mode == CrossoverGraphMode.MAGNITUDE_PHASE) {
+                drawSystemOverlays(
+                    nc, curves, axis, left, right, top, bottom, overlays, carBaseline, houseCurve,
+                    measuredResult, measuredSide, showLeft, showRight,
+                )
+            }
         }
     }
     GraphOverlay(mode, curves.highBranchActive, lowArgb, midArgb, highArgb, dbRange)
+    if (mode == CrossoverGraphMode.MAGNITUDE || mode == CrossoverGraphMode.MAGNITUDE_PHASE) {
+        SystemLegend(carBaseline != null, houseCurve != null, measuredResult, measuredSide)
+    }
     }
 }
 
@@ -908,8 +937,16 @@ private fun drawCrossoverMarkers(
     density: Float,
     markerPaint: Paint,
     labelPaint: Paint,
+    highlightSplit: Int = -1,
+    overlays: OverlayPaints? = null,
 ) {
     if (values.size != BmwSignalChain.VALUE_COUNT) return
+    // The selected split's two corners (lowpass and highpass), drawn bright over the faint markers.
+    val highlighted = when (highlightSplit) {
+        0 -> intArrayOf(NativeBmwDspValues.INDEX_LOW_CROSSOVER_FREQ, NativeBmwDspValues.INDEX_MID_CROSSOVER_FREQ)
+        1 -> if (ThreeWayCrossover.isEnabled(values)) intArrayOf(ThreeWayCrossover.midLowpassIndex, ThreeWayCrossover.highHighpassIndex) else IntArray(0)
+        else -> IntArray(0)
+    }
     val markers = if (ThreeWayCrossover.isEnabled(values)) {
         intArrayOf(
             NativeBmwDspValues.INDEX_LOW_CROSSOVER_FREQ, NativeBmwDspValues.INDEX_MID_CROSSOVER_FREQ,
@@ -922,8 +959,14 @@ private fun drawCrossoverMarkers(
         val freq = values[index]
         if (freq < 20f || freq > 20_000f) return@forEach
         val x = frequencyToX(freq, left, right).coerceIn(left, right)
-        nc.drawLine(x, top, x, bottom, markerPaint)
-        nc.drawText("${freq.toInt()}", x + 2f * density, top + 10f * density, labelPaint)
+        if (overlays != null && index in highlighted) {
+            nc.drawLine(x, top, x, bottom, overlays.splitGlow)
+            nc.drawLine(x, top, x, bottom, overlays.split)
+            nc.drawText("${freq.toInt()}", x + 3f * density, top + 11f * density, overlays.splitLabel)
+        } else {
+            nc.drawLine(x, top, x, bottom, markerPaint)
+            nc.drawText("${freq.toInt()}", x + 2f * density, top + 10f * density, labelPaint)
+        }
     }
 }
 
@@ -968,5 +1011,115 @@ private fun themeColor(context: Context, attribute: Int): Int {
         ContextCompat.getColor(context, typedValue.resourceId)
     } else {
         typedValue.data
+    }
+}
+
+
+/** Paints for the system overlays: the selected split, the car alone, the house target, the measured sum. */
+private class OverlayPaints(density: Float) {
+    val split = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = 2.5f * density; color = 0xE6FFFFFF.toInt() }
+    val splitGlow = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = 12f * density; color = 0x26FFFFFF }
+    val splitLabel = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        textSize = 11f * density; color = 0xFFFFFFFF.toInt(); typeface = android.graphics.Typeface.DEFAULT_BOLD
+    }
+    val car = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = 1.5f * density; color = 0x66C9CED6 }
+    val house = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE; strokeWidth = 1.5f * density; color = 0xB3F3F6FA.toInt()
+        pathEffect = android.graphics.DashPathEffect(floatArrayOf(7f * density, 5f * density), 0f)
+    }
+    val measured = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE; strokeWidth = 3f * density; color = 0xFFFFFFFF.toInt(); strokeJoin = Paint.Join.ROUND
+    }
+    val measuredGlow = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE; strokeWidth = 9f * density; color = 0x2EFFFFFF; strokeJoin = Paint.Join.ROUND
+    }
+    val path = android.graphics.Path()
+}
+
+/**
+ * Over the response: the car on its own (faint), the house target (dashed, aligned to the shown
+ * sums as the PEQ graph aligns it) and the measured Low + Mid sum (bright white, levelled onto the
+ * modelled sum of its side between [MEASURED_ALIGN_LOW_HZ] and [MEASURED_ALIGN_HIGH_HZ], since a
+ * REW export is in absolute SPL).
+ */
+private fun drawSystemOverlays(
+    nc: Canvas,
+    curves: BmwResponseCurves,
+    axis: DbAxis,
+    left: Float,
+    right: Float,
+    top: Float,
+    bottom: Float,
+    p: OverlayPaints,
+    carBaseline: CarBaseline?,
+    houseCurve: HouseCurve?,
+    measured: MeasuredLowMid.Result?,
+    measuredSide: BmwOutputChannel,
+    showLeft: Boolean,
+    showRight: Boolean,
+) {
+    val f = curves.frequencies
+    fun line(db: DoubleArray, offset: Double, paint: Paint, glow: Paint? = null) {
+        p.path.rewind()
+        var drawing = false
+        for (i in f.indices) {
+            val v = db[i]
+            if (!v.isFinite()) { drawing = false; continue }
+            val x = frequencyToX(f[i].toFloat(), left, right)
+            val y = dbToY(axis.clip(v + offset), axis, top, bottom)
+            if (drawing) p.path.lineTo(x, y) else p.path.moveTo(x, y)
+            drawing = true
+        }
+        nc.save()
+        nc.clipRect(left, top, right, bottom)
+        glow?.let { nc.drawPath(p.path, it) }
+        nc.drawPath(p.path, paint)
+        nc.restore()
+    }
+    if (carBaseline != null) {
+        val ch = if (showLeft || !showRight) BmwOutputChannel.LEFT else BmwOutputChannel.RIGHT
+        line(carBaseline.offsetsFor(ch.ordinal, f), 0.0, p.car)
+    }
+    if (houseCurve != null) {
+        val grid = houseCurve.onGrid(f)
+        val shown = buildList {
+            if (showLeft) add(curves.sumDb[BmwOutputChannel.LEFT.ordinal])
+            if (showRight) add(curves.sumDb[BmwOutputChannel.RIGHT.ordinal])
+        }
+        if (shown.isNotEmpty()) line(grid, HouseCurve.alignmentOffset(grid, shown, f), p.house)
+    }
+    if (measured != null) {
+        val model = curves.sumDb[measuredSide.ordinal]
+        var sum = 0.0
+        var n = 0
+        for (i in f.indices) {
+            if (f[i] < MEASURED_ALIGN_LOW_HZ || f[i] > MEASURED_ALIGN_HIGH_HZ) continue
+            val m = measured.nowDb[i]
+            if (m.isFinite() && model[i].isFinite()) { sum += model[i] - m; n++ }
+        }
+        if (n > 0) line(measured.nowDb, sum / n, p.measured, p.measuredGlow)
+    }
+}
+
+private const val MEASURED_ALIGN_LOW_HZ = 200.0
+private const val MEASURED_ALIGN_HIGH_HZ = 600.0
+
+
+/** Names the system overlays that are showing, top left of the plot. */
+@Composable
+private fun BoxScope.SystemLegend(car: Boolean, house: Boolean, measured: MeasuredLowMid.Result?, side: BmwOutputChannel) {
+    if (!car && !house && measured == null) return
+    androidx.compose.foundation.layout.Row(
+        Modifier.align(Alignment.TopStart).padding(start = (PAD_LEFT_DP + 6f).dp, top = 4.dp),
+        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(10.dp),
+    ) {
+        if (measured != null) {
+            Text(
+                "— MEASURED ${if (side == BmwOutputChannel.LEFT) "L" else "R"}" + if (measured.crossoverChanged) " (crossover changed since)" else "",
+                color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold,
+            )
+        }
+        if (house) Text("- - HOUSE", color = Color(0xFFDDE1E7), fontSize = 10.sp, fontWeight = FontWeight.Medium)
+        if (car) Text("— CAR only", color = Color(0xFF9CA2AC), fontSize = 10.sp, fontWeight = FontWeight.Medium)
     }
 }

@@ -18,6 +18,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.navigation.NavHostController
@@ -38,8 +39,7 @@ import app.siphondsp.compose.screens.CompressorVisualiserPage
 import app.siphondsp.compose.screens.ConvolverScreen
 import app.siphondsp.compose.screens.DeepBassScreen
 import app.siphondsp.compose.screens.CrossoverGraphMode
-import app.siphondsp.compose.screens.CrossoverLowMidPage
-import app.siphondsp.compose.screens.CrossoverMidHighPage
+import app.siphondsp.compose.screens.CrossoverSplitsPage
 import app.siphondsp.compose.screens.CrossoverTiltPage
 import app.siphondsp.compose.screens.GainsDelayScreen
 import app.siphondsp.compose.screens.HeadroomOutputScreen
@@ -91,7 +91,8 @@ object Routes {
     /** Dynamics: the visualiser, one page per MBC band, then the bus limiters. */
     val DYNAMICS_PAGE_COUNT = 2 + NativeBmwDspValues.MBC_BAND_COUNT
 
-    const val CROSSOVER_PAGE_COUNT = 3
+    /** Crossover (one split at a time) and Tilt. */
+    const val CROSSOVER_PAGE_COUNT = 2
 
     /** Output: the end-of-chain stages, the convolver, then Deep bass (after the master volume). */
     const val OUTPUT_PAGE_COUNT = 3
@@ -247,8 +248,8 @@ private fun Workspace(
 
 /** The page finder on the head unit, prev/next arrows on a phone. */
 @Composable
-private fun PagerControls(pagerState: PagerState, labels: List<String>, frac: WorkspaceArt.Frac) {
-    if (LocalContext.current.isHeadUnitDisplay()) ArtPagerFinder(pagerState, labels, frac) else DspPagerArrows(pagerState)
+private fun PagerControls(pagerState: PagerState, labels: List<String>, frac: WorkspaceArt.Frac, accent: Color? = null) {
+    if (LocalContext.current.isHeadUnitDisplay()) ArtPagerFinder(pagerState, labels, frac, accent = accent) else DspPagerArrows(pagerState)
 }
 
 @Composable
@@ -299,18 +300,17 @@ internal fun AlignmentWorkspace(startPage: Int) {
 }
 
 @Composable
-private fun CrossoverWorkspace() {
+internal fun CrossoverWorkspace() {
     val pagerState = rememberPagerState { Routes.CROSSOVER_PAGE_COUNT }
     // The pages share one graph-mode choice.
     var graphMode by rememberSaveable { mutableStateOf(CrossoverGraphMode.MAGNITUDE) }
     Workspace(
         current = DspDestination.CROSSOVER_TILT,
-        toolbarActions = { PagerControls(pagerState, listOf("LOW/MID", "MID/HIGH", "TILT"), WorkspaceArt.finder3) },
+        toolbarActions = { PagerControls(pagerState, listOf("CROSSOVER", "TILT"), WorkspaceArt.finder3, DspColors.Xover) },
     ) {
         HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
             when (page) {
-                0 -> CrossoverLowMidPage(graphMode, { graphMode = it })
-                1 -> CrossoverMidHighPage(graphMode, { graphMode = it })
+                0 -> CrossoverSplitsPage(graphMode, { graphMode = it })
                 else -> CrossoverTiltPage(graphMode, { graphMode = it })
             }
         }

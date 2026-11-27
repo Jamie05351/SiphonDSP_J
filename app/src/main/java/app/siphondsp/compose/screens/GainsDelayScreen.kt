@@ -58,6 +58,7 @@ import app.siphondsp.compose.controls.BmwSegmentedControl
 import app.siphondsp.compose.controls.BmwSwitch
 import app.siphondsp.compose.controls.BoxedValue
 import app.siphondsp.compose.controls.CarSpeakerDiagram
+import app.siphondsp.compose.controls.DspColors
 import app.siphondsp.compose.controls.MinusPlusPill
 import app.siphondsp.compose.controls.SpeakerKind
 import app.siphondsp.compose.controls.StepMath
@@ -177,30 +178,50 @@ private fun HeadUnitDelayPage(
 ) {
     val accent = Color(band.accent)
     var showMore by rememberSaveable { mutableStateOf(false) }
+    // Car photo, or the car's measured Low + Mid sum (Band Align's files) for the Low / Mid split.
+    var measuredView by rememberSaveable { mutableStateOf(false) }
+    val lowMid = band != GainsBand.HIGH
+    val showMeasured = measuredView && lowMid
+    val bandAlign = rememberBandAlignModel()
     WorkspaceArtBox(modifier.fillMaxSize()) {
-        // A soft glow in the selected band's colour behind the car, so the page takes the band's
-        // colour as a whole rather than only in its value boxes.
-        Box(Modifier.artRect(GlowRect).drawBehind {
-            scale(1f, size.height / size.width) {
-                drawCircle(
-                    Brush.radialGradient(listOf(accent.copy(alpha = 0.45f), accent.copy(alpha = 0.14f), Color.Transparent)),
-                    radius = size.width / 2f,
-                )
-            }
-        })
-        // The car is the band picker too: tap a driver to select its band. The lit pair show their
-        // delays. No seats: the Delay page has no path lines (alignment comes from Band Align).
-        CarSpeakerDiagram(
-            selected = band.speaker,
-            accent = accent,
-            onSelect = { setBand(GainsBand.forSpeaker(it)) },
-            modifier = Modifier.artRect(CarRect),
-            seats = emptyList(),
-            label = { kind, left ->
-                if (kind == band.speaker) "${DelayFormat.format(dsp.get(if (left) band.delayL else band.delayR))} ms" else null
-            },
-            carAlpha = CarAlpha,
-        )
+        if (showMeasured) {
+            MeasuredLowMidGraph(bandAlign, dsp.values, Modifier.artRect(MeasuredRect))
+        } else {
+            // A soft glow in the selected band's colour behind the car, so the page takes the band's
+            // colour as a whole rather than only in its value boxes.
+            Box(Modifier.artRect(GlowRect).drawBehind {
+                scale(1f, size.height / size.width) {
+                    drawCircle(
+                        Brush.radialGradient(listOf(accent.copy(alpha = 0.45f), accent.copy(alpha = 0.14f), Color.Transparent)),
+                        radius = size.width / 2f,
+                    )
+                }
+            })
+            // The car is the band picker too: tap a driver to select its band. The lit pair show their
+            // delays. No seats: the Delay page has no path lines (alignment comes from Band Align).
+            CarSpeakerDiagram(
+                selected = band.speaker,
+                accent = accent,
+                onSelect = { setBand(GainsBand.forSpeaker(it)) },
+                modifier = Modifier.artRect(CarRect),
+                seats = emptyList(),
+                label = { kind, left ->
+                    if (kind == band.speaker) "${DelayFormat.format(dsp.get(if (left) band.delayL else band.delayR))} ms" else null
+                },
+                carAlpha = CarAlpha,
+            )
+        }
+        if (lowMid) {
+            BmwSegmentedControl(
+                options = listOf("CAR", "MEASURED"),
+                selectedIndex = if (measuredView) 1 else 0,
+                onSelect = { measuredView = it == 1 },
+                optionAccents = listOf(DspColors.Delay, DspColors.Delay),
+                modifier = Modifier.artRect(ViewToggleRect),
+                segmentHeight = 36.dp,
+                segmentGap = 4.dp,
+            )
+        }
         if (inactive) ThreeWayOffNote(band, Modifier.artRect(NoteRect))
         DriverCard(dsp, band, left = true, mirrored = false, linked, inactive, LargeSizing, fill = true,
             Modifier.artRect(LeftCardRect).bandPanel(accent, edgeOnLeft = true))
@@ -687,6 +708,9 @@ private val RightCardRect = artDp(922, 132, 320, 260)
 private val TabsRect = artDp(487, 404, 420, 48)
 private val LinkRect = artDp(906, 76, 290, 44)
 private val MoreRect = artDp(1206, 76, 56, 44)
+private val ViewToggleRect = artDp(152, 76, 240, 44)
+// Between the cards, where the car sits, a little taller.
+private val MeasuredRect = artDp(484, 122, 426, 272)
 
 /** The backdrop car photo's opacity, so the cards read over it. */
 private const val CarAlpha = 0.85f

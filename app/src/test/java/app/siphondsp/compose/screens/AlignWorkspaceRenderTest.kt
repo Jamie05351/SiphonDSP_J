@@ -7,6 +7,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.performClick
 import androidx.core.view.drawToBitmap
 import app.siphondsp.compose.nav.AlignmentWorkspace
@@ -63,6 +64,32 @@ class AlignWorkspaceRenderTest {
         saveRender("align-delay")
         compose.onNodeWithContentDescription("More delay settings").performClick()
         compose.onNodeWithText("MONO BASS").assertIsDisplayed()
+    }
+
+    @Test
+    fun measuredViewAsksForBandAlignFilesInsteadOfFakingIt() {
+        open(0)
+        compose.onNodeWithText("MEASURED").performClick()
+        compose.onNodeWithText("Load Low only and Mid only for this side on Phase (Band Align) to see delay on your car.")
+            .assertIsDisplayed()
+        saveRender("align-delay-measured-empty")
+    }
+
+    @Test
+    fun xoverHasCrossoverAndTiltWithASplitSelector() {
+        val c = Robolectric.buildActivity(ComponentActivity::class.java).setup()
+        controller = c
+        c.get().setContent {
+            BmwDspTheme { CompositionLocalProvider(LocalAppNavigator provides navigator) { app.siphondsp.compose.nav.CrossoverWorkspace() } }
+        }
+        compose.waitForIdle()
+        compose.onAllNodesWithText("CROSSOVER")[0].assertIsDisplayed()
+        compose.onNodeWithText("TILT").assertIsDisplayed()
+        compose.onNodeWithText("Low lowpass").assertIsDisplayed()
+        saveRender("xover-low-mid")
+        compose.onNodeWithText("MID / HIGH").performClick()
+        compose.onNodeWithText("Mid lowpass").assertIsDisplayed()
+        saveRender("xover-mid-high")
     }
 
     @Test

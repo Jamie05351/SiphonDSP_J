@@ -88,7 +88,7 @@ private fun sideName(side: BmwOutputChannel) = if (side == BmwOutputChannel.LEFT
  * other way to tune the bands' phase) open from "All-pass…" in the top row, via [onOpenAllPass]. How to measure is a dialog. The column scrolls if its content runs long.
  */
 @Composable
-fun BandAlignScreen(model: BandAlignViewModel = viewModel(), onOpenAllPass: (() -> Unit)? = null) {
+fun BandAlignScreen(model: BandAlignViewModel = rememberBandAlignModel(), onOpenAllPass: (() -> Unit)? = null) {
     val context = LocalContext.current
     val dsp = rememberBmwDspState()
     var seatIndex by rememberSaveable { mutableIntStateOf(0) }
@@ -156,7 +156,7 @@ fun BandAlignScreen(model: BandAlignViewModel = viewModel(), onOpenAllPass: (() 
                     Text("Band Align", fontSize = 19.sp, fontWeight = FontWeight.SemiBold,
                         style = TextStyle(brush = Brush.horizontalGradient(listOf(LowColor, MidColor))))
                     for (slot in BandAlignViewModel.Slot.entries) {
-                        ImportRow(model, BandAlignViewModel.Key(seat, side, slot))
+                        ImportRow(model, BandAlignViewModel.Key(seat, side, slot)) { dsp.values }
                     }
                     val ready = model.readySides()
                     GlassChip(if (model.analysing) "Analysing…" else "Analyse", onClick = {
@@ -215,10 +215,11 @@ private fun PageColumn(modifier: Modifier, content: @Composable ColumnScope.() -
  * by side, the two buttons left the text almost no width: "Low only" broke a letter per line.
  */
 @Composable
-private fun ImportRow(model: BandAlignViewModel, key: BandAlignViewModel.Key) {
+private fun ImportRow(model: BandAlignViewModel, key: BandAlignViewModel.Key, currentValues: () -> FloatArray) {
     val context = LocalContext.current
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) model.import(key, uri)
+        // With the settings it was measured at, so the measured curves can follow later changes.
+        if (uri != null) model.import(key, uri, currentValues())
     }
     val imported = model.imports[key]
     val err = model.importErrors[key]

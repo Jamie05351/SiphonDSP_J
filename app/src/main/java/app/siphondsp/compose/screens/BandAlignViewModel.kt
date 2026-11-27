@@ -4,6 +4,7 @@ import android.app.Application
 import android.net.Uri
 import android.provider.OpenableColumns
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -11,6 +12,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import app.siphondsp.dsp.BmwOutputChannel
 import app.siphondsp.dsp.bandalign.BandAlignSolver
+import app.siphondsp.dsp.bandalign.MeasuredLowMid
 import app.siphondsp.dsp.bandalign.RewMeasurement
 import app.siphondsp.model.BmwPeqState
 import app.siphondsp.model.MeasurementNeutral
@@ -39,6 +41,8 @@ class BandAlignViewModel(application: Application) : AndroidViewModel(applicatio
     data class Imported(val fileName: String, val measurement: RewMeasurement)
 
     val imports = mutableStateMapOf<Key, Imported>()
+    /** The DSP settings at each file's import: the timing it was measured with, for [measured]. */
+    private val importedValues = HashMap<Key, FloatArray>()
     val importErrors = mutableStateMapOf<Key, String>()
 
     var analysing by mutableStateOf(false)
@@ -67,7 +71,7 @@ class BandAlignViewModel(application: Application) : AndroidViewModel(applicatio
     private var applied: Map<Int, Float> = emptyMap()
     private val slotGeneration = HashMap<Key, Int>()
 
-    fun import(key: Key, uri: Uri) {
+    fun import(key: Key, uri: Uri, values: FloatArray? = null) {
         val generation = (slotGeneration[key] ?: 0) + 1
         slotGeneration[key] = generation
         viewModelScope.launch {
@@ -88,6 +92,7 @@ class BandAlignViewModel(application: Application) : AndroidViewModel(applicatio
             }
             if (slotGeneration[key] != generation) return@launch
             outcome.onSuccess { (name, m) ->
+                if (values != null) importedValues[key] = values.copyOf() else importedValues.remove(key)
                 imports[key] = Imported(name, m)
                 importErrors.remove(key)
                 measuredBeforeApply = false
@@ -102,6 +107,7 @@ class BandAlignViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun clear(key: Key) {
         slotGeneration[key] = (slotGeneration[key] ?: 0) + 1
+        importedValues.remove(key)
         imports.remove(key)
         importErrors.remove(key)
         invalidate()
@@ -113,6 +119,26 @@ class BandAlignViewModel(application: Application) : AndroidViewModel(applicatio
         analysing = false
         results = null
         failure = null
+    }
+
+    /**
+     * The car's measured Low + Mid sum for [seat] / [side] at [frequencies], re-timed for the delays
+     * and polarities in [values] (see [MeasuredLowMid]); null without both a Low-only and a
+     * Mid-only file for that seat and side, or when either was imported without its settings.
+     */
+    fun measured(seat: Seat, side: BmwOutputChannel, values: FloatArray, frequencies: DoubleArray): MeasuredLowMid.Result? {
+        val lowKey = Key(seat, side, Slot.LOW)
+        val midKey = Key(seat, side, Slot.MID)
+        val low = imports[lowKey]?.measurement ?: return null
+        val mid = imports[midKey]?.measurement ?: return null
+        val lowThen = importedValues[lowKey] ?: return null
+        val midThen = importedValues[midKey] ?: return null
+        return MeasuredLowMid.sum(
+            low, MeasuredLowMid.lowTiming(lowThen, side), MeasuredLowMid.lowTiming(values, side),
+            mid, MeasuredLowMid.midTiming(midThen, side), MeasuredLowMid.midTiming(values, side),
+            frequencies,
+            crossoverChanged = MeasuredLowMid.crossoverChanged(lowThen, values) || MeasuredLowMid.crossoverChanged(midThen, values),
+        )
     }
 
     /** Per side, the seats with both a Low-only and a Mid-only measurement. */
@@ -318,4 +344,27 @@ private fun java.io.InputStream.readNBytesCompat(limit: Int): ByteArray {
         total += n
     }
     return out.toByteArray()
+}
+
+
+/**
+ * The one Band Align model for the whole activity, so the files imported on Align's Phase page are
+ * the ones Xover and the Delay page draw their measured Low + Mid curves from. They live as long
+ * as the app's screen does (they aren't saved: import them again after the app is closed).
+ */
+@androidx.compose.runtime.Composable
+fun rememberBandAlignModel(): BandAlignViewModel {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val owner = remember(context) { context.findViewModelStoreOwner() }
+    return if (owner != null) androidx.lifecycle.viewmodel.compose.viewModel(viewModelStoreOwner = owner)
+    else androidx.lifecycle.viewmodel.compose.viewModel()
+}
+
+private fun android.content.Context.findViewModelStoreOwner(): androidx.lifecycle.ViewModelStoreOwner? {
+    var c: android.content.Context? = this
+    while (c != null) {
+        if (c is androidx.lifecycle.ViewModelStoreOwner) return c
+        c = (c as? android.content.ContextWrapper)?.baseContext
+    }
+    return null
 }
