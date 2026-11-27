@@ -22,6 +22,7 @@ import app.siphondsp.model.ParametricEqBand
 import app.siphondsp.model.ParametricEqBandList
 import app.siphondsp.model.ParametricEqChannel
 import app.siphondsp.model.ParametricEqFilterType
+import app.siphondsp.model.PeqStateHistory
 import app.siphondsp.service.RootlessAudioProcessorService
 import app.siphondsp.utils.AppEvent
 import app.siphondsp.utils.AppEvents
@@ -41,15 +42,41 @@ private const val MIN_ASSUMED_SAMPLE_RATE = 44_100f
 
 /**
  * Compose state layer for the three-bank Parametric EQ (roadmap Phase 10a). Ports
- * `ParametricEqualizerFragment`'s state + the `applyCandidate` mutation funnel, minus the undo
- * history (the Compose PEQ screen drops Undo/Redo -- see `docs/PEQ_COMPOSE_PLAN.md`). The visible
- * band list is derived from `peqState` + `selectedScope`, not explicitly rebound.
+ * `ParametricEqualizerFragment`'s state + the `applyCandidate` mutation funnel, with a bounded
+ * [PeqStateHistory] of committed states behind the toolbar's Undo / Redo. The visible band list is
+ * derived from `peqState` + `selectedScope`, not explicitly rebound.
  */
 class PeqStateHolder internal constructor(private val appContext: Context) {
 
     /** Always reassigned wholesale (never mutated in place) so composition tracks it. */
     var peqState: BmwPeqState by mutableStateOf(BmwPeqState.load(appContext))
         private set
+
+    // Committed states only: previews never enter it, and the cursor moves only once the engine
+    // (or disk) has accepted the state, as PeqStateHistory requires.
+    private val history = PeqStateHistory().also { it.reset(peqState) }
+    var canUndo: Boolean by mutableStateOf(false)
+        private set
+    var canRedo: Boolean by mutableStateOf(false)
+        private set
+
+    private fun syncHistoryFlags() {
+        canUndo = history.canUndo
+        canRedo = history.canRedo
+    }
+
+    /** Step back to the previous committed state (through the same validate + apply funnel). */
+    fun undo() {
+        val target = history.peekUndo() ?: return
+        if (applyCandidate(target, "undo", recordHistory = false)) history.confirmUndo()
+        syncHistoryFlags()
+    }
+
+    fun redo() {
+        val target = history.peekRedo() ?: return
+        if (applyCandidate(target, "redo", recordHistory = false)) history.confirmRedo()
+        syncHistoryFlags()
+    }
 
     var selectedScope: PeqScope by mutableStateOf(PeqScope.FULL)
 
@@ -201,7 +228,7 @@ class PeqStateHolder internal constructor(private val appContext: Context) {
      * sample rate, then pushes to the running engine or persists to disk; toasts + returns false
      * on any rejection, leaving the previous state active.
      */
-    fun applyCandidate(rawCandidate: BmwPeqState, source: String): Boolean {
+    fun applyCandidate(rawCandidate: BmwPeqState, source: String, recordHistory: Boolean = true): Boolean {
         val candidate = rawCandidate.copy(enabled = true)
         val sampleRate = RootlessAudioProcessorService.nativeBmwPeqSampleRate() ?: MIN_ASSUMED_SAMPLE_RATE
         candidate.validate(sampleRate)?.let { validation ->
@@ -233,19 +260,35 @@ class PeqStateHolder internal constructor(private val appContext: Context) {
             return false
         }
         peqState = candidate
+        if (recordHistory) {
+            history.commit(candidate)
+            syncHistoryFlags()
+        }
         AppEvents.send(AppEvent.ParametricEqChanged)
         return true
     }
 
     /** Reload the active session, or disk when offline (resume / external update). */
     fun refreshFromDisk() {
-        peqState = BmwPeqState.load(appContext)
+        val loaded = BmwPeqState.load(appContext)
+        // Our own applies come back through here (ParametricEqChanged); only a state changed
+        // elsewhere (another screen, a restore, the service) starts the history again.
+        if (loaded != peqState) {
+            history.reset(loaded)
+            syncHistoryFlags()
+        }
+        peqState = loaded
     }
 
     /** Adopt a state produced elsewhere (import / backup restore) without re-validating here --
      *  the caller is expected to have run [applyCandidate] already; this just syncs the snapshot. */
     fun setSnapshot(state: BmwPeqState) {
-        peqState = state.copy(enabled = true)
+        val adopted = state.copy(enabled = true)
+        if (adopted != peqState) {
+            history.commit(adopted)
+            syncHistoryFlags()
+        }
+        peqState = adopted
     }
 
     // --- convenience edits, all funnelling through applyCandidate ---
@@ -330,6 +373,27 @@ class PeqStateHolder internal constructor(private val appContext: Context) {
 
     fun setPreamp(preampDb: Float) {
         applyCandidate(peqState.deepCopy().copy(preampDb = preampDb), "preamp")
+    }
+
+    /** [setPreamp] without the save, for a held −/+ (as [previewBandEdit]); [commitPreview] saves. */
+    fun previewPreamp(preampDb: Float) {
+        if (previewBase == null) previewBase = peqState
+        val previewed = peqState.deepCopy().copy(enabled = true, preampDb = preampDb)
+        val sampleRate = RootlessAudioProcessorService.nativeBmwPeqSampleRate() ?: MIN_ASSUMED_SAMPLE_RATE
+        if (previewed.validate(sampleRate) != null) return
+        if (RootlessAudioProcessorService.nativeBmwPeqHandleReady() == true &&
+            !RootlessAudioProcessorService.previewNativeBmwPeq(previewed)
+        ) {
+            return
+        }
+        peqState = previewed
+    }
+
+    /** Bypass or re-enable band [index]: it keeps its settings but leaves the engine and the curves. */
+    fun setBandEnabled(index: Int, enabled: Boolean) {
+        commitBandEdit(index, if (enabled) "enable" else "bypass") {
+            ParametricEqBand(it.frequency, it.gain, it.q, it.filterType, it.channel, it.uuid, enabled)
+        }
     }
 
     fun deleteBand(index: Int) {

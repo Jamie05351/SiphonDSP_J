@@ -113,13 +113,37 @@ class PeqWorkspaceRenderTest {
         compose.onNodeWithTag("peq-filter-editor").assertIsDisplayed()
         assertTrue(compose.onNodeWithTag("peq-response-graph").fetchSemanticsNode().boundsInRoot.width < width)
         saveRender("selected-filter")
-        compose.onNodeWithText("Close").performClick()
+        compose.onNodeWithContentDescription("Close filter").performClick()
         compose.onNodeWithTag("peq-filter-editor").assertDoesNotExist()
         assertEquals(width, compose.onNodeWithTag("peq-response-graph").fetchSemanticsNode().boundsInRoot.width, 1f)
         val workspace = compose.onNodeWithTag("peq-workspace").fetchSemanticsNode().boundsInRoot
         val filterBar = compose.onNodeWithTag("peq-filter-bar").fetchSemanticsNode().boundsInRoot
-        assertTrue(workspace.bottom - filterBar.bottom >= 23f)
+        // The filter bar took over the old 24dp bottom clearance: 64dp chips, a small inset kept.
+        assertEquals(64f, filterBar.height, 1f)
+        assertTrue(workspace.bottom - filterBar.bottom >= 3f)
         saveRender("graph")
+    }
+
+    @Test
+    fun inspectorFitsTheGraphRowAndBypassDimsTheFilter() {
+        compose.onNodeWithText("02").performClick()
+        val editor = compose.onNodeWithTag("peq-filter-editor").fetchSemanticsNode().boundsInRoot
+        val graph = compose.onNodeWithTag("peq-response-graph").fetchSemanticsNode().boundsInRoot
+        assertEquals(300f, editor.width, 1f)
+        // Everything fits the head unit's graph row: the last action row is inside the editor.
+        val copy = compose.onNodeWithText("Copy to…").fetchSemanticsNode().boundsInRoot
+        assertTrue("actions must fit without scrolling", copy.bottom <= editor.bottom)
+        assertEquals(graph.height, editor.height, 1f)
+        compose.onNodeWithContentDescription("Filter on, tap to bypass").performClick()
+        compose.waitForIdle()
+        assertTrue(!holder.peqState.fullRangeBands[1].enabled)
+        assertTrue(holder.canUndo)
+        saveRender("selected-filter-bypassed")
+        compose.onNodeWithContentDescription("Undo").performClick()
+        compose.waitForIdle()
+        assertTrue(holder.peqState.fullRangeBands[1].enabled)
+        compose.onNodeWithContentDescription("Previous filter").performClick()
+        compose.onNodeWithText("Filter 01").assertIsDisplayed()
     }
 
     @Test

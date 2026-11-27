@@ -81,6 +81,7 @@ import app.siphondsp.model.MeasurementNeutral
 import app.siphondsp.model.NativeBmwDspValues
 import app.siphondsp.model.ParametricEqBand
 import app.siphondsp.model.ParametricEqChannel
+import app.siphondsp.model.ParametricEqFilterType
 import app.siphondsp.utils.extensions.prettyNumberFormat
 import app.siphondsp.view.PeakHoldMeter
 import app.siphondsp.view.PeqGraphMath
@@ -1184,7 +1185,9 @@ private fun nodeDb(
     maxFrequency: Double,
     g: PeqPlotGeometry,
 ): Double {
-    val db = if (showIndividualFilters) bandDbAt(m, band, band.frequency, sampleRate) else curveDbAt(bankCurve, band.frequency, maxFrequency)
+    // A bypassed filter isn't in the bank's curve, so its node caps its own (dashed) shape instead.
+    val db = if (showIndividualFilters || !band.enabled) bandDbAt(m, band, band.frequency, sampleRate)
+        else curveDbAt(bankCurve, band.frequency, maxFrequency)
     // A notch's own response at its centre is -inf: clamp it to the bottom with its shape, not 0 dB.
     return if (db.isNaN()) 0.0 else db.coerceIn(g.minGain, g.maxGain)
 }
@@ -1235,6 +1238,20 @@ private fun drawFocusedFilterShapes(nc: Canvas, ctx: PeqDrawContext) {
         }
         if (abs(extremeDb) < 0.05) return@forEachIndexed // a 0 dB filter has no shape to show
 
+        if (!band.enabled) {
+            // Bypassed: its whole would-be response as a faint dashed line, no fill -- it's kept but
+            // isn't part of what you hear (nor of the bank curve above it).
+            outline.rewind()
+            outline.moveTo(m.fillX[0], m.fillTopY[0])
+            for (i in 1 until SYSTEM_POINT_COUNT) outline.lineTo(m.fillX[i], m.fillTopY[i])
+            bypassedShapePaint.color = peqFilterColor(offset + index)
+            bypassedShapePaint.strokeWidth = 1.5f * ctx.density
+            bypassedShapePaint.pathEffect = DashPathEffect(floatArrayOf(5f * ctx.density, 5f * ctx.density), 0f)
+            bypassedShapePaint.alpha = scaleAlpha(150, ctx.focus)
+            nc.drawPath(outline, bypassedShapePaint)
+            return@forEachIndexed
+        }
+
         shape.rewind()
         shape.moveTo(g.left, zeroY)
         for (i in 0 until SYSTEM_POINT_COUNT) shape.lineTo(m.fillX[i], m.fillTopY[i])
@@ -1273,6 +1290,9 @@ private fun drawFocusedFilterShapes(nc: Canvas, ctx: PeqDrawContext) {
     }
     nc.restore()
 }
+
+// Single-threaded draw scratch for a bypassed filter's dashed shape.
+private val bypassedShapePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
 
 // A filter's outline is drawn only where it moves the response by at least this much.
 private const val OUTLINE_MIN_DB = 0.15f
@@ -1352,6 +1372,28 @@ private fun drawFocusedNodes(nc: Canvas, ctx: PeqDrawContext) {
             band.uuid == ctx.highlightId
         val radius = (if (highlighted) ACTIVE_NODE_RADIUS_DP + 3f else ACTIVE_NODE_RADIUS_DP) * d
 
+        if (band.uuid == ctx.selectedId && band.enabled) drawBandwidthMarkers(nc, ctx, band, x, y, color)
+
+        if (!band.enabled) {
+            // Bypassed: a hollow, dashed node in its colour (still tappable, so it can be re-enabled).
+            bypassedNodePaint.style = Paint.Style.FILL
+            bypassedNodePaint.pathEffect = null
+            bypassedNodePaint.color = BYPASSED_NODE_FILL
+            bypassedNodePaint.alpha = withAlpha(235)
+            nc.drawCircle(x, y, radius, bypassedNodePaint)
+            bypassedNodePaint.style = Paint.Style.STROKE
+            bypassedNodePaint.strokeWidth = (if (highlighted) 2.5f else 1.75f) * d
+            bypassedNodePaint.pathEffect = DashPathEffect(floatArrayOf(3f * d, 3f * d), 0f)
+            bypassedNodePaint.color = if (highlighted) AndroidColor.WHITE else color
+            bypassedNodePaint.alpha = withAlpha(230)
+            nc.drawCircle(x, y, radius, bypassedNodePaint)
+            p.nodeTextPaint.color = color
+            p.nodeTextPaint.alpha = withAlpha(230)
+            val bypassBaseline = y - (p.nodeTextPaint.ascent() + p.nodeTextPaint.descent()) / 2
+            nc.drawText((numberOffset + index + 1).toString(), x, bypassBaseline, p.nodeTextPaint)
+            return@forEachIndexed
+        }
+
         if (highlighted) {
             p.nodeHaloPaint.color = color
             p.nodeHaloPaint.alpha = withAlpha(160)
@@ -1395,6 +1437,52 @@ private fun drawFocusedNodes(nc: Canvas, ctx: PeqDrawContext) {
         p.nodeTextPaint.alpha = withAlpha(255)
         val baseline = y - (p.nodeTextPaint.ascent() + p.nodeTextPaint.descent()) / 2
         nc.drawText((numberOffset + index + 1).toString(), x, baseline, p.nodeTextPaint)
+    }
+}
+
+private val bypassedNodePaint = Paint(Paint.ANTI_ALIAS_FLAG)
+private val bandwidthPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+private val bandwidthPath = Path()
+private val BYPASSED_NODE_FILL = AndroidColor.rgb(0x0B, 0x0C, 0x0F)
+
+/**
+ * The selected bell / notch's bandwidth: a dashed span between its band edges (f / 2^(N/2) and
+ * f * 2^(N/2) for N octaves from its Q) with a small diamond at each, half-way between its node and
+ * 0 dB, so its width reads on the graph as Q changes. Shelves have no bandwidth to show.
+ */
+private fun drawBandwidthMarkers(nc: Canvas, ctx: PeqDrawContext, band: ParametricEqBand, x: Float, y: Float, color: Int) {
+    if (band.filterType != ParametricEqFilterType.PEAKING && band.filterType != ParametricEqFilterType.NOTCH) return
+    val g = ctx.geometry
+    val d = ctx.density
+    val half = Math.pow(2.0, bandwidthOctaves(band.q) / 2.0)
+    val left = g.xForFrequency((band.frequency / half).coerceAtLeast(20.0)).coerceIn(g.left, g.right)
+    val right = g.xForFrequency((band.frequency * half).coerceAtMost(ctx.maxFrequency)).coerceIn(g.left, g.right)
+    val markerY = ((y + g.yForGain(0.0)) / 2f).coerceIn(g.top, g.bottom)
+    if (right - left < 4f * d) return
+    val alpha = scaleAlpha(230, ctx.focus.coerceIn(0f, 1f))
+    bandwidthPaint.style = Paint.Style.STROKE
+    bandwidthPaint.strokeWidth = 1.5f * d
+    bandwidthPaint.pathEffect = DashPathEffect(floatArrayOf(3f * d, 3f * d), 0f)
+    bandwidthPaint.color = color
+    bandwidthPaint.alpha = alpha
+    nc.drawLine(left, markerY, right, markerY, bandwidthPaint)
+    bandwidthPaint.pathEffect = null
+    val r = 5f * d
+    for (mx in floatArrayOf(left, right)) {
+        bandwidthPath.rewind()
+        bandwidthPath.moveTo(mx, markerY - r)
+        bandwidthPath.lineTo(mx + r, markerY)
+        bandwidthPath.lineTo(mx, markerY + r)
+        bandwidthPath.lineTo(mx - r, markerY)
+        bandwidthPath.close()
+        bandwidthPaint.style = Paint.Style.FILL
+        bandwidthPaint.color = BYPASSED_NODE_FILL
+        bandwidthPaint.alpha = alpha
+        nc.drawPath(bandwidthPath, bandwidthPaint)
+        bandwidthPaint.style = Paint.Style.STROKE
+        bandwidthPaint.color = color
+        bandwidthPaint.alpha = alpha
+        nc.drawPath(bandwidthPath, bandwidthPaint)
     }
 }
 
