@@ -10,6 +10,8 @@ import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onParent
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
@@ -143,7 +145,7 @@ class PeqWorkspaceRenderTest {
         compose.waitForIdle()
         assertTrue(holder.peqState.fullRangeBands[1].enabled)
         compose.onNodeWithContentDescription("Previous filter").performClick()
-        compose.onNodeWithText("Filter 01").assertIsDisplayed()
+        compose.onNodeWithText("Filter 1").assertIsDisplayed()
     }
 
     @Test
@@ -246,7 +248,7 @@ class PeqWorkspaceRenderTest {
         assertTrue("Crossover edits must change the main purple combined response",
             !responsePixels(delayed).contentEquals(responsePixels(crossed)))
         saveRender("combined-response")
-        compose.onNodeWithText("R").performClick()
+        graphRightButton().performClick()
         val right = graphBitmap()
         assertMainCurveMatchesCombinedResponse(right, values, BmwOutputChannel.RIGHT)
         before.recycle()
@@ -348,7 +350,7 @@ class PeqWorkspaceRenderTest {
 
     @Test
     fun channelButtonsPersistTheViewAndTheFullFiltersPageRemainsReachable() {
-        compose.onNodeWithText("R").performClick().assertIsSelected()
+        graphRightButton().performClick().assertIsSelected()
         assertEquals(PeqChannelDisplay.RIGHT, PeqGraphPreferences(controller.get()).channelDisplay)
         swipeToFilters()
         compose.onNodeWithText("FREQUENCY").assertIsDisplayed()
@@ -623,6 +625,10 @@ class PeqWorkspaceRenderTest {
                 compose.onNodeWithTag("dsp-sidebar").fetchSemanticsNode().boundsInRoot)
         }
     }
+
+    // The graph's R display button, not the filter inspector's R channel segment.
+    private fun graphRightButton() =
+        compose.onNode(hasText("R") and hasContentDescription("Channel R").not())
 
     private fun saveRender(name: String) {
         val view = controller.get().window.decorView

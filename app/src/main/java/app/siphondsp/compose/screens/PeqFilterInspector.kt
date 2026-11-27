@@ -107,7 +107,7 @@ internal fun PeqSelectedFilter(
             horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Box(Modifier.size(12.dp).clip(CircleShape).background(colour))
             Column(Modifier.weight(1f)) {
-                Text("Filter %02d".format(Locale.ROOT, number), color = PeqControlText, fontSize = 16.sp,
+                Text("Filter $number", color = PeqControlText, fontSize = 16.sp,
                     fontWeight = FontWeight.SemiBold, maxLines = 1)
                 Text("${holder.selectedScope.label.uppercase(Locale.ROOT)} · ${index + 1} of ${bands.size}" +
                     if (band.enabled) "" else " · BYPASSED",
