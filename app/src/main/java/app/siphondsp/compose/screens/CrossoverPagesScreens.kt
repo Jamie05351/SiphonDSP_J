@@ -263,7 +263,7 @@ private fun CrossoverPage(
     if (LocalContext.current.isHeadUnitDisplay()) {
         HeadUnitCrossoverPage(dsp, graphMode, onGraphModeChange, modifier, controls, split, onSplit)
     } else {
-        PhoneCrossoverPage(dsp, graphMode, onGraphModeChange, modifier, controls)
+        PhoneCrossoverPage(dsp, graphMode, onGraphModeChange, modifier, controls, split, onSplit)
     }
 }
 
@@ -374,9 +374,10 @@ private fun PhoneCrossoverPage(
     onGraphModeChange: (CrossoverGraphMode) -> Unit,
     modifier: Modifier,
     controls: @Composable (ControlRow) -> Unit,
+    split: Int = -1,
+    onSplit: ((Int) -> Unit)? = null,
 ) {
-    val context = LocalContext.current
-    val peqState = remember { BmwPeqState.load(context) }
+    val system = rememberSystemContext(dsp)
 
     BmwDspTheme {
         Row(
@@ -389,10 +390,27 @@ private fun PhoneCrossoverPage(
                 CrossoverResponseGraph(
                     mode = graphMode,
                     systemValues = dsp.values,
-                    peqState = peqState,
+                    peqState = system.peqState,
                     modifier = Modifier.fillMaxWidth().weight(1f),
+                    carBaseline = system.carBaseline,
+                    houseCurve = system.houseCurve,
+                    measured = system.measured,
+                    highlightSplit = split,
                 )
                 Spacer(Modifier.height(8.dp))
+                // Phones in landscape: the split selector above the graph modes (one page holds both splits).
+                if (onSplit != null) {
+                    BmwSegmentedControl(
+                        options = listOf("LOW / MID", "MID / HIGH"),
+                        selectedIndex = split,
+                        onSelect = onSplit,
+                        optionAccents = listOf(Color(BmwDashboardSkin.SLIDER_LOW_BAND_COLOR), Color(BmwDashboardSkin.SLIDER_HIGH_BAND_COLOR)),
+                        modifier = Modifier.fillMaxWidth(),
+                        segmentHeight = 34.dp,
+                        segmentGap = 4.dp,
+                    )
+                    Spacer(Modifier.height(6.dp))
+                }
                 GraphModePicker(graphMode, onGraphModeChange)
             }
             Column(

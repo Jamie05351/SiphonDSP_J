@@ -104,17 +104,18 @@ fun BandAlignScreen(model: BandAlignViewModel = rememberBandAlignModel(), onOpen
             Row(Modifier.fillMaxWidth().height(40.dp), verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 BmwSegmentedControl(
-                    options = BmwOutputChannel.entries.map { sideName(it).uppercase() },
+                    // L / R, as on the graphs: full words don't fit beside the seat on a phone.
+                    options = listOf("L", "R"),
                     selectedIndex = sideIndex, onSelect = { sideIndex = it },
                     optionAccents = listOf(Color(LeftChannelColor), Color(RightChannelColor)),
-                    modifier = Modifier.width(200.dp), segmentHeight = 36.dp, segmentGap = 6.dp,
+                    modifier = Modifier.weight(0.5f), segmentHeight = 36.dp, segmentGap = 6.dp,
                 )
                 BmwSegmentedControl(
                     options = BandAlignViewModel.Seat.entries.map { it.label.substringBefore(' ').uppercase() },
                     selectedIndex = seatIndex, onSelect = { seatIndex = it },
-                    modifier = Modifier.width(260.dp), segmentHeight = 36.dp, segmentGap = 6.dp,
+                    modifier = Modifier.weight(1.2f), segmentHeight = 36.dp, segmentGap = 6.dp,
                 )
-                Spacer(Modifier.weight(1f))
+                // Selectors share the width, so both chips stay on screen on a phone in landscape too.
                 GlassChip("How to measure", onClick = { showHowTo = true }, arrow = false)
                 // The other way to tune the bands' phase, always in reach rather than under the column.
                 if (onOpenAllPass != null) GlassChip("All-pass…", onClick = onOpenAllPass, arrow = false)

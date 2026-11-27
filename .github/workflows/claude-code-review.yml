@@ -39,16 +39,16 @@ jobs:
             PR NUMBER: ${{ github.event.pull_request.number }}
 
             Review this pull request. SiphonDSP_J is an Android (Kotlin / Jetpack Compose) DSP app
-            with a native C++ audio engine. It targets one device: a 1280x480 mdpi landscape car
-            head unit. It is landscape only.
+            with a native C++ audio engine. It runs on a 1280x480 mdpi landscape car head unit
+            (the main target) and on phones in landscape. It is landscape only.
 
             Focus on real defects: correctness bugs, audio-safety issues (anything that could send
             full-scale or non-finite values to the engine, or silently change the sound), broken
             persistence or migrations in NativeBmwDspValues, threading and lifecycle mistakes, and
-            layouts that break on the 1280x480 head unit. Skip style nits.
+            layouts that break on the head unit or a phone in landscape. Skip style nits.
 
-            Do not flag phone, portrait, tablet or other screen-size issues: the leftover phone /
-            compact code paths are unsupported and won't be fixed. See CLAUDE.md.
+            Do not flag portrait layouts: portrait isn't supported and those findings are won't-fix.
+            See CLAUDE.md.
 
             Use `gh pr diff` and `gh pr view` to read the change. Put findings on the exact lines
             with inline comments, then post one short summary comment with `gh pr comment`. If you

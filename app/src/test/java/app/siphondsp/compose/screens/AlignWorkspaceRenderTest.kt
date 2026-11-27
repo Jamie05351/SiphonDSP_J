@@ -110,6 +110,27 @@ class AlignWorkspaceRenderTest {
         compose.onNodeWithText("‹ Back").assertIsDisplayed()
     }
 
+    @Test
+    @Config(qualifiers = "w800dp-h400dp-land-mdpi")
+    fun phoneLandscapeCanReachMidHighAndLeaveAllPass() {
+        val c = Robolectric.buildActivity(ComponentActivity::class.java).setup()
+        controller = c
+        c.get().setContent {
+            BmwDspTheme { CompositionLocalProvider(LocalAppNavigator provides navigator) { app.siphondsp.compose.nav.CrossoverWorkspace() } }
+        }
+        compose.waitForIdle()
+        compose.onNodeWithText("MID / HIGH").performClick()
+        compose.onNodeWithText("Mid lowpass").assertExists()
+        saveRender("phone-xover-mid-high")
+        c.pause().stop().destroy()
+        open(Routes.ALIGNMENT_PAGE_ALLPASS)
+        compose.onNodeWithText("‹ Back").assertIsDisplayed()
+        saveRender("phone-allpass")
+        compose.onNodeWithText("‹ Back").performClick()
+        compose.onNodeWithText("Band Align").assertIsDisplayed()
+        saveRender("phone-phase")
+    }
+
     private fun saveRender(name: String) {
         val bitmap = controller!!.get().window.decorView.drawToBitmap()
         val directory = File("build/reports/tests/align-renders").apply { mkdirs() }
