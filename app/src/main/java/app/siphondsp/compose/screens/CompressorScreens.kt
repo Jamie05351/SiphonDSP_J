@@ -1,7 +1,21 @@
 package app.siphondsp.compose.screens
 
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
+import app.siphondsp.compose.controls.BmwSegmentedControl
+import app.siphondsp.compose.controls.DspColors
+import app.siphondsp.dsp.MbcBandPreset
+import app.siphondsp.dsp.CompressorCurve
+import androidx.compose.ui.text.drawText
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.material3.Text
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.border
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableLongStateOf
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -79,7 +93,7 @@ private fun formatHz(hz: Float): String =
     }
 
 @Composable
-fun CompressorVisualiserPage(modifier: Modifier = Modifier) {
+fun CompressorVisualiserPage(modifier: Modifier = Modifier, onOpenBand: ((Int) -> Unit)? = null) {
     val dsp = rememberBmwDspState()
     val mbcMeter = rememberMeterPoll(NativeDsp.METER_MBC, MbcMeterSize)
 
@@ -88,7 +102,10 @@ fun CompressorVisualiserPage(modifier: Modifier = Modifier) {
         // the live dry/wet spectrum + boost/cut delta fill, and the applied gain-reduction curve.
         // The meter goes in as a provider the graph calls from its draw lambda, so a meter tick
         // redraws the graph without recomposing this page.
-        CompressorGraph(systemValues = dsp.values, mbcMeter = mbcMeter::latest, modifier = m.clip(RoundedCornerShape(20.dp)))
+        CompressorGraph(
+            systemValues = dsp.values, mbcMeter = mbcMeter::latest, modifier = m.clip(RoundedCornerShape(20.dp)),
+            onBandTap = onOpenBand,
+        )
     }
     val controls: @Composable (MasterRow) -> Unit = { row -> MbcMasterControls(dsp, row) }
 
@@ -149,7 +166,7 @@ private fun MbcMasterControls(dsp: BmwDspState, row: MasterRow) {
     }
     ArtGroupHeader(
         title = "Multiband",
-        accent = DefaultSliderAccent,
+        accent = DspColors.Comp,
         modifier = row(80, 40),
         checked = dsp.isOn(NativeBmwDspValues.INDEX_MBC_ENABLED),
         onCheckedChange = { dsp.commit(NativeBmwDspValues.INDEX_MBC_ENABLED, if (it) 1f else 0f) },
@@ -159,13 +176,197 @@ private fun MbcMasterControls(dsp: BmwDspState, row: MasterRow) {
         ArtLabel("BAND SPLITS", color = Color.White.copy(alpha = 0.55f), size = 13.sp)
     }
     repeat(3) { i ->
+        // Each split in the colour of the band below it: B1 | B2 in coral, and so on.
         DspArtSlider(
             dsp, "Bands ${i + 1} | ${i + 2}", NativeBmwDspValues.INDEX_MBC_XO_0 + i,
-            CompressorSurfaceMath.splitStepRange(slots, i), 1f, "Hz", DefaultSliderAccent, row(222 + i * 58, 48),
+            CompressorSurfaceMath.splitStepRange(slots, i), 1f, "Hz", Color(MbcBandColors[i]), row(222 + i * 58, 48),
         )
     }
 }
 
+
+/**
+ * The BANDS page: one band at a time, picked with B1 | B2 | B3 | B4 (each in its band colour,
+ * [MbcBandColors]). Head unit: the band's compressor curve (level in against out, threshold,
+ * knee and ratio as the engine computes them, with a live dot at the band's current input level)
+ * and its gain-reduction meter on the left; the header, the Level and Timing steppers and the
+ * Gentle / Medium / Firm starting points on the right. Phone (landscape): the selector and
+ * starting points above the band's usual controls.
+ */
+@Composable
+fun CompressorBandsPage(band: Int, onBand: (Int) -> Unit, modifier: Modifier = Modifier) {
+    val selector: @Composable (Modifier) -> Unit = { m ->
+        BmwSegmentedControl(
+            options = List(CompressorSurfaceMath.BAND_COUNT) { "B${it + 1}" },
+            selectedIndex = band,
+            onSelect = onBand,
+            optionAccents = MbcBandColors.map { Color(it) },
+            modifier = m,
+            segmentHeight = 38.dp,
+            segmentGap = 4.dp,
+        )
+    }
+    if (LocalContext.current.isHeadUnitDisplay()) {
+        BmwDspTheme { HeadUnitBandsPage(band, selector, modifier) }
+    } else {
+        Column(modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                selector(Modifier.width(260.dp))
+                BandPresets(rememberBmwDspState(), band, Modifier.weight(1f).height(40.dp))
+            }
+            key(band) { CompressorBandPage(band, Modifier.weight(1f)) }
+        }
+    }
+}
+
+@Composable
+private fun HeadUnitBandsPage(band: Int, selector: @Composable (Modifier) -> Unit, modifier: Modifier) {
+    val dsp = rememberBmwDspState()
+    val mbcMeter = rememberMeterPoll(NativeDsp.METER_MBC, MbcMeterSize)
+    val color = Color(MbcBandColors[band])
+    fun idx(field: Int) = NativeBmwDspValues.mbcBandIndex(band, field)
+    val rangeLabel = run {
+        val (lo, hi) = CompressorSurfaceMath.bandRange(band, CompressorSurfaceMath.splitFrequencies(dsp.values))
+        "${formatHz(lo.toFloat())} – ${formatHz(maxOf(hi, lo * 1.01).toFloat())}"
+    }
+    WorkspaceArtBox(modifier.fillMaxSize()) {
+        selector(Modifier.artRect(artDp(152, 76, 300, 44)))
+        Box(Modifier.artRect(artDp(466, 76, 160, 44)), contentAlignment = Alignment.CenterStart) {
+            ArtLabel(rangeLabel, color = color, size = 15.sp)
+        }
+        CompressorCurveGraph(
+            threshold = dsp.get(idx(NativeBmwDspValues.MBC_FIELD_THRESHOLD)).toDouble(),
+            ratio = dsp.get(idx(NativeBmwDspValues.MBC_FIELD_RATIO)).toDouble(),
+            knee = dsp.get(idx(NativeBmwDspValues.MBC_FIELD_KNEE)).toDouble(),
+            makeup = dsp.get(idx(NativeBmwDspValues.MBC_FIELD_MAKEUP)).toDouble(),
+            color = color,
+            liveInputDb = { mbcMeter.latest()?.getOrNull(band * 3)?.toDouble() },
+            enabled = dsp.isOn(NativeBmwDspValues.INDEX_MBC_ENABLED) && dsp.isOn(idx(NativeBmwDspValues.MBC_FIELD_ENABLED)),
+            modifier = Modifier.artRect(artDp(152, 128, 474, 262)),
+        )
+        Column(Modifier.artRect(artDp(152, 398, 474, 58)), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            ArtLabel("Gain reduction")
+            BmwGrMeter({ mbcMeter.value(band * 3 + 2, 0f) }, Modifier.fillMaxWidth().height(30.dp))
+        }
+        BandHeader(band, "", dsp, Modifier.artRect(artDp(646, 76, 604, 46)))
+        BandColumnHeading("Level", Modifier.artRect(artDp(646, 128, 300, 20)))
+        BandColumnHeading("Timing", Modifier.artRect(artDp(646, 312, 300, 20)))
+        val level = listOf(0, 1, 2, 5).map { BandSliderSpecs[it] } // threshold, ratio, knee, makeup
+        level.forEachIndexed { i, spec ->
+            DspArtSlider(dsp, spec.label, idx(spec.field), spec.range, spec.step, spec.unit, color,
+                Modifier.artRect(artDp(646 + (i % 2) * 304, 150 + (i / 2) * 80, 296, 74)), labelAbove = true)
+        }
+        listOf(3, 4).map { BandSliderSpecs[it] }.forEachIndexed { i, spec ->
+            DspArtSlider(dsp, spec.label, idx(spec.field), spec.range, spec.step, spec.unit, color,
+                Modifier.artRect(artDp(646 + i * 304, 334, 296, 74)), labelAbove = true)
+        }
+        BandPresets(dsp, band, Modifier.artRect(artDp(646, 418, 604, 40)))
+    }
+}
+
+/** Gentle / Medium / Firm: one tap sets the band's ratio, knee, attack and release ([MbcBandPreset]). */
+@Composable
+private fun BandPresets(dsp: BmwDspState, band: Int, modifier: Modifier) {
+    fun idx(field: Int) = NativeBmwDspValues.mbcBandIndex(band, field)
+    val current = MbcBandPreset.entries.indexOfFirst { p ->
+        dsp.get(idx(NativeBmwDspValues.MBC_FIELD_RATIO)) == p.ratio && dsp.get(idx(NativeBmwDspValues.MBC_FIELD_KNEE)) == p.knee &&
+            dsp.get(idx(NativeBmwDspValues.MBC_FIELD_ATTACK)) == p.attackMs && dsp.get(idx(NativeBmwDspValues.MBC_FIELD_RELEASE)) == p.releaseMs
+    }
+    Row(modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        ArtLabel("Start from")
+        BmwSegmentedControl(
+            options = MbcBandPreset.entries.map { it.label },
+            selectedIndex = current,
+            onSelect = { i ->
+                val p = MbcBandPreset.entries[i]
+                dsp.commitAll(mapOf(
+                    idx(NativeBmwDspValues.MBC_FIELD_RATIO) to p.ratio,
+                    idx(NativeBmwDspValues.MBC_FIELD_KNEE) to p.knee,
+                    idx(NativeBmwDspValues.MBC_FIELD_ATTACK) to p.attackMs,
+                    idx(NativeBmwDspValues.MBC_FIELD_RELEASE) to p.releaseMs,
+                ))
+            },
+            optionAccents = List(MbcBandPreset.entries.size) { Color(MbcBandColors[band]) },
+            modifier = Modifier.weight(1f),
+            segmentHeight = 34.dp,
+            segmentGap = 4.dp,
+        )
+    }
+}
+
+/**
+ * The band's static curve: input level along the bottom, output up the side (-60..0 dB in,
+ * -60..+6 dB out), the 1:1 line dashed, the knee shaded, the threshold dashed in the band colour,
+ * and a white dot at the band's live input level riding the curve. The dot is read in the draw
+ * phase only, so the meter tick redraws the canvas, not the page.
+ */
+@Composable
+private fun CompressorCurveGraph(
+    threshold: Double,
+    ratio: Double,
+    knee: Double,
+    makeup: Double,
+    color: Color,
+    liveInputDb: () -> Double?,
+    enabled: Boolean,
+    modifier: Modifier,
+) {
+    val measurer = androidx.compose.ui.text.rememberTextMeasurer()
+    androidx.compose.foundation.Canvas(
+        modifier.clip(RoundedCornerShape(14.dp)).background(Color(0xE60B0C0F))
+            .border(1.5.dp, color.copy(alpha = .7f), RoundedCornerShape(14.dp)),
+    ) {
+        val padL = 40.dp.toPx(); val padR = 12.dp.toPx(); val padT = 14.dp.toPx(); val padB = 26.dp.toPx()
+        val w = size.width - padL - padR; val h = size.height - padT - padB
+        fun x(db: Double) = padL + ((db + 60) / 60).toFloat() * w
+        fun y(db: Double) = padT + ((OutTopDb - db) / (OutTopDb + 60)).toFloat().coerceIn(0f, 1f) * h
+        val grid = Color(0xFF23262D)
+        val labelStyle = androidx.compose.ui.text.TextStyle(color = Color(0xFF9AA1AB), fontSize = 10.sp)
+        for (d in listOf(-48.0, -36.0, -24.0, -12.0, 0.0)) {
+            drawLine(grid, androidx.compose.ui.geometry.Offset(x(d), padT), androidx.compose.ui.geometry.Offset(x(d), padT + h), 1.dp.toPx())
+            drawLine(grid, androidx.compose.ui.geometry.Offset(padL, y(d)), androidx.compose.ui.geometry.Offset(padL + w, y(d)), 1.dp.toPx())
+            val tx = measurer.measure(d.toInt().toString(), labelStyle)
+            drawText(tx, topLeft = androidx.compose.ui.geometry.Offset(x(d) - tx.size.width / 2f, padT + h + 6.dp.toPx()))
+            drawText(tx, topLeft = androidx.compose.ui.geometry.Offset(padL - tx.size.width - 6.dp.toPx(), y(d) - tx.size.height / 2f))
+        }
+        // Knee region and threshold.
+        if (knee > 0) {
+            val k0 = x(threshold - knee / 2).coerceIn(padL, padL + w)
+            val k1 = x(threshold + knee / 2).coerceIn(padL, padL + w)
+            drawRect(color.copy(alpha = .08f), androidx.compose.ui.geometry.Offset(k0, padT), androidx.compose.ui.geometry.Size(k1 - k0, h))
+        }
+        val dash = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(4.dp.toPx(), 4.dp.toPx()))
+        drawLine(color, androidx.compose.ui.geometry.Offset(x(threshold), padT), androidx.compose.ui.geometry.Offset(x(threshold), padT + h), 1.5.dp.toPx(), pathEffect = dash)
+        drawLine(Color(0x669AA1AB), androidx.compose.ui.geometry.Offset(x(-60.0), y(-60.0)), androidx.compose.ui.geometry.Offset(x(0.0), y(0.0)), 1.dp.toPx(),
+            pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(5.dp.toPx(), 5.dp.toPx())))
+        val path = androidx.compose.ui.graphics.Path()
+        var i = -60.0
+        path.moveTo(x(i), y(CompressorCurve.outputDb(i, threshold, ratio, knee, makeup)))
+        while (i < 0.0) { i += 0.5; path.lineTo(x(i), y(CompressorCurve.outputDb(i, threshold, ratio, knee, makeup))) }
+        drawPath(path, if (enabled) color else color.copy(alpha = .35f), style = androidx.compose.ui.graphics.drawscope.Stroke(3.dp.toPx()))
+        val th = measurer.measure("threshold ${"%.1f".format(threshold)}", labelStyle.copy(color = color))
+        drawText(th, topLeft = androidx.compose.ui.geometry.Offset(x(threshold) + 6.dp.toPx(), padT + 4.dp.toPx()))
+        val live = liveInputDb()
+        if (enabled && live != null && live > -60.0) {
+            val inDb = live.coerceAtMost(0.0)
+            val outDb = CompressorCurve.outputDb(inDb, threshold, ratio, knee, makeup)
+            val c = androidx.compose.ui.geometry.Offset(x(inDb), y(outDb))
+            drawCircle(color, 8.dp.toPx(), c)
+            drawCircle(Color.White, 5.dp.toPx(), c)
+            val gr = -CompressorCurve.gainReductionDb(inDb - threshold, ratio, knee)
+            val t = measurer.measure("in ${"%.0f".format(inDb)} · GR ${"%.1f".format(gr)}",
+                androidx.compose.ui.text.TextStyle(color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold))
+            val tl = androidx.compose.ui.geometry.Offset((c.x - t.size.width - 14.dp.toPx()).coerceAtLeast(padL + 4.dp.toPx()), c.y - t.size.height - 6.dp.toPx())
+            drawRect(Color(0xE60B0C0F), tl - androidx.compose.ui.geometry.Offset(4.dp.toPx(), 2.dp.toPx()),
+                androidx.compose.ui.geometry.Size(t.size.width + 8.dp.toPx(), t.size.height + 4.dp.toPx()))
+            drawText(t, topLeft = tl)
+        }
+        val axis = measurer.measure("IN (dB) →", labelStyle)
+        drawText(axis, topLeft = androidx.compose.ui.geometry.Offset(padL + w - axis.size.width, padT + h - axis.size.height - 2.dp.toPx()))
+    }
+}
+
+private const val OutTopDb = 6.0
 
 @Composable
 fun CompressorBandPage(band: Int, modifier: Modifier = Modifier) {
@@ -316,9 +517,9 @@ private typealias BusRow = (y: Int, h: Int) -> Modifier
 @Composable
 fun CompressorDriverPage(modifier: Modifier = Modifier) {
     val dsp = rememberBmwDspState()
-    val busMeter = rememberMeterPoll(NativeDsp.METER_BUS_LIMITER, BusMeterSize)
+    val busMeter = rememberMeterPoll(NativeDsp.METER_BUS_LIMITER, BusMeterSize, holdAboveDb = LimitingDb)
     val bus: @Composable (Int, BusRow) -> Unit = { i, row ->
-        BusLimiterColumn(dsp, BusColumns[i], { busMeter.value(i, 0f) }, row)
+        BusLimiterColumn(dsp, BusColumns[i], { busMeter.value(i, 0f) }, row) { busMeter.lastAbove[i] }
     }
 
     BmwDspTheme {
@@ -336,7 +537,7 @@ fun CompressorDriverPage(modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun BusLimiterColumn(dsp: BmwDspState, col: BusColumn, gainReductionDb: () -> Float, row: BusRow) {
+private fun BusLimiterColumn(dsp: BmwDspState, col: BusColumn, gainReductionDb: () -> Float, row: BusRow, lastLimitedMs: () -> Long) {
     ArtGroupHeader(
         title = col.title,
         accent = Color(col.accent),
@@ -350,6 +551,7 @@ private fun BusLimiterColumn(dsp: BmwDspState, col: BusColumn, gainReductionDb: 
         ArtLabel("Gain reduction")
         BmwGrMeter(gainReductionDb, Modifier.fillMaxWidth().height(36.dp), stage = MbcBandGrMeter.Stage.LIMITER)
     }
+    LimiterActivityChip(lastLimitedMs, row(304, 30))
 }
 
 /** Phone: the three columns side by side, centred; a phone too narrow for them stacks them and
@@ -390,8 +592,11 @@ private const val BusMeterSize = 3
  * nothing (NativeDsp.readNativeBmwMeter fills [values] in place).
  */
 @Stable
-private class MeterPoll(size: Int) {
+private class MeterPoll(size: Int, val holdAboveDb: Float = Float.NaN) {
     val values = FloatArray(size)
+
+    /** Uptime (ms) each value last read above [holdAboveDb], recorded on every ~33 ms poll so a brief hit isn't missed; 0 = never. */
+    val lastAbove = LongArray(size)
     val tick = mutableIntStateOf(0)
     var valid = false
 
@@ -409,13 +614,17 @@ private class MeterPoll(size: Int) {
 }
 
 @Composable
-private fun rememberMeterPoll(kind: Int, size: Int): MeterPoll {
-    val poll = remember(kind, size) { MeterPoll(size) }
+private fun rememberMeterPoll(kind: Int, size: Int, holdAboveDb: Float = Float.NaN): MeterPoll {
+    val poll = remember(kind, size, holdAboveDb) { MeterPoll(size, holdAboveDb) }
     LifecycleStartEffect(poll) {
         val handler = Handler(Looper.getMainLooper())
         val tick = object : Runnable {
             override fun run() {
                 poll.valid = RootlessAudioProcessorService.readNativeBmwMeter(kind, poll.values)
+                if (poll.valid && !poll.holdAboveDb.isNaN()) {
+                    val t = SystemClock.uptimeMillis()
+                    for (i in poll.values.indices) if (poll.values[i] > poll.holdAboveDb) poll.lastAbove[i] = t
+                }
                 poll.tick.intValue++
                 handler.postDelayed(this, MeterTickMs)
             }
@@ -492,3 +701,42 @@ private val BusColumns = listOf(
         NativeBmwDspValues.INDEX_BUS_LIMITER_HIGH_THRESHOLD, NativeBmwDspValues.INDEX_BUS_LIMITER_HIGH_RELEASE,
     ),
 )
+
+
+/** Below this much reduction a bus counts as not limiting. */
+private const val LimitingDb = 0.1f
+/** How long "limited N s ago" stays up after the last limiting. */
+private const val LimitedHoldMs = 10_000L
+
+/**
+ * Whether the bus has been limiting lately: red "limiting now", amber "limited N s ago" for
+ * [LimitedHoldMs], grey "not limiting" -- so a glance in the car still catches it after the meter
+ * has dropped back.
+ */
+@Composable
+private fun LimiterActivityChip(lastLimitedMs: () -> Long, modifier: Modifier) {
+    // The clock lives here so its 5 Hz tick recomposes only this chip, not the page's steppers.
+    var nowMs by remember { mutableLongStateOf(SystemClock.uptimeMillis()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            kotlinx.coroutines.delay(200)
+            nowMs = SystemClock.uptimeMillis()
+        }
+    }
+    val last = lastLimitedMs()
+    val age = if (last == 0L) Long.MAX_VALUE else nowMs - last
+    val (text, color) = when {
+        age < 400 -> "limiting now" to DspColors.Comp
+        age < LimitedHoldMs -> "limited ${age / 1000 + 1} s ago" to Color(0xFFFFA24C)
+        else -> "not limiting" to Color(0xFF9AA1AB)
+    }
+    Row(
+        modifier.clip(RoundedCornerShape(8.dp)).background(color.copy(alpha = .16f))
+            .border(1.dp, color.copy(alpha = .7f), RoundedCornerShape(8.dp)).padding(horizontal = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Box(Modifier.size(8.dp).clip(androidx.compose.foundation.shape.CircleShape).background(color))
+        Text(text, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+    }
+}
