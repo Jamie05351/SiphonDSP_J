@@ -25,6 +25,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -65,6 +66,9 @@ import app.siphondsp.model.ParametricEqChannel
 import app.siphondsp.model.ParametricEqFilterType
 import app.siphondsp.utils.extensions.ContextExtensions.toast
 import java.util.Locale
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import kotlin.math.asinh
 import kotlin.math.ln
 import kotlin.math.log10
@@ -417,12 +421,20 @@ internal fun PeqPreampControl(holder: PeqStateHolder, systemValues: FloatArray, 
     val context = LocalContext.current
     val dialogs = remember(context) { PeqDialogs(context) }
     val state = holder.peqState
-    val calculator = remember { AutoHeadroomCalculator() }
-    val outputPeakDb = remember(state, systemValues, sampleRate) {
-        if (systemValues.size != NativeBmwDspValues.SIZE) null else runCatching {
-            val effective = calculator.effectiveValues(systemValues, state, sampleRate)
-            calculator.peakDb(systemValues, state, sampleRate) + effective[NativeBmwDspValues.INDEX_HEADROOM]
-        }.getOrNull()
+    // Off the main thread and debounced: every scrub / hold-step preview replaces peqState, and the
+    // peak search runs full response passes. A restart cancels the pending run; the last value
+    // stays shown meanwhile. One calculator per run, since AutoHeadroomCalculator isn't thread-safe
+    // and a cancelled run may still be finishing on the background thread.
+    val peakState = produceState<Double?>(null, state, systemValues, sampleRate) {
+        if (systemValues.size != NativeBmwDspValues.SIZE) { value = null; return@produceState }
+        delay(PEAK_DEBOUNCE_MS)
+        value = withContext(Dispatchers.Default) {
+            runCatching {
+                val calculator = AutoHeadroomCalculator()
+                val effective = calculator.effectiveValues(systemValues, state, sampleRate)
+                calculator.peakDb(systemValues, state, sampleRate) + effective[NativeBmwDspValues.INDEX_HEADROOM]
+            }.getOrNull()
+        }
     }
     Row(modifier.fillMaxHeight(), verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -446,6 +458,7 @@ internal fun PeqPreampControl(holder: PeqStateHolder, systemValues: FloatArray, 
             Modifier.fillMaxHeight().clip(RoundedCornerShape(8.dp)).background(PeqControlFill).padding(horizontal = 8.dp),
             verticalArrangement = Arrangement.Center,
         ) {
+            val outputPeakDb = peakState.value
             Text("PEAK", color = PeqMutedText, fontSize = 10.sp, fontWeight = FontWeight.Medium)
             val clipping = outputPeakDb != null && outputPeakDb > 0.05
             Text(
@@ -462,6 +475,7 @@ internal fun PeqPreampControl(holder: PeqStateHolder, systemValues: FloatArray, 
 }
 
 private const val PREAMP_MIN_DB = -30.0
+private const val PEAK_DEBOUNCE_MS = 150L
 private const val PREAMP_MAX_DB = 12.0
 
 /** How many filters each bank holds, for the bank tabs. */
