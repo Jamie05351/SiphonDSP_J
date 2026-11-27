@@ -91,6 +91,7 @@ object SpectrumEngine {
         val n = length.coerceIn(0, minOf(FRAME_CAPACITY, interleaved.limit()))
         for (i in 0 until n) frame.dry[i] = interleaved.get(i)
         frame.length = n
+        bufferLength = length.coerceIn(0, interleaved.limit())
         dryCaptured = true
     }
 
@@ -99,6 +100,7 @@ object SpectrumEngine {
         val n = length.coerceIn(0, minOf(FRAME_CAPACITY, interleaved.limit()))
         for (i in 0 until n) frame.dry[i] = interleaved.get(i) / 32768f
         frame.length = n
+        bufferLength = length.coerceIn(0, interleaved.limit())
         dryCaptured = true
     }
 
@@ -108,35 +110,35 @@ object SpectrumEngine {
      */
     fun publishWet(interleaved: FloatBuffer, sampleRate: Int) {
         val frame = takeDryFrame() ?: return
-        var peak = 0f
-        for (i in 0 until frame.length) {
-            val s = interleaved.get(i)
-            frame.wet[i] = s
-            val a = abs(s)
-            if (a > peak) peak = a
+        for (i in 0 until frame.length) frame.wet[i] = interleaved.get(i)
+        // The whole buffer, not just the copied frame; a NaN or Inf fails `<` and counts as a clip.
+        val n = bufferLength.coerceAtMost(interleaved.limit())
+        for (i in 0 until n) {
+            if (!(abs(interleaved.get(i)) < CLIP_AMPLITUDE)) {
+                lastClipNanos = System.nanoTime()
+                break
+            }
         }
-        noteClip(peak)
         publish(frame, sampleRate)
     }
 
     fun publishWet(interleaved: ShortBuffer, sampleRate: Int) {
         val frame = takeDryFrame() ?: return
-        var peak = 0f
-        for (i in 0 until frame.length) {
-            val s = interleaved.get(i) / 32768f
-            frame.wet[i] = s
-            val a = abs(s)
-            if (a > peak) peak = a
+        for (i in 0 until frame.length) frame.wet[i] = interleaved.get(i) / 32768f
+        val n = bufferLength.coerceAtMost(interleaved.limit())
+        for (i in 0 until n) {
+            if (abs(interleaved.get(i) / 32768f) >= CLIP_AMPLITUDE) {
+                lastClipNanos = System.nanoTime()
+                break
+            }
         }
-        noteClip(peak)
         publish(frame, sampleRate)
     }
 
-    // Checked here, on every published buffer, rather than on the analyser thread, which only
-    // sees the newest buffer per 16 ms tick and would miss a clip in the ones it skips.
-    private fun noteClip(peak: Float) {
-        if (peak >= CLIP_AMPLITUDE) lastClipNanos = System.nanoTime()
-    }
+    // The clip check runs here, over every sample of every published buffer, rather than on the
+    // analyser thread, which only sees the newest (frame-capped) buffer per 16 ms tick.
+    // Set by captureDry(): the whole buffer's length, which the frame copy may cut short.
+    private var bufferLength = 0
 
     /** Full scale, less rounding: a 16-bit sample of 32767 reads 0.99997. */
     private const val CLIP_AMPLITUDE = 0.9999f
