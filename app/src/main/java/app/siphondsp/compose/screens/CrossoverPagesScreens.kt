@@ -305,6 +305,7 @@ private fun rememberSystemContext(dsp: BmwDspState): SystemContext {
         peqState = holder.peqState,
         carBaseline = holder.graphBaseline,
         houseCurve = holder.houseCurve?.takeIf { holder.showHouseCurve },
+        // Driver seat when it has files, else passenger; the legend names which.
         measured = { f, side ->
             bandAlign.measured(BandAlignViewModel.Seat.DRIVER, side, dsp.values, f)
                 ?: bandAlign.measured(BandAlignViewModel.Seat.PASSENGER, side, dsp.values, f)

@@ -27,6 +27,8 @@ object MeasuredLowMid {
         val thenDb: DoubleArray,
         /** A Low / Mid crossover frequency or slope differs from when the files were imported. */
         val crossoverChanged: Boolean,
+        /** Which measurement this is (the seat), for labelling; empty if not given. */
+        val source: String = "",
     )
 
     fun lowTiming(values: FloatArray, side: BmwOutputChannel) = Timing(

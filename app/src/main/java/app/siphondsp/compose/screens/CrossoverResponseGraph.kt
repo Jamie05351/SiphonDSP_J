@@ -1127,7 +1127,9 @@ private fun BoxScope.SystemLegend(car: Boolean, house: Boolean, measured: Measur
     ) {
         if (measured != null) {
             Text(
-                "— MEASURED ${if (side == BmwOutputChannel.LEFT) "L" else "R"}" + if (measured.crossoverChanged) " (crossover changed since)" else "",
+                "— MEASURED ${if (side == BmwOutputChannel.LEFT) "L" else "R"}" +
+                    (if (measured.source.isNotEmpty()) " · ${measured.source.lowercase(java.util.Locale.ROOT)}" else "") +
+                    if (measured.crossoverChanged) " (crossover changed since)" else "",
                 color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold,
             )
         }

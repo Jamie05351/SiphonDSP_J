@@ -133,12 +133,13 @@ class BandAlignViewModel(application: Application) : AndroidViewModel(applicatio
         val mid = imports[midKey]?.measurement ?: return null
         val lowThen = importedValues[lowKey] ?: return null
         val midThen = importedValues[midKey] ?: return null
-        return MeasuredLowMid.sum(
+        val sum = MeasuredLowMid.sum(
             low, MeasuredLowMid.lowTiming(lowThen, side), MeasuredLowMid.lowTiming(values, side),
             mid, MeasuredLowMid.midTiming(midThen, side), MeasuredLowMid.midTiming(values, side),
             frequencies,
             crossoverChanged = MeasuredLowMid.crossoverChanged(lowThen, values) || MeasuredLowMid.crossoverChanged(midThen, values),
         )
+        return MeasuredLowMid.Result(sum.nowDb, sum.thenDb, sum.crossoverChanged, seat.label)
     }
 
     /** Per side, the seats with both a Low-only and a Mid-only measurement. */
