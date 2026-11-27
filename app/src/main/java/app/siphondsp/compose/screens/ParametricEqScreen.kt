@@ -51,6 +51,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import app.siphondsp.compose.controls.GlassButton
 import app.siphondsp.compose.controls.GlassButtonKind
@@ -150,7 +152,7 @@ fun ParametricEqScreen(holder: PeqStateHolder, modifier: Modifier = Modifier, sh
                 Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     androidx.compose.foundation.layout.BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
                         val wide = maxWidth >= 720.dp || (maxHeight < 360.dp && maxWidth >= 520.dp)
-                        val editorWidth = (maxWidth * 0.36f).coerceIn(220.dp, 288.dp)
+                        val editorWidth = (maxWidth * 0.36f).coerceIn(220.dp, PeqInspectorWidth)
                         val editorHeight = (maxHeight * 0.45f).coerceAtMost(260.dp)
                         val graph: @Composable (Modifier) -> Unit = { graphModifier ->
                             PeqGraph(
@@ -189,28 +191,33 @@ fun ParametricEqScreen(holder: PeqStateHolder, modifier: Modifier = Modifier, sh
                         if (wide) {
                             Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
                                 graph(Modifier.weight(1f).fillMaxHeight())
-                                if (editorIndex >= 0) PeqSelectedFilter(holder, editorIndex, { editorId = null },
+                                if (editorIndex >= 0) PeqSelectedFilter(holder, editorIndex, { editorId = null }, ::select,
                                     Modifier.width(editorWidth).fillMaxHeight())
                             }
                         } else {
                             Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 graph(Modifier.weight(1f).fillMaxWidth())
-                                if (editorIndex >= 0) PeqSelectedFilter(holder, editorIndex, { editorId = null },
+                                if (editorIndex >= 0) PeqSelectedFilter(holder, editorIndex, { editorId = null }, ::select,
                                     Modifier.heightIn(max = editorHeight).fillMaxWidth())
                             }
                         }
                     }
+                    // 64dp: the filter bar took over the old 24dp bottom clearance for bigger chips.
                     Row(
-                        Modifier.fillMaxWidth().height(44.dp).testTag("peq-filter-bar"),
+                        Modifier.fillMaxWidth().height(64.dp).testTag("peq-filter-bar"),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
-                        Text("FILTERS", color = PeqMutedText, fontSize = 12.sp)
-                        Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Column {
+                            Text("FILTERS", color = PeqMutedText, fontSize = 11.sp)
+                            Text("${holder.visibleBands.size}/${BmwPeqState.MAX_BANDS}", color = PeqControlText,
+                                fontSize = 14.sp, fontFamily = FontFamily.Monospace)
+                        }
+                        Row(Modifier.weight(1f).fillMaxHeight().horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             holder.visibleBands.forEachIndexed { index, band ->
-                                PeqActionButton("%02d".format(java.util.Locale.ROOT, holder.filterNumberOffset + index + 1), { select(band) },
-                                    Modifier.width(64.dp), selected = band.uuid.toString() == editorId)
+                                PeqFilterChip(holder.filterNumberOffset + index + 1, band,
+                                    selected = band.uuid.toString() == editorId, onClick = { select(band) })
                             }
                             if (holder.visibleBands.size < BmwPeqState.MAX_BANDS) {
                                 PeqActionButton("+ Add", {
@@ -219,8 +226,12 @@ fun ParametricEqScreen(holder: PeqStateHolder, modifier: Modifier = Modifier, sh
                                     if (holder.selectedUuid != previousSelection) {
                                         editorId = holder.selectedUuid?.toString()
                                     }
-                                })
+                                }, Modifier.fillMaxHeight())
                             }
+                        }
+                        if (holder.selectedScope == PeqScope.FULL) {
+                            PeqPreampControl(holder, systemValues,
+                                (RootlessAudioProcessorService.nativeBmwPeqSampleRate() ?: 48_000f).toDouble())
                         }
                     }
                 }
@@ -293,7 +304,12 @@ fun PeqToolbarActions(holder: PeqStateHolder, modifier: Modifier = Modifier, sco
             selected = holder.selectedScope,
             onSelect = { holder.selectedScope = it },
             modifier = Modifier.width(scopeWidth),
+            counts = PeqScope.entries.associateWith { holder.peqState.bandCount(it) },
         )
+        PeqActionButton("↶", holder::undo, Modifier.width(44.dp).semantics { contentDescription = "Undo" },
+            contentPadding = 0.dp, enabled = holder.canUndo)
+        PeqActionButton("↷", holder::redo, Modifier.width(44.dp).semantics { contentDescription = "Redo" },
+            contentPadding = 0.dp, enabled = holder.canRedo)
         // Four menus, so everything fits on the line: the whole-DSP backup first (the most
         // important, and it covers every page, not only the PEQ), then this scope's files, the
         // filter tools and the graph's overlays.
@@ -409,9 +425,6 @@ private fun FilterToolsChip(
 ) {
     var expanded by remember { mutableStateOf(false) }
     val scope = holder.selectedScope
-    val bands = holder.visibleBands
-    val selectedIndex = bands.indexOfFirst { it.uuid == holder.selectedUuid }
-
     fun run(result: PeqBandEditResult) {
         expanded = false
         when (holder.apply(result)) {
@@ -423,30 +436,11 @@ private fun FilterToolsChip(
     Box {
         GlassChip("Tools", onClick = { expanded = true })
         GlassMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            GlassItem(
-                text = "Duplicate selected filter",
-                enabled = selectedIndex >= 0,
-                onClick = { run(PeqBandEditor.duplicateFilter(holder.peqState, scope, selectedIndex)) },
-            )
-            GlassItem(
-                text = "Move up",
-                enabled = selectedIndex > 0,
-                onClick = { run(PeqBandEditor.moveFilter(holder.peqState, scope, selectedIndex, selectedIndex - 1)) },
-            )
-            GlassItem(
-                text = "Move down",
-                enabled = selectedIndex in 0 until bands.lastIndex,
-                onClick = { run(PeqBandEditor.moveFilter(holder.peqState, scope, selectedIndex, selectedIndex + 1)) },
-            )
-            GlassDivider()
+            // Per-filter actions (duplicate, move, copy one filter) live on the filter inspector;
+            // this menu keeps the whole-bank tools.
             PeqScope.entries.filter { it != scope }.forEach { target ->
                 GlassItem(
-                    text = "Copy selected to ${target.label}",
-                    enabled = selectedIndex >= 0,
-                    onClick = { run(PeqBandEditor.copyFilter(holder.peqState, scope, selectedIndex, target)) },
-                )
-                GlassItem(
-                    text = "Copy all to ${target.label}…",
+                    text = "Copy all ${scope.label} to ${target.label}…",
                     onClick = { expanded = false; onCopyWholeScope(target) },
                 )
             }

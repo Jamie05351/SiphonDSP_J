@@ -39,6 +39,9 @@ enum class ParametricEqChannel(val code: Int, val displayLabel: String) {
  *
  * [uuid] is excluded from equals/hashCode so that two bands with the
  * same audio parameters compare as equal regardless of identity.
+ *
+ * [enabled] = false is a bypassed filter: it keeps its settings (and its place in the bank) but
+ * is not sent to the engine ([BmwPeqState.nativeValues]) or drawn into the response curves.
  */
 class ParametricEqBand(
     val frequency: Double,
@@ -46,7 +49,8 @@ class ParametricEqBand(
     val q: Double,
     val filterType: ParametricEqFilterType = ParametricEqFilterType.PEAKING,
     val channel: ParametricEqChannel = ParametricEqChannel.LEFT_RIGHT,
-    val uuid: UUID = UUID.randomUUID()
+    val uuid: UUID = UUID.randomUUID(),
+    val enabled: Boolean = true,
 ) : Serializable {
 
     override fun equals(other: Any?): Boolean {
@@ -56,7 +60,8 @@ class ParametricEqBand(
                 gain == other.gain &&
                 q == other.q &&
                 filterType == other.filterType &&
-                channel == other.channel
+                channel == other.channel &&
+                enabled == other.enabled
     }
 
     override fun hashCode(): Int {
@@ -65,9 +70,10 @@ class ParametricEqBand(
         result = 31 * result + q.hashCode()
         result = 31 * result + filterType.hashCode()
         result = 31 * result + channel.hashCode()
+        result = 31 * result + enabled.hashCode()
         return result
     }
 
     override fun toString(): String =
-        "ParametricEqBand(frequency=$frequency, gain=$gain, q=$q, filterType=$filterType, channel=$channel, uuid=$uuid)"
+        "ParametricEqBand(frequency=$frequency, gain=$gain, q=$q, filterType=$filterType, channel=$channel, uuid=$uuid, enabled=$enabled)"
 }

@@ -24,7 +24,17 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
@@ -54,7 +64,9 @@ internal val PeqMutedText = Color(0xFF9AA1AB)
 internal val PeqControlFill = Color(0xFF222530)
 internal val PeqValueFill = Color(0xFF090C12)
 internal val PeqPanelFill = Color(0xFF181A22)
-internal val PeqBottomClearance = 24.dp
+// The filter bar takes what used to be a 24dp bottom clearance (44 -> 64dp chips); a small inset
+// keeps it off the content frame's border.
+internal val PeqBottomClearance = 4.dp
 
 /** The same global numbering used for graph node and filter-shape colours. */
 internal val PeqStateHolder.filterNumberOffset: Int
@@ -91,7 +103,7 @@ internal fun PeqWorkspaceLayout(holder: PeqStateHolder, showSpectrum: Boolean = 
                     Row(Modifier.fillMaxWidth().height(48.dp), verticalAlignment = Alignment.CenterVertically) {
                         PeqActionButton(if (compact) "‹" else "‹ Parametric EQ", navigator::back,
                             Modifier.width(if (compact) 44.dp else 190.dp))
-                        PeqToolbarActions(holder, Modifier.weight(1f), if (compact) 220.dp else 340.dp)
+                        PeqToolbarActions(holder, Modifier.weight(1f), if (compact) 220.dp else 400.dp)
                     }
                     ParametricEqScreen(holder, Modifier.weight(1f).fillMaxWidth(), showSpectrum)
                 }
@@ -108,13 +120,15 @@ internal fun PeqActionButton(
     modifier: Modifier = Modifier,
     selected: Boolean = false,
     contentPadding: androidx.compose.ui.unit.Dp = 12.dp,
+    enabled: Boolean = true,
 ) {
     val interaction = remember { MutableInteractionSource() }
     Box(
         modifier.height(44.dp)
+            .alpha(if (enabled) 1f else .4f)
             .clip(RoundedCornerShape(8.dp))
             .background(if (selected) PeqControlBlue else PeqControlFill)
-            .clickable(interactionSource = interaction, indication = null, role = Role.Button, onClick = onClick)
+            .clickable(interactionSource = interaction, indication = null, role = Role.Button, enabled = enabled, onClick = onClick)
             .bmwFocusRing(interaction)
             .semantics { this.selected = selected }
             .padding(horizontal = contentPadding),
@@ -124,7 +138,15 @@ internal fun PeqActionButton(
     }
 }
 
-/** Value in the middle, independent hold-to-repeat buttons at either side. */
+/**
+ * Value in the middle, independent hold-to-repeat buttons at either side.
+ *
+ * [rangeFraction] (0..1) draws a thin bar along the value's bottom edge showing where it sits in its
+ * range -- from the start, or from the centre when [rangeCentred] (a ±dB value). [trailing] is a
+ * small secondary readout at the value's right (Q's bandwidth). With [scrubbable], a sideways drag
+ * on the value steps it like the buttons (one step per [ScrubStepDp]), previewing as it goes and
+ * committing once on release; a tap still opens exact entry.
+ */
 @Composable
 internal fun PeqNumericControl(
     label: String,
@@ -134,11 +156,17 @@ internal fun PeqNumericControl(
     onCommit: () -> Unit,
     modifier: Modifier = Modifier,
     showSteppers: Boolean = true,
-    stepWidth: androidx.compose.ui.unit.Dp = 48.dp,
-    valueFontSize: androidx.compose.ui.unit.TextUnit = 20.sp,
+    stepWidth: Dp = 48.dp,
+    valueFontSize: TextUnit = 20.sp,
+    height: Dp = 48.dp,
+    rangeFraction: Float? = null,
+    rangeCentred: Boolean = false,
+    rangeColor: Color = PeqControlBlue,
+    trailing: String? = null,
+    scrubbable: Boolean = false,
 ) {
     Row(
-        modifier.height(48.dp).clip(RoundedCornerShape(8.dp)).background(PeqControlFill),
+        modifier.height(height).clip(RoundedCornerShape(8.dp)).background(PeqControlFill),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (showSteppers) HoldStepHalf(
@@ -146,10 +174,40 @@ internal fun PeqNumericControl(
             { onStep(-1, it) }, StepMath::defaultHoldMultiplier, {}, onCommit,
         )
         val source = remember { MutableInteractionSource() }
+        val step by rememberUpdatedState(onStep)
+        val commit by rememberUpdatedState(onCommit)
         Box(
             Modifier.weight(1f).fillMaxHeight()
                 .background(PeqValueFill)
                 .border(1.dp, PeqMutedText.copy(alpha = .55f))
+                .then(if (rangeFraction != null) Modifier.drawBehind {
+                    val barHeight = 3.dp.toPx()
+                    val top = size.height - barHeight
+                    val x = rangeFraction.coerceIn(0f, 1f) * size.width
+                    val from = if (rangeCentred) size.width / 2 else 0f
+                    drawRect(PeqRangeTrack, Offset(0f, top), Size(size.width, barHeight))
+                    drawRect(rangeColor, Offset(minOf(from, x), top), Size(kotlin.math.abs(x - from), barHeight))
+                    drawRect(Color.White, Offset(x - 1.5.dp.toPx(), top), Size(3.dp.toPx(), barHeight))
+                } else Modifier)
+                .then(if (scrubbable) Modifier.pointerInput(Unit) {
+                    val stepPx = ScrubStepDp.toPx()
+                    var accumulated = 0f
+                    var moved = false
+                    detectHorizontalDragGestures(
+                        onDragStart = { accumulated = 0f; moved = false },
+                        onDragEnd = { if (moved) commit() },
+                        onDragCancel = { if (moved) commit() },
+                    ) { change, dragAmount ->
+                        change.consume()
+                        accumulated += dragAmount
+                        val steps = (accumulated / stepPx).toInt()
+                        if (steps != 0) {
+                            accumulated -= steps * stepPx
+                            moved = true
+                            step(if (steps > 0) 1 else -1, kotlin.math.abs(steps))
+                        }
+                    }
+                } else Modifier)
                 .clickable(interactionSource = source, indication = null, role = Role.Button, onClick = onValueClick)
                 .semantics { contentDescription = "Edit $label" }
                 .bmwFocusRing(source),
@@ -157,6 +215,10 @@ internal fun PeqNumericControl(
         ) {
             Text(value, color = PeqControlText, fontSize = valueFontSize, fontWeight = FontWeight.Medium,
                 maxLines = 1, softWrap = false)
+            if (trailing != null) {
+                Text(trailing, color = PeqMutedText, fontSize = 10.sp, maxLines = 1,
+                    modifier = Modifier.align(Alignment.CenterEnd).padding(end = 6.dp))
+            }
         }
         if (showSteppers) HoldStepHalf(
             "+", "Increase $label", PeqControlBlue, true, Modifier.width(stepWidth).fillMaxHeight(),
@@ -164,6 +226,9 @@ internal fun PeqNumericControl(
         )
     }
 }
+
+private val PeqRangeTrack = Color(0xFF1C1F27)
+private val ScrubStepDp = 14.dp
 
 /** Reuses the holder's validation/preview/save path in both the table and selected-node editor. */
 internal class PeqFilterActions(
@@ -231,6 +296,10 @@ internal class PeqFilterActions(
         }
     }
 
+    fun setType(type: ParametricEqFilterType) = edit("edit_type") { it.withType(type) }
+    fun setChannel(channel: ParametricEqChannel) = edit("edit_channel") { it.withChannel(channel) }
+    fun setQ(value: Double) = edit("edit_q") { it.withQ(value.coerceIn(0.1, 30.0)) }
+
     fun stepFrequency(direction: Int, times: Int) = preview("step_frequency") { band ->
         var frequency = band.frequency
         repeat(times) { frequency = StepMath.nextFrequency(frequency, direction) }
@@ -255,42 +324,10 @@ internal fun rememberPeqFilterActions(holder: PeqStateHolder, index: Int): PeqFi
     return remember(holder, holder.visibleBands.getOrNull(index)?.uuid, holder.selectedScope, dialogs) { PeqFilterActions(holder, index, dialogs) }
 }
 
-@Composable
-internal fun PeqSelectedFilter(holder: PeqStateHolder, index: Int, onClose: () -> Unit, modifier: Modifier = Modifier) {
-    val band = holder.visibleBands.getOrNull(index) ?: return
-    val actions = rememberPeqFilterActions(holder, index)
-    Column(
-        modifier.testTag("peq-filter-editor").clip(RoundedCornerShape(12.dp)).background(PeqPanelFill)
-            .verticalScroll(rememberScrollState()).padding(12.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text("Filter ${holder.filterNumberOffset + index + 1}", color = PeqControlText, fontSize = 20.sp, modifier = Modifier.weight(1f))
-            PeqActionButton("Close", onClose)
-        }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            PeqActionButton(band.filterType.displayLabel, actions::type, Modifier.weight(1f))
-            PeqActionButton(band.channel.displayLabel, actions::channel, Modifier.weight(1f))
-        }
-        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            PeqEditorParameter("Frequency", "${formatPeqValue(band.frequency)} Hz", actions::frequency, actions::stepFrequency, actions::commit)
-            PeqEditorParameter("Gain", "${formatPeqValue(band.gain)} dB", actions::gain, actions::stepGain, actions::commit)
-            PeqEditorParameter("Q", formatPeqValue(band.q), actions::q, actions::stepQ, actions::commit)
-        }
-    }
-}
-
-@Composable
-private fun PeqEditorParameter(label: String, value: String, onValue: () -> Unit, onStep: (Int, Int) -> Unit, onCommit: () -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Text(label.uppercase(), color = PeqMutedText, fontSize = 12.sp)
-        PeqNumericControl(label, value, onValue, onStep, onCommit, Modifier.fillMaxWidth())
-    }
-}
-
 internal fun formatPeqValue(value: Double): String = String.format(java.util.Locale.ROOT, "%.2f", value).trimEnd('0').trimEnd('.')
-internal fun ParametricEqBand.withFrequency(value: Double) = ParametricEqBand(value, gain, q, filterType, channel, uuid)
-internal fun ParametricEqBand.withGain(value: Double) = ParametricEqBand(frequency, value, q, filterType, channel, uuid)
-internal fun ParametricEqBand.withQ(value: Double) = ParametricEqBand(frequency, gain, value, filterType, channel, uuid)
-internal fun ParametricEqBand.withType(value: ParametricEqFilterType) = ParametricEqBand(frequency, gain, q, value, channel, uuid)
-internal fun ParametricEqBand.withChannel(value: ParametricEqChannel) = ParametricEqBand(frequency, gain, q, filterType, value, uuid)
+internal fun ParametricEqBand.withFrequency(value: Double) = ParametricEqBand(value, gain, q, filterType, channel, uuid, enabled)
+internal fun ParametricEqBand.withGain(value: Double) = ParametricEqBand(frequency, value, q, filterType, channel, uuid, enabled)
+internal fun ParametricEqBand.withQ(value: Double) = ParametricEqBand(frequency, gain, value, filterType, channel, uuid, enabled)
+internal fun ParametricEqBand.withType(value: ParametricEqFilterType) = ParametricEqBand(frequency, gain, q, value, channel, uuid, enabled)
+internal fun ParametricEqBand.withChannel(value: ParametricEqChannel) = ParametricEqBand(frequency, gain, q, filterType, value, uuid, enabled)
+internal fun ParametricEqBand.withEnabled(value: Boolean) = ParametricEqBand(frequency, gain, q, filterType, channel, uuid, value)

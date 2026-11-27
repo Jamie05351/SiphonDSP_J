@@ -54,8 +54,9 @@ data class BmwPeqState(
         }
     }
 
+    /** The engine's band array. Bypassed bands are left out: the engine only ever sees audible ones. */
     fun nativeValues(bands: ParametricEqBandList): DoubleArray =
-        bands.flatMap { band ->
+        bands.filter { it.enabled }.flatMap { band ->
             listOf(
                 band.frequency,
                 band.gain,

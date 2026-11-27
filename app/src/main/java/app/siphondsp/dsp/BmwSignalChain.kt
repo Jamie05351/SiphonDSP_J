@@ -125,6 +125,9 @@ object BmwSignalChain {
      * ```
      */
     fun bandAppliesTo(band: ParametricEqBand, output: BmwOutputChannel): Boolean {
+        // A bypassed band is never sent to the engine (BmwPeqState.nativeValues), so it applies
+        // to no output: every response model built from this check matches what is heard.
+        if (!band.enabled) return false
         // If band applies to both, always match
         if (band.channel == ParametricEqChannel.LEFT_RIGHT) return true
 

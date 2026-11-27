@@ -21,6 +21,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
@@ -84,7 +85,9 @@ fun PeqBandList(
                 itemsIndexed(bands, key = { _, band -> band.uuid.toString() }) { index, band ->
                     val actions = rememberPeqFilterActions(holder, index)
                     val number = holder.filterNumberOffset + index + 1
-                    row(Modifier.background(if (band.uuid == holder.selectedUuid) PeqPanelFill else Color.Transparent)
+                    // A bypassed filter's row is dimmed, as its chip and graph node are.
+                    row(Modifier.alpha(if (band.enabled) 1f else .5f)
+                        .background(if (band.uuid == holder.selectedUuid) PeqPanelFill else Color.Transparent)
                         .padding(vertical = 6.dp).testTag("peq-filter-row-$number")) {
                         Text("$number", color = Color(peqFilterColor(number - 1)),
                             textAlign = androidx.compose.ui.text.style.TextAlign.Center,

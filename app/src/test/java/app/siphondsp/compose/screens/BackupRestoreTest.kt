@@ -52,7 +52,7 @@ class BackupRestoreTest {
     fun failedDspSaveReportsPartialRestoreWithoutPublishingUnsavedSettings() {
         val context = context()
         val previous = NativeBmwDspValues.load(context)
-        val holder = mock<PeqStateHolder> { on { applyCandidate(any(), any()) } doReturn true }
+        val holder = mock<PeqStateHolder> { on { applyCandidate(any(), any(), any()) } doReturn true }
         val graph = PeqGraphPreferences(context).also { it.showIndividualFilters = false }
         assertTrue(File(context.noBackupFilesDir, NativeBmwDspStore.FILE_NAME + ".tmp").mkdir())
         var published = false
@@ -70,7 +70,7 @@ class BackupRestoreTest {
     fun successfulRestoreSavesBeforePublishingAndRecordsSuccess() {
         val context = context()
         val values = NativeBmwDspValues.load(context).also { it[5] = -9f }
-        val holder = mock<PeqStateHolder> { on { applyCandidate(any(), any()) } doReturn true }
+        val holder = mock<PeqStateHolder> { on { applyCandidate(any(), any(), any()) } doReturn true }
         var published: FloatArray? = null
 
         applyBackupRestore(context, holder, PeqGraphPreferences(context), prompt(values)) {
