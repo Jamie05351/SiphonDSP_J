@@ -25,7 +25,7 @@ object MeasuredLowMid {
         val nowDb: DoubleArray,
         /** The same sum as it was measured (no timing change). */
         val thenDb: DoubleArray,
-        /** A Low / Mid crossover frequency or type differs from when the files were imported. */
+        /** A Low / Mid crossover frequency or slope differs from when the files were imported. */
         val crossoverChanged: Boolean,
     )
 
@@ -45,10 +45,14 @@ object MeasuredLowMid {
         )] >= .5f,
     )
 
-    /** The Low / Mid crossover settings a measurement depends on. */
+    /** The Low / Mid crossover settings a measurement depends on: both corner frequencies and both slopes. */
     private val CrossoverIndices = intArrayOf(
         NativeBmwDspValues.INDEX_LOW_CROSSOVER_FREQ,
         NativeBmwDspValues.INDEX_MID_CROSSOVER_FREQ,
+        NativeBmwDspValues.outputIndex(NativeBmwDspValues.OUTPUT_LOW_LEFT, NativeBmwDspValues.FIELD_CROSSOVER_TYPE),
+        NativeBmwDspValues.outputIndex(NativeBmwDspValues.OUTPUT_LOW_RIGHT, NativeBmwDspValues.FIELD_CROSSOVER_TYPE),
+        NativeBmwDspValues.outputIndex(NativeBmwDspValues.OUTPUT_MID_LEFT, NativeBmwDspValues.FIELD_CROSSOVER_TYPE),
+        NativeBmwDspValues.outputIndex(NativeBmwDspValues.OUTPUT_MID_RIGHT, NativeBmwDspValues.FIELD_CROSSOVER_TYPE),
     )
 
     fun crossoverChanged(then: FloatArray, now: FloatArray): Boolean =

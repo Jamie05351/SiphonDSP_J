@@ -69,4 +69,14 @@ class MeasuredLowMidTest {
         assertFalse(MeasuredLowMid.crossoverChanged(then, then.copyOf()))
         assertTrue(MeasuredLowMid.crossoverChanged(then, now))
     }
+
+    @Test
+    fun aChangedSlopeIsFlaggedToo() {
+        val then = NativeBmwDspValues.DEFAULTS.copyOf()
+        for (output in intArrayOf(NativeBmwDspValues.OUTPUT_LOW_LEFT, NativeBmwDspValues.OUTPUT_MID_RIGHT)) {
+            val idx = NativeBmwDspValues.outputIndex(output, NativeBmwDspValues.FIELD_CROSSOVER_TYPE)
+            val now = then.copyOf().also { it[idx] = if (it[idx] == 2f) 1f else 2f }
+            assertTrue("slope on output $output", MeasuredLowMid.crossoverChanged(then, now))
+        }
+    }
 }

@@ -337,6 +337,9 @@ fun CrossoverResponseGraph(
     // follows the graph's channel toggle (Left unless only Right is showing).
     val measuredSide = if (CrossoverGraphView.channels == GraphChannels.RIGHT) BmwOutputChannel.RIGHT else BmwOutputChannel.LEFT
     val measuredResult = measured?.invoke(curves.frequencies, measuredSide)
+    // Where the measured line sits on the modelled sum; null when it can't be levelled (too little
+    // overlap), and then neither the line nor its legend is shown.
+    val measuredOffset = measuredResult?.let { measuredLevelOffset(curves, it, measuredSide) }
     // Runs from generation - 1 to generation for each new set of curves; until it starts, the
     // morph sits at the shape last drawn (see the draw below).
     val morphClock = remember { Animatable(0f) }
@@ -432,14 +435,14 @@ fun CrossoverResponseGraph(
             if (mode == CrossoverGraphMode.MAGNITUDE || mode == CrossoverGraphMode.MAGNITUDE_PHASE) {
                 drawSystemOverlays(
                     nc, curves, axis, left, right, top, bottom, overlays, carBaseline, houseCurve,
-                    measuredResult, measuredSide, showLeft, showRight,
+                    measuredResult?.takeIf { measuredOffset != null }, measuredOffset ?: 0.0, showLeft, showRight,
                 )
             }
         }
     }
     GraphOverlay(mode, curves.highBranchActive, lowArgb, midArgb, highArgb, dbRange)
     if (mode == CrossoverGraphMode.MAGNITUDE || mode == CrossoverGraphMode.MAGNITUDE_PHASE) {
-        SystemLegend(carBaseline != null, houseCurve != null, measuredResult, measuredSide)
+        SystemLegend(carBaseline != null, houseCurve != null, measuredResult?.takeIf { measuredOffset != null }, measuredSide)
     }
     }
 }
@@ -1054,7 +1057,7 @@ private fun drawSystemOverlays(
     carBaseline: CarBaseline?,
     houseCurve: HouseCurve?,
     measured: MeasuredLowMid.Result?,
-    measuredSide: BmwOutputChannel,
+    measuredOffset: Double,
     showLeft: Boolean,
     showRight: Boolean,
 ) {
@@ -1088,21 +1091,30 @@ private fun drawSystemOverlays(
         }
         if (shown.isNotEmpty()) line(grid, HouseCurve.alignmentOffset(grid, shown, f), p.house)
     }
-    if (measured != null) {
-        val model = curves.sumDb[measuredSide.ordinal]
-        var sum = 0.0
-        var n = 0
-        for (i in f.indices) {
-            if (f[i] < MEASURED_ALIGN_LOW_HZ || f[i] > MEASURED_ALIGN_HIGH_HZ) continue
-            val m = measured.nowDb[i]
-            if (m.isFinite() && model[i].isFinite()) { sum += model[i] - m; n++ }
-        }
-        if (n > 0) line(measured.nowDb, sum / n, p.measured, p.measuredGlow)
+    if (measured != null) line(measured.nowDb, measuredOffset, p.measured, p.measuredGlow)
+}
+
+/**
+ * The offset that levels the measured sum (absolute SPL) onto the modelled sum of its side: their
+ * mean difference between [MEASURED_ALIGN_LOW_HZ] and [MEASURED_ALIGN_HIGH_HZ], or null with fewer
+ * than [MEASURED_ALIGN_MIN_POINTS] points to average over (a noisy level is worse than none).
+ */
+private fun measuredLevelOffset(curves: BmwResponseCurves, measured: MeasuredLowMid.Result, side: BmwOutputChannel): Double? {
+    val f = curves.frequencies
+    val model = curves.sumDb[side.ordinal]
+    var sum = 0.0
+    var n = 0
+    for (i in f.indices) {
+        if (f[i] < MEASURED_ALIGN_LOW_HZ || f[i] > MEASURED_ALIGN_HIGH_HZ) continue
+        val m = measured.nowDb[i]
+        if (m.isFinite() && model[i].isFinite()) { sum += model[i] - m; n++ }
     }
+    return if (n >= MEASURED_ALIGN_MIN_POINTS) sum / n else null
 }
 
 private const val MEASURED_ALIGN_LOW_HZ = 200.0
 private const val MEASURED_ALIGN_HIGH_HZ = 600.0
+private const val MEASURED_ALIGN_MIN_POINTS = 5
 
 
 /** Names the system overlays that are showing, top left of the plot. */
