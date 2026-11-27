@@ -52,7 +52,7 @@ private val OrderOptions = listOf("First order" to 1f, "Second order" to 2f)
  * made. The output's two sections share one controls column, one at a time on Section 1 / 2 tabs.
  */
 @Composable
-fun AllPassPage(modifier: Modifier = Modifier) {
+fun AllPassPage(modifier: Modifier = Modifier, onBack: (() -> Unit)? = null) {
     var right by rememberSaveable { mutableStateOf(false) }
     var bandIndex by rememberSaveable { mutableIntStateOf(GainsBand.LOW.ordinal) }
     var sectionIndex by rememberSaveable { mutableIntStateOf(0) }
@@ -94,6 +94,12 @@ fun AllPassPage(modifier: Modifier = Modifier) {
                     picker()
                 }
                 controls { y, h -> Modifier.artRect(artDp(ControlX, y, ControlColumnWidth, h)) }
+                // Opened from the Phase page: back to Band Align, in the free space right of the tabs.
+                if (onBack != null) {
+                    Box(Modifier.artRect(artDp(GraphX + 618, SelectorTop, GraphWidth - 618, 44)), contentAlignment = Alignment.CenterEnd) {
+                        app.siphondsp.compose.controls.GlassChip("‹ Back", onClick = onBack, arrow = false)
+                    }
+                }
             }
         } else {
             Column(modifier.fillMaxSize().padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 12.dp)) {

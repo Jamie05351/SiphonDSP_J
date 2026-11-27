@@ -175,7 +175,8 @@ fun CarSpeakerDiagram(
             }
 
             // Distance pills sit halfway along the path; with two seats, halfway to the point between them.
-            val labelAnchor = heads.reduce { acc, o -> acc + o } / heads.size.toFloat()
+            // No seats (the Delay page): no path lines or distance pills, just the drivers.
+            val labelAnchor = if (heads.isEmpty()) Offset.Zero else heads.reduce { acc, o -> acc + o } / heads.size.toFloat()
 
             // Path lines first, so the drivers sit on top of them.
             heads.forEach { head ->
@@ -233,9 +234,10 @@ fun CarSpeakerDiagram(
                                 text,
                                 TextStyle(fontSize = CarUi.MinDenseText, fontWeight = FontWeight.Medium, color = Color.White),
                             )
-                            val m = (c + labelAnchor) / 2f
                             val pw = layout.size.width + layout.size.height * 0.8f
                             val ph = layout.size.height * 1.15f
+                            // Halfway along the path; with no seats (no path), just above the driver.
+                            val m = if (heads.isEmpty()) Offset(c.x, c.y - r * 1.4f - ph / 2) else (c + labelAnchor) / 2f
                             drawRoundRect(Color(0xE0060708), Offset(m.x - pw / 2, m.y - ph / 2), Size(pw, ph), CornerRadius(ph / 2))
                             drawRoundRect(accent, Offset(m.x - pw / 2, m.y - ph / 2), Size(pw, ph), CornerRadius(ph / 2), style = Stroke(1.5f))
                             drawText(layout, topLeft = Offset(m.x - layout.size.width / 2f, m.y - layout.size.height / 2f))
