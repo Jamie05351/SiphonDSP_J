@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
@@ -90,12 +91,13 @@ fun HeadroomOutputScreen(modifier: Modifier = Modifier) {
         LimiterGroup(dsp, row)
         VolumeGroup(dsp, row)
     }
+    val budget: @Composable (Modifier) -> Unit = { m -> GainBudgetPanel(dsp, peq, m) }
 
     BmwDspTheme {
         if (LocalContext.current.isHeadUnitDisplay()) {
-            HeadUnitOutputPage(output, limiter, modifier)
+            HeadUnitOutputPage(output, limiter, budget, modifier)
         } else {
-            PhoneOutputPage(output, limiter, modifier)
+            PhoneOutputPage(output, limiter, budget, modifier)
         }
     }
 }
@@ -126,9 +128,11 @@ private fun OutputGroup(dsp: BmwDspState, peq: PeqStateHolder, headroom: String,
     HeadroomRows(dsp, peq, headroom, headroomRow = row(104, 48), autoRow = row(160, 40))
     DspArtSlider(
         dsp, "Post gain L", NativeBmwDspValues.INDEX_POST_GAIN_L, -6f..6f, 0.5f, "dB", PostGainAccent, row(208, 48),
+        labelWidth = ColumnLabelWidth,
     )
     DspArtSlider(
         dsp, "Post gain R", NativeBmwDspValues.INDEX_POST_GAIN_R, -6f..6f, 0.5f, "dB", PostGainAccent, row(264, 48),
+        labelWidth = ColumnLabelWidth,
     )
 }
 
@@ -158,15 +162,18 @@ private fun HeadroomRows(
             onCommit = {},
             enabled = false,
             modifier = headroomRow,
+            labelWidth = ColumnLabelWidth,
         )
     } else {
-        DspArtSlider(dsp, label, NativeBmwDspValues.INDEX_HEADROOM, HeadroomRange, 1f, "dB", HeadroomAccent, headroomRow)
+        DspArtSlider(dsp, label, NativeBmwDspValues.INDEX_HEADROOM, HeadroomRange, 1f, "dB", HeadroomAccent, headroomRow, labelWidth = ColumnLabelWidth)
     }
     ArtSwitchRow(
         label = "Auto headroom",
         checked = auto,
         onCheckedChange = { on -> dsp.commit(NativeBmwDspValues.INDEX_HEADROOM_AUTO, if (on) 1f else 0f) },
         modifier = autoRow,
+        // A switch is narrower than a stepper, so its label gets the room.
+        labelWidth = 160.dp,
     )
 }
 
@@ -220,6 +227,7 @@ private fun PreampRow(peq: PeqStateHolder, modifier: Modifier) {
             peq.setPreamp(it)
         },
         modifier = modifier,
+        labelWidth = ColumnLabelWidth,
     )
 }
 
@@ -234,7 +242,7 @@ private fun LimiterGroup(dsp: BmwDspState, row: GroupRow) {
     )
     DspArtSlider(
         dsp, "Threshold", NativeBmwDspValues.INDEX_MASTER_LIMITER_THRESHOLD, -12f..0f, 0.5f, "dB", LimiterAccent,
-        row(52, 48),
+        row(52, 48), labelWidth = ColumnLabelWidth,
     )
     Column(row(108, 64), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         ArtLabel("Gain reduction")
@@ -259,29 +267,32 @@ private fun VolumeGroup(dsp: BmwDspState, row: GroupRow) {
     DspArtSlider(
         dsp, "Master", NativeBmwDspValues.INDEX_MASTER_VOLUME_DB,
         NativeBmwDspValues.MASTER_VOLUME_MIN_DB..NativeBmwDspValues.MASTER_VOLUME_MAX_DB, 1f, "dB", VolumeAccent,
-        row(236, 48),
+        row(236, 48), labelWidth = ColumnLabelWidth,
     )
 }
 
-/** Head unit: the two groups side by side, centred on the page. */
+/** Head unit: the gain budget on the left, then the two groups side by side. */
 @Composable
 private fun HeadUnitOutputPage(
     output: @Composable (GroupRow) -> Unit,
     limiter: @Composable (GroupRow) -> Unit,
+    budget: @Composable (Modifier) -> Unit,
     modifier: Modifier,
 ) {
     WorkspaceArtBox(modifier.fillMaxSize()) {
+        budget(Modifier.artRect(artDp(BudgetX, GroupTop, BudgetWidth, BudgetHeight)))
         output { y, h -> Modifier.artRect(artDp(OutputX, GroupTop + y, GroupWidth, h)) }
         limiter { y, h -> Modifier.artRect(artDp(LimiterX, GroupTop + y, GroupWidth, h)) }
     }
 }
 
-/** Phone: the same two groups side by side, centred in the phone's workspace. A phone too narrow
- *  for both stacks them instead, and the page scrolls only if they don't fit its height. */
+/** Phone: the same two groups side by side, centred in the phone's workspace, with the gain
+ *  budget under them. A phone too narrow for both stacks them instead; the page scrolls. */
 @Composable
 private fun PhoneOutputPage(
     output: @Composable (GroupRow) -> Unit,
     limiter: @Composable (GroupRow) -> Unit,
+    budget: @Composable (Modifier) -> Unit,
     modifier: Modifier,
 ) {
     val stack: GroupRow = { _, h -> Modifier.fillMaxWidth().height(h.dp) }
@@ -298,16 +309,17 @@ private fun PhoneOutputPage(
                 .padding(vertical = 12.dp),
             contentAlignment = Alignment.Center,
         ) {
-            if (sideBySide) {
-                Row(horizontalArrangement = Arrangement.spacedBy(PhoneGroupGap)) {
+            Column(verticalArrangement = Arrangement.spacedBy(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                if (sideBySide) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(PhoneGroupGap)) {
+                        group(output)
+                        group(limiter)
+                    }
+                } else {
                     group(output)
                     group(limiter)
                 }
-            } else {
-                Column(verticalArrangement = Arrangement.spacedBy(24.dp)) {
-                    group(output)
-                    group(limiter)
-                }
+                budget(Modifier.widthIn(max = GroupWidth.dp * 2 + PhoneGroupGap).fillMaxWidth().height(PhoneBudgetHeight))
             }
         }
     }
@@ -353,14 +365,18 @@ private val PostGainAccent = Color(BmwDashboardSkin.M_GREEN)
 private val LimiterAccent = Color(BmwDashboardSkin.SLIDER_LIMITER_COLOR)
 private val VolumeAccent = Color.White
 
-// Head-unit layout, in the 1280x480 editor's dp: two 333dp groups (a 150dp label column, then a
-// stepper) with 120dp between them, centred across the content area (x 190..1230). Both columns
-// start at 70, just under the 69dp toolbar line (status strip + OUTPUT/CONVOLVER finder), which
-// they used to run into from 44. Output is 312dp, Limiter + Volume 284dp, inside the 8dp bezel.
-// Rows stay 8dp apart.
-private const val GroupWidth = 333
-private const val OutputX = 317
-private const val LimiterX = 770
-private const val GroupTop = 70
+// Head-unit layout, in the 1280x480 editor's dp: the gain budget on the left (x 152..626, the
+// width of the other workspaces' graphs), then two 296dp groups (a 104dp label column, then a
+// stepper) 12dp apart (x 646..1250). Everything starts at 76, under the toolbar line. Output is
+// 312dp, Limiter + Volume 284dp; rows stay 8dp apart.
+private const val BudgetX = 152
+private const val BudgetWidth = 474
+private const val BudgetHeight = 384
+private const val GroupWidth = 296
+private const val OutputX = 646
+private const val LimiterX = 954
+private const val GroupTop = 76
+private val ColumnLabelWidth = 104.dp
+private val PhoneBudgetHeight = 320.dp
 private const val HeaderHeight = 40
 private val PhoneGroupGap = 60.dp
