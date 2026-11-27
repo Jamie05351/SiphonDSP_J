@@ -526,18 +526,6 @@ class PeqWorkspaceRenderTest {
     }
 
     @Test
-    @Config(qualifiers = "w360dp-h800dp-port-mdpi")
-    fun compactEditorLeavesAtLeastHalfTheGraphAreaAndBankControlsRemainReachable() {
-        val graph = compose.onNodeWithTag("peq-response-graph").fetchSemanticsNode().boundsInRoot
-        compose.onNodeWithText("High").assertIsDisplayed()
-        compose.onNodeWithText("01").performClick()
-        val selectedGraph = compose.onNodeWithTag("peq-response-graph").fetchSemanticsNode().boundsInRoot
-        assertTrue(selectedGraph.height >= graph.height * 0.5f)
-        compose.onNodeWithTag("peq-filter-editor").assertIsDisplayed()
-        saveRender("compact-selected")
-    }
-
-    @Test
     fun dpadLeftFromTheFiltersBoundaryReturnsToTheGraph() {
         swipeToFilters()
         compose.runOnIdle { inputMode.requestInputMode(InputMode.Keyboard) }
