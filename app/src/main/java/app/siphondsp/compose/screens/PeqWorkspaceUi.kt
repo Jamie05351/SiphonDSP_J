@@ -1,5 +1,16 @@
 package app.siphondsp.compose.screens
 
+import app.siphondsp.view.isHeadUnitDisplay
+import app.siphondsp.fragment.PeqScope
+import app.siphondsp.compose.nav.DspWorkspaceScaffold
+import app.siphondsp.compose.controls.WorkspaceArtBox
+import app.siphondsp.compose.controls.WorkspaceArt
+import androidx.compose.ui.unit.em
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.res.dimensionResource
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -30,6 +41,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.input.pointer.pointerInput
@@ -77,40 +89,145 @@ internal val PeqStateHolder.filterNumberOffset: Int
         app.siphondsp.fragment.PeqScope.HIGH -> peqState.fullRangeBands.size + peqState.lowBandBands.size + peqState.midBandBands.size
     }
 
-/** PEQ's compact controls use the same rail geometry as the other DSP workspaces. */
+/**
+ * The PEQ in the chrome every DSP workspace shares ([DspWorkspaceScaffold]): the sidebar rail, the
+ * back arrow and status strip, and the PEQ-blue content window. Its toolbar holds the bank finder
+ * (Pre EQ / Low / Mid / High, styled like the other workspaces' page finders, with each bank's
+ * dot and filter count), undo / redo and one ⋯ menu.
+ */
 @Composable
 internal fun PeqWorkspaceLayout(holder: PeqStateHolder, showSpectrum: Boolean = true) {
     val navigator = LocalAppNavigator.current
+    val headUnit = LocalContext.current.isHeadUnitDisplay()
     CompositionLocalProvider(LocalGlassAccent provides PeqControlBlue) {
-        BoxWithConstraints(Modifier.fillMaxSize()) {
-            val compact = maxWidth < 720.dp
-            val railWidth = DspRail.sidebarWidthDp(maxWidth.value).dp
-            Row(Modifier.fillMaxSize().testTag("peq-workspace").background(Color(0xFF101010))) {
-                DspSidebarRail(
-                    destinations = DspDestination.entries.filter { it.showInPrimaryNav },
-                    current = DspDestination.PARAMETRIC_EQ,
-                    canNavigate = { true },
-                    onNavigate = { navigator.openWorkspace(it) },
-                    modifier = Modifier.width(railWidth).fillMaxHeight(),
+        Box(Modifier.fillMaxSize().testTag("peq-workspace")) {
+            DspWorkspaceScaffold(
+                current = DspDestination.PARAMETRIC_EQ,
+                onNavigate = { navigator.openWorkspace(it) },
+                onBack = navigator::back,
+                // A phone's toolbar line has no room for the strip beside the banks.
+                showStatusStrip = headUnit,
+                toolbarActions = { PeqToolbar(holder, headUnit) },
+            ) {
+                ParametricEqScreen(
+                    holder,
+                    Modifier.fillMaxSize().testTag("peq-content-frame")
+                        .padding(start = PeqContentInset, end = PeqContentInset, top = 6.dp),
+                    showSpectrum,
                 )
-                Column(
+            }
+        }
+    }
+}
+
+/** The toolbar line: banks at the page finder's place, undo / redo / ⋯ just before them. */
+@Composable
+private fun PeqToolbar(holder: PeqStateHolder, headUnit: Boolean) {
+    val banks: @Composable (Modifier) -> Unit = { m ->
+        PeqBankFinder(
+            selected = holder.selectedScope,
+            onSelect = { holder.selectedScope = it },
+            counts = PeqScope.entries.associateWith { holder.peqState.bandCount(it) },
+            modifier = m,
+            // A phone's 80 dp segments have room for the dot and name only.
+            showCounts = headUnit,
+        )
+    }
+    if (headUnit) {
+        WorkspaceArtBox(
+            modifier = Modifier.fillMaxSize(),
+            originX = dimensionResource(app.siphondsp.R.dimen.dsp_status_strip_margin_start),
+            originY = 0.dp,
+        ) {
+            PeqToolbarActions(holder, Modifier.artRect(PeqActionsFrac))
+            banks(Modifier.artRect(WorkspaceArt.finder4))
+        }
+    } else {
+        Row(
+            Modifier.fillMaxSize().padding(end = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            PeqToolbarActions(holder, Modifier.width(120.dp).height(36.dp))
+            banks(Modifier.width(320.dp).height(36.dp))
+        }
+    }
+}
+
+/**
+ * Pre EQ / Low / Mid / High in the shape of the workspaces' page finder ([DspPageFinder]): one
+ * PEQ-blue outlined bar, a segment per bank, the selected one filled. Each keeps its bank dot and
+ * filter count, which the plain finder has no room for.
+ */
+@Composable
+internal fun PeqBankFinder(
+    selected: PeqScope,
+    onSelect: (PeqScope) -> Unit,
+    counts: Map<PeqScope, Int>,
+    modifier: Modifier = Modifier,
+    showCounts: Boolean = true,
+) {
+    val shape = RoundedCornerShape(3.dp)
+    Box(modifier) {
+        Row(
+            Modifier.fillMaxSize().clip(shape).background(Color(0xFF0E0F11)).border(2.5.dp, PeqControlBlue, shape),
+        ) {
+            PeqScope.entries.forEachIndexed { i, scope ->
+                if (i > 0) Box(Modifier.width(2.5.dp).fillMaxHeight().background(PeqControlBlue))
+                val isSelected = scope == selected
+                val source = remember { MutableInteractionSource() }
+                Row(
                     Modifier.weight(1f).fillMaxHeight()
-                        .testTag("peq-content-frame")
-                        .border(2.dp, PeqControlBlue, RoundedCornerShape(10.dp))
-                        .padding(start = 4.dp, end = 4.dp, top = 4.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                        .background(if (isSelected) PeqControlBlue.copy(alpha = .55f) else Color.Transparent)
+                        .clickable(interactionSource = source, indication = null, role = Role.Tab) { onSelect(scope) }
+                        .bmwFocusRing(source)
+                        .semantics { this.selected = isSelected },
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
                 ) {
-                    Row(Modifier.fillMaxWidth().height(48.dp), verticalAlignment = Alignment.CenterVertically) {
-                        PeqActionButton(if (compact) "‹" else "‹ Parametric EQ", navigator::back,
-                            Modifier.width(if (compact) 44.dp else 190.dp))
-                        PeqToolbarActions(holder, Modifier.weight(1f), if (compact) 220.dp else 400.dp)
+                    Box(Modifier.size(7.dp).clip(CircleShape).background(Color(scopeColour(scope))))
+                    Text(
+                        scope.label.removeSuffix(" Band").uppercase(java.util.Locale.ROOT),
+                        color = if (isSelected) Color.White else Color(0xFFBDDFF1),
+                        fontSize = 14.sp, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                        letterSpacing = 0.12.em, maxLines = 1,
+                    )
+                    val count = counts[scope]
+                    if (showCounts && count != null) {
+                        Box(
+                            Modifier.clip(RoundedCornerShape(9.dp))
+                                .background(if (isSelected) Color(0xFF03304D) else PeqValueFill)
+                                .padding(horizontal = 6.dp, vertical = 1.dp),
+                        ) {
+                            Text("$count", color = if (isSelected) Color.White else PeqMutedText, fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                        }
                     }
-                    ParametricEqScreen(holder, Modifier.weight(1f).fillMaxWidth(), showSpectrum)
                 }
             }
         }
     }
 }
+
+/** A square toolbar button (undo, redo, ⋯) that fills the height it's given. */
+@Composable
+internal fun PeqIconButton(glyph: String, description: String, onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true) {
+    val source = remember { MutableInteractionSource() }
+    Box(
+        modifier.fillMaxHeight().alpha(if (enabled) 1f else .4f).clip(RoundedCornerShape(8.dp)).background(PeqControlFill)
+            .clickable(interactionSource = source, indication = null, role = Role.Button, enabled = enabled, onClick = onClick)
+            .bmwFocusRing(source)
+            .semantics { contentDescription = description },
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(glyph, color = PeqControlText, fontSize = 17.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+    }
+}
+
+// Undo / redo / ⋯ on the toolbar line, ending just before the bank finder (WorkspaceArt.finder4).
+private val PeqActionsFrac = WorkspaceArt.Frac(0.484f, 0.048f, 0.080f, 0.0693f)
+// The content's inset from the window's rim, as the other workspaces' panels sit.
+internal val PeqContentInset = 4.dp
 
 /** Plain charcoal controls with a solid blue selected state; no graph/section recolouring. */
 @Composable
@@ -139,13 +256,15 @@ internal fun PeqActionButton(
 }
 
 /**
- * Value in the middle, independent hold-to-repeat buttons at either side.
+ * The workspaces' stepper look: the value in a box edged and lit in [accent], then a −|+ pill with
+ * independent hold-to-repeat halves (as [ArtSlider]'s steppers). Tapping the value opens exact
+ * entry.
  *
  * [rangeFraction] (0..1) draws a thin bar along the value's bottom edge showing where it sits in its
  * range -- from the start, or from the centre when [rangeCentred] (a ±dB value). [trailing] is a
- * small secondary readout at the value's right (Q's bandwidth). With [scrubbable], a sideways drag
+ * small secondary readout at the value's left (Q's bandwidth). With [scrubbable], a sideways drag
  * on the value steps it like the buttons (one step per [ScrubStepDp]), previewing as it goes and
- * committing once on release; a tap still opens exact entry.
+ * committing once on release.
  */
 @Composable
 internal fun PeqNumericControl(
@@ -164,6 +283,105 @@ internal fun PeqNumericControl(
     rangeColor: Color = PeqControlBlue,
     trailing: String? = null,
     scrubbable: Boolean = false,
+    accent: Color = rangeColor,
+    /** The workspaces' look (value box, then a −|+ pill). Off: the table's compact − value + row. */
+    pill: Boolean = false,
+) {
+    if (!pill) {
+        CompactNumericControl(label, value, onValueClick, onStep, onCommit, modifier, showSteppers, stepWidth,
+            valueFontSize, height, rangeFraction, rangeCentred, rangeColor, trailing, scrubbable)
+        return
+    }
+    Row(modifier.height(height), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        val source = remember { MutableInteractionSource() }
+        val step by rememberUpdatedState(onStep)
+        val commit by rememberUpdatedState(onCommit)
+        val shape = RoundedCornerShape(8.dp)
+        Box(
+            Modifier.weight(1f).fillMaxHeight()
+                .drawBehind {
+                    // The accent glow around the box, as the shared steppers light their value.
+                    drawRoundRect(accent.copy(alpha = .22f), Offset(-3.dp.toPx(), -3.dp.toPx()),
+                        Size(size.width + 6.dp.toPx(), size.height + 6.dp.toPx()), CornerRadius(10.dp.toPx()))
+                }
+                .clip(shape)
+                .background(PeqValueFill)
+                .border(1.5.dp, accent.copy(alpha = .9f), shape)
+                .then(if (rangeFraction != null) Modifier.drawBehind {
+                    val barHeight = 3.dp.toPx()
+                    val top = size.height - barHeight
+                    val x = rangeFraction.coerceIn(0f, 1f) * size.width
+                    val from = if (rangeCentred) size.width / 2 else 0f
+                    drawRect(PeqRangeTrack, Offset(0f, top), Size(size.width, barHeight))
+                    drawRect(rangeColor, Offset(minOf(from, x), top), Size(kotlin.math.abs(x - from), barHeight))
+                    drawRect(Color.White, Offset(x - 1.5.dp.toPx(), top), Size(3.dp.toPx(), barHeight))
+                } else Modifier)
+                .then(if (scrubbable) Modifier.pointerInput(Unit) {
+                    val stepPx = ScrubStepDp.toPx()
+                    var accumulated = 0f
+                    var moved = false
+                    detectHorizontalDragGestures(
+                        onDragStart = { accumulated = 0f; moved = false },
+                        onDragEnd = { if (moved) commit() },
+                        onDragCancel = { if (moved) commit() },
+                    ) { change, dragAmount ->
+                        change.consume()
+                        accumulated += dragAmount
+                        val steps = (accumulated / stepPx).toInt()
+                        if (steps != 0) {
+                            accumulated -= steps * stepPx
+                            moved = true
+                            step(if (steps > 0) 1 else -1, kotlin.math.abs(steps))
+                        }
+                    }
+                } else Modifier)
+                .clickable(interactionSource = source, indication = null, role = Role.Button, onClick = onValueClick)
+                .semantics { contentDescription = "Edit $label" }
+                .bmwFocusRing(source),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(value, color = PeqControlText, fontSize = valueFontSize, fontWeight = FontWeight.Medium,
+                maxLines = 1, softWrap = false)
+            if (trailing != null) {
+                Text(trailing, color = PeqMutedText, fontSize = 10.sp, maxLines = 1,
+                    modifier = Modifier.align(Alignment.CenterStart).padding(start = 6.dp))
+            }
+        }
+        if (showSteppers) Row(
+            Modifier.width(stepWidth * 2 + 1.5.dp).fillMaxHeight().clip(shape).background(PeqControlFill),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            HoldStepHalf(
+                "−", "Decrease $label", PeqControlText, true, Modifier.width(stepWidth).fillMaxHeight(),
+                { onStep(-1, it) }, StepMath::defaultHoldMultiplier, {}, onCommit,
+            )
+            Box(Modifier.width(1.5.dp).fillMaxHeight(.5f).background(Color(0xFF3A3F4B)))
+            HoldStepHalf(
+                "+", "Increase $label", PeqControlText, true, Modifier.width(stepWidth).fillMaxHeight(),
+                { onStep(1, it) }, StepMath::defaultHoldMultiplier, {}, onCommit,
+            )
+        }
+    }
+}
+
+/** The filter table's compact stepper: − at the left, the value, + at the right, in one bar. */
+@Composable
+private fun CompactNumericControl(
+    label: String,
+    value: String,
+    onValueClick: () -> Unit,
+    onStep: (Int, Int) -> Unit,
+    onCommit: () -> Unit,
+    modifier: Modifier,
+    showSteppers: Boolean,
+    stepWidth: Dp,
+    valueFontSize: TextUnit,
+    height: Dp,
+    rangeFraction: Float?,
+    rangeCentred: Boolean,
+    rangeColor: Color,
+    trailing: String?,
+    scrubbable: Boolean,
 ) {
     Row(
         modifier.height(height).clip(RoundedCornerShape(8.dp)).background(PeqControlFill),

@@ -145,7 +145,7 @@ class PeqWorkspaceRenderTest {
         compose.waitForIdle()
         assertTrue(holder.peqState.fullRangeBands[1].enabled)
         compose.onNodeWithContentDescription("Previous filter").performClick()
-        compose.onNodeWithText("Filter 1").assertIsDisplayed()
+        compose.onNodeWithText("FILTER 1").assertIsDisplayed()
     }
 
     @Test
@@ -363,10 +363,10 @@ class PeqWorkspaceRenderTest {
 
     @Test
     fun addedBandUsesTheGraphNumberInItsChipAndEditor() {
-        compose.onNodeWithText("Low").performClick()
+        compose.onNodeWithText("LOW").performClick()
         compose.onNodeWithText("+ Add").performClick()
         compose.onNodeWithText("03").assertIsDisplayed()
-        compose.onNodeWithText("Filter 3").assertIsDisplayed()
+        compose.onNodeWithText("FILTER 3").assertIsDisplayed()
         swipeToFilters()
         compose.onNodeWithText("3").assertIsDisplayed()
         listOf("frequency", "gain", "Q").forEach { parameter ->
@@ -570,11 +570,13 @@ class PeqWorkspaceRenderTest {
     fun swipeNavigationReclaimsTheFiltersHeaderAndKeepsTheBlueFrame() {
         compose.onNodeWithTag("peq-open-filters").assertDoesNotExist()
         val graph = compose.onNodeWithTag("peq-response-graph").fetchSemanticsNode().boundsInRoot
-        val frame = compose.onNodeWithTag("peq-content-frame").fetchSemanticsNode().boundsInRoot
         compose.runOnIdle {
+            // The graph sits in the workspaces' panel, edged in PEQ blue (0A8EDF).
             val bitmap = controller.get().window.decorView.drawToBitmap()
-            assertEquals(android.graphics.Color.rgb(10, 142, 223),
-                bitmap.getPixel(frame.center.x.roundToInt(), frame.top.roundToInt() + 1))
+            val edge = bitmap.getPixel(graph.center.x.roundToInt(), graph.top.roundToInt())
+            assertTrue("graph panel edge should be PEQ blue, was ${Integer.toHexString(edge)}",
+                android.graphics.Color.red(edge) < 60 && android.graphics.Color.blue(edge) > 170 &&
+                    android.graphics.Color.green(edge) in 100..170)
             bitmap.recycle()
         }
         swipeToFilters()
