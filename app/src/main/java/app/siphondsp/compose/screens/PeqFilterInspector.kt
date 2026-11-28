@@ -198,11 +198,31 @@ private fun FilterActionsRow(holder: PeqStateHolder, index: Int, band: Parametri
     Row(Modifier.fillMaxWidth().height(40.dp), horizontalArrangement = Arrangement.spacedBy(4.dp),
         verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.weight(1f).fillMaxHeight()) {
-            SmallButton("Copy to…", { copyMenu = true }, Modifier.fillMaxSize())
+            SmallButton("Move / copy to…", { copyMenu = true }, Modifier.fillMaxSize())
             GlassMenu(expanded = copyMenu, onDismissRequest = { copyMenu = false }) {
-                PeqScope.entries.filter { it != scope }.forEach { target ->
+                val targets = PeqScope.entries.filter { it != scope }
+                // Move: out of this bank and into that one (one undo); the bank tabs follow it.
+                targets.forEach { target ->
                     GlassItem(
-                        text = target.label,
+                        text = "Move to ${target.label}",
+                        colour = Color(scopeColour(target)),
+                        onClick = {
+                            val result = PeqBandEditor.moveFilterToScope(holder.peqState, scope, index, target)
+                            run(result)
+                            // (A full bank is already reported by apply().)
+                            if (result is PeqBandEditResult.Changed) {
+                                onClose()
+                                holder.selectedScope = target
+                                holder.selectedUuid = result.select
+                            }
+                        },
+                    )
+                }
+                GlassDivider()
+                // Copy: a copy there, this one stays.
+                targets.forEach { target ->
+                    GlassItem(
+                        text = "Copy to ${target.label}",
                         colour = Color(scopeColour(target)),
                         onClick = { run(PeqBandEditor.copyFilter(holder.peqState, scope, index, target)) },
                     )

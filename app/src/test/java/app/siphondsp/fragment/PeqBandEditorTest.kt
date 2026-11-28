@@ -109,6 +109,32 @@ class PeqBandEditorTest {
         assertEquals(PeqBandEditResult.Overflow(PeqScope.MID, alreadyFull = true), result)
     }
 
+    // --- moveFilterToScope ----------------------------------------------------------------
+
+    @Test
+    fun moveFilterToScopeTakesItOutOfOneBankAndIntoTheOther() {
+        val src = band(freq = 640.0)
+        val stays = band(freq = 100.0)
+        val original = state(full = listOfBands(stays, src), mid = listOfBands(band()))
+        val result = PeqBandEditor.moveFilterToScope(original, PeqScope.FULL, index = 1, to = PeqScope.MID)
+        result as PeqBandEditResult.Changed
+        assertEquals("move-filter", result.undoSource)
+        assertEquals(listOf(100.0), result.candidate.fullRangeBands.map { it.frequency })
+        assertEquals(2, result.candidate.midBandBands.size)
+        assertEquals(src.uuid, result.candidate.midBandBands[1].uuid)
+        assertEquals(src.uuid, result.select)
+        // The original state is untouched.
+        assertEquals(2, original.fullRangeBands.size)
+    }
+
+    @Test
+    fun moveFilterToScopeOverflowsWithoutLosingTheFilter() {
+        val original = state(full = listOfBands(band()), mid = fill(16))
+        val result = PeqBandEditor.moveFilterToScope(original, PeqScope.FULL, index = 0, to = PeqScope.MID)
+        assertEquals(PeqBandEditResult.Overflow(PeqScope.MID, alreadyFull = true), result)
+        assertEquals(1, original.fullRangeBands.size)
+    }
+
     // --- moveFilter --------------------------------------------------------------------
 
     @Test
