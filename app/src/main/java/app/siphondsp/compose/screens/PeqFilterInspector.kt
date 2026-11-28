@@ -209,8 +209,9 @@ private fun FilterActionsRow(holder: PeqStateHolder, index: Int, band: Parametri
                         onClick = {
                             val result = PeqBandEditor.moveFilterToScope(holder.peqState, scope, index, target)
                             run(result)
-                            // (A full bank is already reported by apply().)
-                            if (result is PeqBandEditResult.Changed) {
+                            // Follow it only once it's really there: apply() keeps the old state when
+                            // the engine or the save refuses it (and reports a full bank itself).
+                            if (result is PeqBandEditResult.Changed && holder.hasBand(target, result.select)) {
                                 onClose()
                                 holder.selectedScope = target
                                 holder.selectedUuid = result.select

@@ -456,7 +456,8 @@ private fun FilterToolsMenu(
                         onClick = {
                             val result = PeqBandEditor.moveFilterToScope(holder.peqState, scope, selectedIndex, target)
                             run(result)
-                            if (result is PeqBandEditResult.Changed) {
+                            // Only once it's really there (apply() keeps the old state if refused).
+                            if (result is PeqBandEditResult.Changed && holder.hasBand(target, result.select)) {
                                 holder.selectedScope = target
                                 holder.selectedUuid = result.select
                             }

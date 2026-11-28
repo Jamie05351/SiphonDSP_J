@@ -77,6 +77,10 @@ internal val PeqPanelFill = Color(0xFF181A22)
 // keeps it off the content frame's border.
 internal val PeqBottomClearance = 4.dp
 
+/** Whether [scope]'s committed bands hold the filter [uuid]. */
+internal fun PeqStateHolder.hasBand(scope: PeqScope, uuid: java.util.UUID?): Boolean =
+    uuid != null && app.siphondsp.fragment.PeqBandEditor.bandsFor(peqState, scope).any { it.uuid == uuid }
+
 /** The same global numbering used for graph node and filter-shape colours. */
 internal val PeqStateHolder.filterNumberOffset: Int
     get() = when (selectedScope) {
