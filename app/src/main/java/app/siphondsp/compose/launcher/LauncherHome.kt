@@ -336,6 +336,10 @@ fun LauncherHome(
             val geometry = launcherGeometry(maxWidth.value, maxHeight.value)
             val scale = HomeScale(geometry.scale)
             val designWidth = geometry.designWidth
+            // As wide as the built-in wallpaper's car allows on this screen (the window's shape
+            // decides where Crop puts it): on the head unit's 1280 x 417 window that's ~350 dp.
+            val musicWidth = if (look.wallpaper != null) CustomWallpaperMusicWidth
+            else musicTileWidth(maxWidth.value, maxHeight.value, geometry)
             val g = animateActive(powered, "launcher power")
             val covered = overlay != LauncherOverlay.None
             val blur by animateDpAsState(if (covered) 16.dp else 0.dp, tween(PanelMs), label = "home blur")
@@ -361,7 +365,9 @@ fun LauncherHome(
                     } else {
                         Image(
                             painterResource(R.drawable.launcher_wallpaper), contentDescription = null,
-                            contentScale = ContentScale.Crop, alignment = Alignment.CenterEnd, modifier = Modifier.fillMaxSize(),
+                            // Cropped from the bottom-right: what a short window loses comes off the top
+                            // (wall), so the car sits above the DSP bar instead of behind it.
+                            contentScale = ContentScale.Crop, alignment = Alignment.BottomEnd, modifier = Modifier.fillMaxSize(),
                         )
                         // Only on the built-in wallpaper, where the car's place is known.
                         CarUnderglow(readout, g, Modifier.fillMaxSize())
@@ -375,7 +381,7 @@ fun LauncherHome(
                                 Modifier.at(PodX, TilesTop, PodWidth, TileHeight),
                                 bassBoostDb = engine.deepBassDb,
                             )
-                            TileGrid(apps, slots, look.hidden, track, lastPlayer, onOverlayChange, actions)
+                            TileGrid(apps, slots, look.hidden, track, lastPlayer, onOverlayChange, actions, musicWidth)
                             CornerButton(designWidth - 2 * CornerSize - 12f, stringResource(R.string.launcher_drawer), { onOverlayChange(LauncherOverlay.Drawer()) }) { drawDrawerGlyph() }
                             CornerButton(designWidth - CornerSize, stringResource(R.string.launcher_car_menu), { onOverlayChange(LauncherOverlay.CarMenu()) }) { drawCarGlyph() }
                         }
@@ -417,7 +423,7 @@ fun LauncherHome(
 
 /**
  * A soft violet-blue glow on the floor under the built-in wallpaper's car, breathing slowly with the
- * output level while the DSP is on ([g]). Drawn where [ContentScale.Crop] with [Alignment.CenterEnd]
+ * output level while the DSP is on ([g]). Drawn where [ContentScale.Crop] with [Alignment.BottomEnd]
  * puts the car's underside, so it stays under the car on any screen. Read while drawing, so it never
  * recomposes the home screen.
  */
@@ -442,7 +448,7 @@ private fun CarUnderglow(readout: () -> LevelReadout, g: Float, modifier: Modifi
         level[0] += (target - level[0]) * if (target > level[0]) 0.25f else 0.04f
         val scale = maxOf(size.width / WallpaperW, size.height / WallpaperH)
         val left = size.width - WallpaperW * scale
-        val top = (size.height - WallpaperH * scale) / 2
+        val top = size.height - WallpaperH * scale
         val centre = Offset(left + UnderglowX * scale, top + UnderglowY * scale)
         val radiusX = UnderglowHalfWidth * scale
         val radiusY = UnderglowHalfHeight * scale
@@ -460,6 +466,20 @@ private fun CarUnderglow(readout: () -> LevelReadout, g: Float, modifier: Modifi
             )
         }
     }
+}
+
+/**
+ * The music tile's width, in design dp, that ends the tile grid [CarClearance] short of the built-in
+ * wallpaper's car on a [widthDp] x [heightDp] window: the wallpaper is cropped to fill the window
+ * from its right edge, so the car's place depends on the window's shape.
+ */
+internal fun musicTileWidth(widthDp: Float, heightDp: Float, geometry: LauncherGeometry): Float {
+    val s = maxOf(widthDp / WallpaperW, heightDp / WallpaperH)
+    val carLeft = widthDp - WallpaperW * s + WallpaperCarLeft * s
+    // The design box is centred in the window.
+    val designLeft = (widthDp - geometry.designWidth * geometry.scale) / 2
+    val carDesign = (carLeft - designLeft) / geometry.scale
+    return (carDesign - CarClearance - TilesX - TileGap - GridWidth).coerceIn(MinMusicWidth, MaxMusicWidth)
 }
 
 internal data class LauncherGeometry(val scale: Float, val designWidth: Float)
@@ -525,14 +545,16 @@ private fun TileGrid(
     lastPlayer: String?,
     onOverlayChange: (LauncherOverlay) -> Unit,
     actions: LauncherActions,
+    musicWidth: Float,
 ) {
-    Box(Modifier.at(TilesX, TilesTop, MusicWidth, TileHeight)) {
+    val gridX = TilesX + musicWidth + TileGap
+    Box(Modifier.at(TilesX, TilesTop, musicWidth, TileHeight)) {
         MusicTile(slots, apps, track, lastPlayer, onOverlayChange, actions)
     }
     HomeTile.visible(hidden).forEachIndexed { n, tile ->
         val column = n % HomeTile.Columns
         val row = n / HomeTile.Columns
-        Box(Modifier.at(GridX + column * (TileWidth + TileGap), TilesTop + row * (GridTileHeight + TileGap), TileWidth, GridTileHeight)) {
+        Box(Modifier.at(gridX + column * (TileWidth + TileGap), TilesTop + row * (GridTileHeight + TileGap), TileWidth, GridTileHeight)) {
             Tile(tile, slots, apps, onOverlayChange, actions)
         }
     }
@@ -820,11 +842,13 @@ private fun Dock(
             if (runCatching { knobEntry.requestFocus() }.isSuccess) return@LaunchedEffect
         }
     }
-    val pillX = width - PillWidth
+    // The bar runs the whole width along the bottom, under the tiles.
+    val pillWidth = width
+    val pillX = 0f
     // The edge and face, from the pill's place and size to the panel's.
     val x = mix(pillX, 0f, o)
     val top = mix(PillTop, PanelTop, o)
-    val w = mix(PillWidth, width, o)
+    val w = mix(pillWidth, width, o)
     val h = mix(PillHeight, PanelHeight, o)
     val corner = mix(PillCorner, DockCorner, o)
     if (o > 0f) {
@@ -875,14 +899,14 @@ private fun Dock(
     val pillAlpha = (1f - o * 2f).coerceIn(0f, 1f)
     if (!expanded || pillAlpha > 0f) {
         // Fading out under the opening panel, or not yet back as the panel closes, it takes no taps.
-        Box(Modifier.at(pillX, PillTop, PillWidth, PillHeight).graphicsLayer { alpha = pillAlpha }.blockTouches(expanded || pillAlpha < 1f)) {
+        Box(Modifier.at(pillX, PillTop, pillWidth, PillHeight).graphicsLayer { alpha = pillAlpha }.blockTouches(expanded || pillAlpha < 1f)) {
             // One long, low row along the floor under the car: power, what the DSP is doing with
             // the output meter and status chips, then the headroom (which opens the panel).
-            Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.fillMaxSize().padding(horizontal = s.dp(8f)), verticalAlignment = Alignment.CenterVertically) {
                 CompositionLocalProvider(LocalHomeScale provides HomeScale(s.k * PillNodeScale)) {
                     PowerNode(powered, g, actions::togglePower, caption = false)
                 }
-                PillStatus(powered, engine, readout, Modifier.weight(1f))
+                PillStatus(powered, engine, readout, Modifier.weight(1f).padding(horizontal = s.dp(6f)))
                 CompositionLocalProvider(LocalHomeScale provides HomeScale(s.k * PillNodeScale)) {
                     HeadroomNode(
                         readout, engine.ceilingDb, g, { ChainSweep.arrived(sweep.value) }, Modifier,
@@ -1053,7 +1077,7 @@ private fun CornerButton(x: Float, label: String, onClick: () -> Unit, glyph: Dr
     val shape = RoundedCornerShape(s.dp(14f))
     Box(
         Modifier
-            .at(x, TopMargin, CornerSize, CornerSize)
+            .at(x, TilesTop, CornerSize, CornerSize)
             .knobFocusRing(s.dp(14f), grow = true)
             .neonEdge(14f, HomePalette.PanelEdge, glow = 0f)
             .clip(shape)
@@ -1201,9 +1225,8 @@ private const val PanelShadeBottom = 1f
 // The pill: one long, low row in the bottom-right corner, along the floor under the wallpaper's car
 // (power, the status, the headroom), its power and headroom at PillNodeScale. It ends 12 dp clear of
 // the tiles on the 1280 wide design.
-private const val PillWidth = 500f
-private const val PillHeight = 72f
-private const val PillNodeScale = 0.5f
+private const val PillHeight = 92f
+private const val PillNodeScale = 0.62f
 private const val PillTop = DesignH - DockInset - PillHeight
 private const val PillCorner = 24f
 private const val PillShade = 0.9f
@@ -1227,7 +1250,15 @@ private const val CornerSize = 58f
 private const val TileWidth = 148f
 private const val TileGap = 16f
 private const val GridWidth = HomeTile.Columns * TileWidth + (HomeTile.Columns - 1) * TileGap
-private const val MusicWidth = 256f
+// The music tile takes what the wallpaper's car leaves (see musicTileWidth), between these.
+private const val MinMusicWidth = 256f
+private const val MaxMusicWidth = 360f
+// A custom wallpaper's car could be anywhere: a middle width.
+private const val CustomWallpaperMusicWidth = 300f
+// How far the tiles stay clear of the built-in wallpaper's car, design dp.
+private const val CarClearance = 16f
+// The built-in wallpaper's car's left edge (its front corner), in the image's own pixels.
+private const val WallpaperCarLeft = 1097f
 // The music tile's insides: the art square, then the text and the controls under it.
 private const val MusicCorner = 16f
 private const val MusicPad = 16f
@@ -1238,12 +1269,15 @@ private const val MediaButtonGap = 10f
 private const val PodWidth = 64f
 private const val PodX = 0f
 private const val TilesX = PodX + PodWidth + 20f
-/** Where the tiles end, in design dp: the wallpaper's car must start right of it. */
-internal const val TilesRight = TilesX + MusicWidth + TileGap + GridWidth
-private const val TilesTop = 60f
-private const val GridX = TilesX + MusicWidth + TileGap
+
+// On the head unit the KSW bar takes its own strip above the window (1280 x 417 dp), so nothing
+// draws over the top of the launcher: the tiles start just under the window's top edge.
+private const val TilesTop = 14f
+
 // Down to the bottom of the screen, level with the DSP pill: the open panel goes over them.
-private const val TileHeight = DesignH - DockInset - TilesTop
+// Down to just above the DSP bar along the bottom.
+private const val TileBarGap = 12f
+private const val TileHeight = PillTop - TileBarGap - TilesTop
 // Two rows of grid tiles in the music tile's height.
 private const val GridTileHeight = (TileHeight - TileGap) / 2
 // The text and controls' band along the bottom, which the fade darkens; the fade starts at

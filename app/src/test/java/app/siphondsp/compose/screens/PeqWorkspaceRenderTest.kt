@@ -133,7 +133,7 @@ class PeqWorkspaceRenderTest {
         val graph = compose.onNodeWithTag("peq-response-graph").fetchSemanticsNode().boundsInRoot
         assertEquals(300f, editor.width, 1f)
         // Everything fits the head unit's graph row: the last action row is inside the editor.
-        val copy = compose.onNodeWithText("Copy to…").fetchSemanticsNode().boundsInRoot
+        val copy = compose.onNodeWithText("Move / copy to…").fetchSemanticsNode().boundsInRoot
         assertTrue("actions must fit without scrolling", copy.bottom <= editor.bottom)
         assertEquals(graph.height, editor.height, 1f)
         compose.onNodeWithContentDescription("Filter on, tap to bypass").performClick()
