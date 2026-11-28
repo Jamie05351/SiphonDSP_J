@@ -36,6 +36,8 @@ data class HomeEngineState(
     val known: Boolean = true,
     val crossoverWays: Int = 2,
     val neutral: Boolean = false,
+    /** Deep bass's boost at the saved master volume ([NativeBmwDspValues.deepBassCurve]), dB; 0 while off. */
+    val deepBassDb: Float = 0f,
 ) {
     val allPassOn: Boolean get() = allPassOutputs > 0
 
@@ -43,6 +45,9 @@ data class HomeEngineState(
     val ceilingDb: Float get() = limiterDb ?: 0f
 
     companion object {
+        private fun deepBassDb(values: FloatArray): Float =
+            if (values.size < NativeBmwDspValues.SIZE) 0f else NativeBmwDspValues.deepBassCurve(values).gainDb.toFloat()
+
         val OFF = HomeEngineState(
             allPassOutputs = 0,
             tiltDb = null,
@@ -54,7 +59,8 @@ data class HomeEngineState(
         fun from(status: EngineStatus?, values: FloatArray): HomeEngineState {
             val volumeDb = values.getOrElse(NativeBmwDspValues.INDEX_MASTER_VOLUME_DB) { NativeBmwDspValues.MASTER_VOLUME_MIN_DB }
             val muted = values.getOrElse(NativeBmwDspValues.INDEX_MASTER_MUTE) { 0f } >= .5f
-            if (status == null) return OFF.copy(masterVolumeDb = volumeDb, masterMuted = muted, known = false)
+            val deepBass = deepBassDb(values)
+            if (status == null) return OFF.copy(masterVolumeDb = volumeDb, masterMuted = muted, known = false, deepBassDb = deepBass)
             return HomeEngineState(
                 allPassOutputs = status.allPassOutputs,
                 tiltDb = (status.tiltDb * NativeBmwDspValues.TILT_END_GAIN_PER_AMOUNT).takeIf { status.isActive(DspStage.TILT) },
@@ -65,6 +71,7 @@ data class HomeEngineState(
                 known = true,
                 crossoverWays = status.crossoverWays,
                 neutral = status.measurementNeutral,
+                deepBassDb = deepBass,
             )
         }
 
@@ -81,6 +88,7 @@ data class HomeEngineState(
                     .takeIf { on(NativeBmwDspValues.INDEX_MASTER_LIMITER_ENABLED) },
                 masterVolumeDb = values[NativeBmwDspValues.INDEX_MASTER_VOLUME_DB],
                 masterMuted = on(NativeBmwDspValues.INDEX_MASTER_MUTE),
+                deepBassDb = deepBassDb(values),
             )
         }
     }
