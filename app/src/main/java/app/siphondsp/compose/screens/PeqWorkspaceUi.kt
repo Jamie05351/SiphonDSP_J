@@ -3,11 +3,8 @@ package app.siphondsp.compose.screens
 import app.siphondsp.view.isHeadUnitDisplay
 import app.siphondsp.fragment.PeqScope
 import app.siphondsp.compose.nav.DspWorkspaceScaffold
-import app.siphondsp.compose.controls.WorkspaceArtBox
-import app.siphondsp.compose.controls.WorkspaceArt
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.res.dimensionResource
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.size
@@ -108,11 +105,12 @@ internal fun PeqWorkspaceLayout(holder: PeqStateHolder, showSpectrum: Boolean = 
                 // A phone's toolbar line has no room for the strip beside the banks.
                 showStatusStrip = headUnit,
                 toolbarActions = { PeqToolbar(holder, headUnit) },
+                toolbarHeight = PeqToolbarHeight,
             ) {
                 ParametricEqScreen(
                     holder,
                     Modifier.fillMaxSize().testTag("peq-content-frame")
-                        .padding(start = PeqContentInset, end = PeqContentInset, top = 6.dp),
+                        .padding(start = PeqContentInset, end = PeqContentInset, top = 2.dp),
                     showSpectrum,
                 )
             }
@@ -133,24 +131,15 @@ private fun PeqToolbar(holder: PeqStateHolder, headUnit: Boolean) {
             showCounts = headUnit,
         )
     }
-    if (headUnit) {
-        WorkspaceArtBox(
-            modifier = Modifier.fillMaxSize(),
-            originX = dimensionResource(app.siphondsp.R.dimen.dsp_status_strip_margin_start),
-            originY = 0.dp,
-        ) {
-            PeqToolbarActions(holder, Modifier.artRect(PeqActionsFrac))
-            banks(Modifier.artRect(WorkspaceArt.finder4))
-        }
-    } else {
-        Row(
-            Modifier.fillMaxSize().padding(end = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            PeqToolbarActions(holder, Modifier.width(120.dp).height(36.dp))
-            banks(Modifier.width(320.dp).height(36.dp))
-        }
+    // One compact line, everything centred in it: the PEQ gives the height to its graph. On the head
+    // unit the banks end where the other workspaces' finder does (WorkspaceArt.finder4).
+    Row(
+        Modifier.fillMaxSize().padding(end = if (headUnit) 38.dp else 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        PeqToolbarActions(holder, Modifier.width(if (headUnit) 108.dp else 120.dp).height(PeqToolbarControlHeight))
+        banks(Modifier.width(if (headUnit) 512.dp else 320.dp).height(PeqToolbarControlHeight))
     }
 }
 
@@ -224,8 +213,9 @@ internal fun PeqIconButton(glyph: String, description: String, onClick: () -> Un
     }
 }
 
-// Undo / redo / ⋯ on the toolbar line, ending just before the bank finder (WorkspaceArt.finder4).
-private val PeqActionsFrac = WorkspaceArt.Frac(0.484f, 0.048f, 0.080f, 0.0693f)
+// The PEQ's compact toolbar line (the standard is 69 dp) and its controls' height.
+internal val PeqToolbarHeight = 52.dp
+private val PeqToolbarControlHeight = 36.dp
 // The content's inset from the window's rim, as the other workspaces' panels sit.
 internal val PeqContentInset = 4.dp
 

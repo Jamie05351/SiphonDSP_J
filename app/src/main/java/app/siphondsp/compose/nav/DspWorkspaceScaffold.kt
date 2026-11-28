@@ -1,5 +1,6 @@
 package app.siphondsp.compose.nav
 
+import androidx.compose.ui.unit.Dp
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -40,6 +41,8 @@ import app.siphondsp.view.DspRail
  * - [content] in the window below the toolbar line, out to the screen's right and bottom edges.
  *
  * @param showStatusStrip false on the PEQ, whose scope row takes the whole toolbar line.
+ * @param toolbarHeight the toolbar line's height; null for the standard one. The PEQ uses a
+ *   compact line so its graph gets the height, with the back arrow centred in it.
  */
 @Composable
 fun DspWorkspaceScaffold(
@@ -48,11 +51,15 @@ fun DspWorkspaceScaffold(
     onBack: () -> Unit,
     showStatusStrip: Boolean = true,
     toolbarActions: (@Composable () -> Unit)? = null,
+    toolbarHeight: Dp? = null,
     content: @Composable () -> Unit,
 ) {
     val context = LocalContext.current
     val navigator = LocalAppNavigator.current
-    val toolbarHeight = dimensionResource(R.dimen.dsp_workspace_toolbar_height)
+    val standardToolbar = dimensionResource(R.dimen.dsp_workspace_toolbar_height)
+    val toolbarHeight = toolbarHeight ?: standardToolbar
+    // The arrow's standard spot, or centred in a compact line.
+    val arrowY = if (toolbarHeight == standardToolbar) 25.dp else (toolbarHeight - 44.dp) / 2
     val navInset = dimensionResource(R.dimen.dsp_toolbar_nav_inset)
     val destinations = remember { DspDestination.entries.filter { it.showInPrimaryNav } }
 
@@ -86,7 +93,7 @@ fun DspWorkspaceScaffold(
             IconButton(
                 onClick = onBack,
                 modifier = Modifier
-                    .offset(x = railWidth + navInset - 4.dp, y = 25.dp)
+                    .offset(x = railWidth + navInset - 4.dp, y = arrowY)
                     .size(44.dp),
             ) {
                 Icon(
@@ -100,6 +107,7 @@ fun DspWorkspaceScaffold(
                 DspStatusStrip(
                     onOpen = { navigator.openWorkspace(it) },
                     onOpenTruth = { navigator.open(Routes.NATIVE_TRUTH) },
+                    top = arrowY,
                     modifier = Modifier
                         .padding(start = actionsStart)
                         .fillMaxHeight()

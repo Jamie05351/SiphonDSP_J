@@ -163,7 +163,9 @@ fun ParametricEqScreen(holder: PeqStateHolder, modifier: Modifier = Modifier, sh
                                 // The workspaces' panel: rounded, edged in the workspace's colour.
                                 modifier = graphModifier.testTag("peq-response-graph")
                                     .clip(RoundedCornerShape(14.dp))
-                                    .border(1.5.dp, PeqControlBlue, RoundedCornerShape(14.dp)),
+                                    .border(1.5.dp, PeqControlBlue, RoundedCornerShape(14.dp))
+                                    // Inside the edge, so the legend along the top clears the border.
+                                    .padding(top = 6.dp, start = 3.dp, end = 3.dp, bottom = 3.dp),
                                 mode = graphMode,
                                 channelDisplay = channelDisplay,
                                 showIndividualFilters = showOverlays,

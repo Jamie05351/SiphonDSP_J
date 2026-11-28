@@ -72,7 +72,7 @@ private val WorstCaseCells = listOf(
  * the saved event log -- with a Restart button. The log outlives a head-unit reset.
  */
 @Composable
-fun DspStatusStrip(onOpen: (DspDestination) -> Unit, onOpenTruth: () -> Unit, modifier: Modifier = Modifier) {
+fun DspStatusStrip(onOpen: (DspDestination) -> Unit, onOpenTruth: () -> Unit, modifier: Modifier = Modifier, top: androidx.compose.ui.unit.Dp = 25.dp) {
     val context = LocalContext.current
     val status by rememberEngineStatus()
     val selfTest by rememberSelfTestState()
@@ -99,7 +99,8 @@ fun DspStatusStrip(onOpen: (DspDestination) -> Unit, onOpenTruth: () -> Unit, mo
         (MAX_TEXT_SP * (roomPx / textPx).coerceAtMost(1f)).coerceAtLeast(MIN_TEXT_SP).sp
     }
 
-    Row(modifier.padding(top = 25.dp), verticalAlignment = Alignment.CenterVertically) {
+    // Level with the back arrow, which sits [top] down the toolbar line.
+    Row(modifier.padding(top = top), verticalAlignment = Alignment.CenterVertically) {
         val engine = status
         val sp = fontSize.value
         val xover = when (val ways = engine?.crossoverWays) {
