@@ -1,5 +1,9 @@
 package app.siphondsp.compose.home
 
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.Alignment
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
@@ -62,6 +66,8 @@ fun StageCard(
     modifier: Modifier = Modifier,
     width: Float = CardWidth,
     animateArt: Boolean = true,
+    /** Label / value pairs under the title (the launcher's dock: the stage's settings at a glance). */
+    facts: List<Pair<String, String>> = emptyList(),
 ) {
     val s = LocalHomeScale.current
     val shape = RoundedCornerShape(s.dp(16f))
@@ -104,17 +110,28 @@ fun StageCard(
             .padding(s.dp(12f)),
     ) {
         Spacer(Modifier.weight(1f))
-        AnimatedTileArt(art, animateArt, Modifier.fillMaxWidth().height(s.dp(80f)))
+        AnimatedTileArt(art, animateArt, Modifier.fillMaxWidth().height(s.dp(if (facts.isEmpty()) 80f else 56f)))
         Spacer(Modifier.weight(1f))
         Text(
             text = title,
             color = Color.White,
-            fontSize = s.sp(22f),
+            fontSize = s.sp(if (facts.isEmpty()) 22f else 20f),
             fontWeight = FontWeight.Medium,
             maxLines = 1,
             softWrap = false,
             modifier = Modifier.padding(start = s.dp(4f)),
         )
+        if (facts.isNotEmpty()) {
+            Column(Modifier.padding(start = s.dp(4f), top = s.dp(6f)), verticalArrangement = Arrangement.spacedBy(s.dp(3f))) {
+                for ((label, value) in facts) {
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Text(label, color = HomePalette.Caption, fontSize = s.sp(13f), maxLines = 1, modifier = Modifier.weight(1f))
+                        Text(value, color = Color.White, fontSize = s.sp(14f), fontWeight = FontWeight.Medium,
+                            fontFamily = FontFamily.Monospace, maxLines = 1, softWrap = false)
+                    }
+                }
+            }
+        }
         if (subtitle != null) {
             Text(
                 text = subtitle,
