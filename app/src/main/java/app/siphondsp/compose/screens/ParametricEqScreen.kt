@@ -6,6 +6,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -56,7 +57,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import app.siphondsp.compose.controls.GlassButton
 import app.siphondsp.compose.controls.GlassButtonKind
-import app.siphondsp.compose.controls.GlassChip
 import app.siphondsp.compose.controls.GlassDialog
 import app.siphondsp.compose.controls.GlassDialogText
 import app.siphondsp.compose.controls.GlassDivider
@@ -160,8 +160,10 @@ fun ParametricEqScreen(holder: PeqStateHolder, modifier: Modifier = Modifier, sh
                                 peqState = responsePeqState,
                                 activeBank = holder.selectedScope.bank,
                                 selectedBandId = responseSelection,
+                                // The workspaces' panel: rounded, edged in the workspace's colour.
                                 modifier = graphModifier.testTag("peq-response-graph")
-                                    .border(1.dp, Color(0xFF353535), RoundedCornerShape(10.dp)),
+                                    .clip(RoundedCornerShape(14.dp))
+                                    .border(1.5.dp, PeqControlBlue, RoundedCornerShape(14.dp)),
                                 mode = graphMode,
                                 channelDisplay = channelDisplay,
                                 showIndividualFilters = showOverlays,
@@ -189,7 +191,7 @@ fun ParametricEqScreen(holder: PeqStateHolder, modifier: Modifier = Modifier, sh
                             )
                         }
                         if (wide) {
-                            Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+                            Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                                 graph(Modifier.weight(1f).fillMaxHeight())
                                 if (editorIndex >= 0) PeqSelectedFilter(holder, editorIndex, { editorId = null }, ::select,
                                     Modifier.width(editorWidth).fillMaxHeight())
@@ -209,7 +211,7 @@ fun ParametricEqScreen(holder: PeqStateHolder, modifier: Modifier = Modifier, sh
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
                         Column {
-                            Text("FILTERS", color = PeqMutedText, fontSize = 11.sp)
+                            Text("FILTERS", color = PeqMutedText, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                             Text("${holder.visibleBands.size}/${BmwPeqState.MAX_BANDS}", color = PeqControlText,
                                 fontSize = 14.sp, fontFamily = FontFamily.Monospace)
                         }
@@ -220,13 +222,13 @@ fun ParametricEqScreen(holder: PeqStateHolder, modifier: Modifier = Modifier, sh
                                     selected = band.uuid.toString() == editorId, onClick = { select(band) })
                             }
                             if (holder.visibleBands.size < BmwPeqState.MAX_BANDS) {
-                                PeqActionButton("+ Add", {
+                                PeqAddTile {
                                     val previousSelection = holder.selectedUuid
                                     holder.addBand()
                                     if (holder.selectedUuid != previousSelection) {
                                         editorId = holder.selectedUuid?.toString()
                                     }
-                                }, Modifier.fillMaxHeight())
+                                }
                             }
                         }
                         if (holder.selectedScope == PeqScope.FULL) {
@@ -244,7 +246,7 @@ fun ParametricEqScreen(holder: PeqStateHolder, modifier: Modifier = Modifier, sh
 
 /** Compact bank selector and the existing backup/file/filter/overlay menus. */
 @Composable
-fun PeqToolbarActions(holder: PeqStateHolder, modifier: Modifier = Modifier, scopeWidth: androidx.compose.ui.unit.Dp = 340.dp) {
+fun PeqToolbarActions(holder: PeqStateHolder, modifier: Modifier = Modifier) {
     val context = LocalContext.current
 
     val apoImport = remember(context, holder) {
@@ -290,54 +292,58 @@ fun PeqToolbarActions(holder: PeqStateHolder, modifier: Modifier = Modifier, sco
     var diagnosticReport by remember { mutableStateOf<String?>(null) }
     var copyWholeScopeTarget by remember { mutableStateOf<PeqScope?>(null) }
 
-    // The compact PEQ header is already aligned to the sidebar's top bezel.
+    // Undo, redo, and one ⋯ menu for what were four chips: the whole-DSP backup, this bank's
+    // files, the filter tools and the graph's overlays, each opening its own menu in the same place
+    // (one long list would scroll on the 480 dp screen).
+    var more by remember { mutableStateOf(false) }
+    var backupMenu by remember { mutableStateOf(false) }
+    var fileMenu by remember { mutableStateOf(false) }
+    var toolsMenu by remember { mutableStateOf(false) }
+    var graphMenu by remember { mutableStateOf(false) }
     Row(
-        modifier = modifier
-            .fillMaxHeight()
-            .horizontalScroll(rememberScrollState())
-            .padding(end = 4.dp)
-            .focusGroup(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = modifier.focusGroup(),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        PeqScopeControl(
-            selected = holder.selectedScope,
-            onSelect = { holder.selectedScope = it },
-            modifier = Modifier.width(scopeWidth),
-            counts = PeqScope.entries.associateWith { holder.peqState.bandCount(it) },
-        )
-        PeqActionButton("↶", holder::undo, Modifier.width(44.dp).semantics { contentDescription = "Undo" },
-            contentPadding = 0.dp, enabled = holder.canUndo)
-        PeqActionButton("↷", holder::redo, Modifier.width(44.dp).semantics { contentDescription = "Redo" },
-            contentPadding = 0.dp, enabled = holder.canRedo)
-        // Four menus, so everything fits on the line: the whole-DSP backup first (the most
-        // important, and it covers every page, not only the PEQ), then this scope's files, the
-        // filter tools and the graph's overlays.
-        BackupChip(backup)
-        FileChip(
-            scope = holder.selectedScope.label,
-            onImport = { importLauncher.launch(arrayOf("text/plain", "text/*")) },
-            onExport = { exportLauncher.launch(holder.selectedScope.fileName) },
-            onClear = { showResetConfirm = true },
-        )
-        FilterToolsChip(
-            holder, { copyWholeScopeTarget = it }, { message -> context.toast(message) },
-            onDiagnostics = {
-                val sampleRate = RootlessAudioProcessorService.nativeBmwPeqSampleRate()
-                val graphPrefs = PeqGraphPreferences(context)
-                diagnosticReport = PeqDiagnosticReport.create(
-                    context = context,
-                    state = holder.peqState,
-                    systemValues = NativeBmwDspValues.load(context),
-                    sampleRate = sampleRate,
-                    serviceActive = sampleRate != null,
-                    nativeHandleReady = RootlessAudioProcessorService.nativeBmwPeqHandleReady(),
-                    channelDisplay = graphPrefs.channelDisplay.name,
-                    showIndividualFilters = graphPrefs.showIndividualFilters,
-                )
-            },
-        )
-        GraphChip(holder)
+        PeqIconButton("↶", "Undo", holder::undo, Modifier.weight(1f), enabled = holder.canUndo)
+        PeqIconButton("↷", "Redo", holder::redo, Modifier.weight(1f), enabled = holder.canRedo)
+        Box(Modifier.weight(1f).fillMaxHeight()) {
+            PeqIconButton("⋯", "More: backup, file, tools, graph", { more = true }, Modifier.fillMaxSize())
+            GlassMenu(expanded = more, onDismissRequest = { more = false }) {
+                GlassItem("Backup ›", colour = BackupAccent) { more = false; backupMenu = true }
+                GlassItem("File ›") { more = false; fileMenu = true }
+                GlassItem("Tools ›") { more = false; toolsMenu = true }
+                GlassItem("Graph ›") { more = false; graphMenu = true }
+            }
+            BackupMenu(backup, backupMenu) { backupMenu = false }
+            FileMenu(
+                expanded = fileMenu,
+                onDismiss = { fileMenu = false },
+                scope = holder.selectedScope.label,
+                onImport = { importLauncher.launch(arrayOf("text/plain", "text/*")) },
+                onExport = { exportLauncher.launch(holder.selectedScope.fileName) },
+                onClear = { showResetConfirm = true },
+            )
+            FilterToolsMenu(
+                toolsMenu, { toolsMenu = false },
+                holder, { copyWholeScopeTarget = it }, { message -> context.toast(message) },
+                onDiagnostics = {
+                    val sampleRate = RootlessAudioProcessorService.nativeBmwPeqSampleRate()
+                    val graphPrefs = PeqGraphPreferences(context)
+                    diagnosticReport = PeqDiagnosticReport.create(
+                        context = context,
+                        state = holder.peqState,
+                        systemValues = NativeBmwDspValues.load(context),
+                        sampleRate = sampleRate,
+                        serviceActive = sampleRate != null,
+                        nativeHandleReady = RootlessAudioProcessorService.nativeBmwPeqHandleReady(),
+                        channelDisplay = graphPrefs.channelDisplay.name,
+                        showIndividualFilters = graphPrefs.showIndividualFilters,
+                    )
+                },
+            )
+            GraphMenu(holder, graphMenu) { graphMenu = false }
+        }
     }
 
     // --- dialogs -----------------------------------------------------------------------------
@@ -417,16 +423,17 @@ fun PeqToolbarActions(holder: PeqStateHolder, modifier: Modifier = Modifier, sco
 // --- action chips + filter-tools menu ------------------------------------------------------
 
 @Composable
-private fun FilterToolsChip(
+private fun FilterToolsMenu(
+    expanded: Boolean,
+    onDismiss: () -> Unit,
     holder: PeqStateHolder,
     onCopyWholeScope: (PeqScope) -> Unit,
     toast: (String) -> Unit,
     onDiagnostics: () -> Unit,
 ) {
-    var expanded by remember { mutableStateOf(false) }
     val scope = holder.selectedScope
     fun run(result: PeqBandEditResult) {
-        expanded = false
+        onDismiss()
         when (holder.apply(result)) {
             PeqBandEditResult.NoMatchingChannel -> toast("No filters on that channel to copy")
             else -> Unit
@@ -434,14 +441,13 @@ private fun FilterToolsChip(
     }
 
     Box {
-        GlassChip("Tools", onClick = { expanded = true })
-        GlassMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+        GlassMenu(expanded = expanded, onDismissRequest = onDismiss) {
             // Per-filter actions (duplicate, move, copy one filter) live on the filter inspector;
             // this menu keeps the whole-bank tools.
             PeqScope.entries.filter { it != scope }.forEach { target ->
                 GlassItem(
                     text = "Copy all ${scope.label} to ${target.label}…",
-                    onClick = { expanded = false; onCopyWholeScope(target) },
+                    onClick = { onDismiss(); onCopyWholeScope(target) },
                 )
             }
             GlassDivider()
@@ -464,7 +470,7 @@ private fun FilterToolsChip(
                 },
             )
             GlassDivider()
-            GlassItem("Diagnostics", icon = R.drawable.ic_twotone_troubleshoot_24dp, onClick = { expanded = false; onDiagnostics() })
+            GlassItem("Diagnostics", icon = R.drawable.ic_twotone_troubleshoot_24dp, onClick = { onDismiss(); onDiagnostics() })
         }
     }
 }
@@ -571,33 +577,25 @@ private fun HouseCurveMenu(holder: PeqStateHolder, expanded: Boolean, onDismiss:
     }
 }
 
-/** The whole-DSP backup, lit green as the line's most important menu: back up, restore, and when it was last saved. */
+/** The whole-DSP backup, lit green as the most important menu: back up, restore, and when it was last saved. */
 @Composable
-private fun BackupChip(backup: DspBackupActions) {
-    var expanded by remember { mutableStateOf(false) }
-    Box {
-        GlassChip("Backup", onClick = { expanded = true }, accent = BackupAccent)
-        GlassMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            GlassItem("Back up all DSP settings…", icon = R.drawable.ic_twotone_save_24dp, colour = BackupAccent) { expanded = false; backup.backUp() }
-            GlassItem("Restore all DSP settings…", icon = R.drawable.ic_twotone_settings_backup_restore_24dp) { expanded = false; backup.restore() }
-            GlassDivider()
-            GlassNote(lastBackupText(backup.lastBackupMs))
-        }
+private fun BackupMenu(backup: DspBackupActions, expanded: Boolean, onDismiss: () -> Unit) {
+    GlassMenu(expanded = expanded, onDismissRequest = onDismiss) {
+        GlassItem("Back up all DSP settings…", icon = R.drawable.ic_twotone_save_24dp, colour = BackupAccent) { onDismiss(); backup.backUp() }
+        GlassItem("Restore all DSP settings…", icon = R.drawable.ic_twotone_settings_backup_restore_24dp) { onDismiss(); backup.restore() }
+        GlassDivider()
+        GlassNote(lastBackupText(backup.lastBackupMs))
     }
 }
 
 /** This scope's filters as a file: import, export, and Clear apart in red. */
 @Composable
-private fun FileChip(scope: String, onImport: () -> Unit, onExport: () -> Unit, onClear: () -> Unit) {
-    var expanded by remember { mutableStateOf(false) }
-    Box {
-        GlassChip("File", onClick = { expanded = true })
-        GlassMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            GlassItem("Import $scope filters…", icon = R.drawable.ic_twotone_download_24) { expanded = false; onImport() }
-            GlassItem("Export $scope filters…", icon = R.drawable.ic_twotone_save_24dp) { expanded = false; onExport() }
-            GlassDivider()
-            GlassItem("Clear $scope…", icon = R.drawable.ic_twotone_delete_24dp, danger = true) { expanded = false; onClear() }
-        }
+private fun FileMenu(expanded: Boolean, onDismiss: () -> Unit, scope: String, onImport: () -> Unit, onExport: () -> Unit, onClear: () -> Unit) {
+    GlassMenu(expanded = expanded, onDismissRequest = onDismiss) {
+        GlassItem("Import $scope filters…", icon = R.drawable.ic_twotone_download_24) { onDismiss(); onImport() }
+        GlassItem("Export $scope filters…", icon = R.drawable.ic_twotone_save_24dp) { onDismiss(); onExport() }
+        GlassDivider()
+        GlassItem("Clear $scope…", icon = R.drawable.ic_twotone_delete_24dp, danger = true) { onDismiss(); onClear() }
     }
 }
 
@@ -606,19 +604,15 @@ private fun FileChip(scope: String, onImport: () -> Unit, onExport: () -> Unit, 
  * (one long menu would scroll on the 480 dp screen). A tick shows which are on the graph.
  */
 @Composable
-private fun GraphChip(holder: PeqStateHolder) {
-    var expanded by remember { mutableStateOf(false) }
+private fun GraphMenu(holder: PeqStateHolder, expanded: Boolean, onDismiss: () -> Unit) {
     var baseline by remember { mutableStateOf(false) }
     var house by remember { mutableStateOf(false) }
-    Box {
-        GlassChip("Graph", onClick = { expanded = true })
-        GlassMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            GlassItem("Car baseline ›", checked = holder.graphBaseline != null) { expanded = false; baseline = true }
-            GlassItem("House curve ›", checked = holder.houseCurve != null && holder.showHouseCurve) { expanded = false; house = true }
-        }
-        CarBaselineMenu(holder, baseline) { baseline = false }
-        HouseCurveMenu(holder, house) { house = false }
+    GlassMenu(expanded = expanded, onDismissRequest = onDismiss) {
+        GlassItem("Car baseline ›", checked = holder.graphBaseline != null) { onDismiss(); baseline = true }
+        GlassItem("House curve ›", checked = holder.houseCurve != null && holder.showHouseCurve) { onDismiss(); house = true }
     }
+    CarBaselineMenu(holder, baseline) { baseline = false }
+    HouseCurveMenu(holder, house) { house = false }
 }
 
 private val BackupAccent = Color(0xFF5DCAA5)

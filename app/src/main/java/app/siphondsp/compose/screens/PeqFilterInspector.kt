@@ -76,7 +76,7 @@ import kotlin.math.log10
 // The inspector is sized for the head unit's 348dp graph row: everything fits without scrolling.
 internal val PeqInspectorWidth = 300.dp
 private val InspectorRowHeight = 44.dp
-private val InspectorLabelWidth = 40.dp
+private val InspectorLabelWidth = 46.dp
 
 /** One-tap Q values: Butterworth, 1.0, one octave, 2.0 and a third of an octave. */
 private val QPresets = listOf(0.71, 1.0, 1.41, 2.0, 4.3)
@@ -99,32 +99,34 @@ internal fun PeqSelectedFilter(
     val actions = rememberPeqFilterActions(holder, index)
     val number = holder.filterNumberOffset + index + 1
     val colour = Color(peqFilterColor(number - 1))
+    // A stepper column like the other workspaces': a group header in the filter's own (neon)
+    // colour with its on switch, then the shared steppers.
     Column(
-        modifier.testTag("peq-filter-editor").clip(RoundedCornerShape(12.dp)).background(PeqPanelFill)
-            .drawBehind { drawRect(colour, Offset.Zero, Size(4.dp.toPx(), size.height)) }
-            .verticalScroll(rememberScrollState())
-            .padding(start = 14.dp, end = 10.dp, top = 10.dp, bottom = 10.dp),
+        modifier.testTag("peq-filter-editor")
+            .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        // Identity, prev / next, close.
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            Box(Modifier.size(12.dp).clip(CircleShape).background(colour))
-            Column(Modifier.weight(1f)) {
-                Text("Filter $number", color = PeqControlText, fontSize = 16.sp,
-                    fontWeight = FontWeight.SemiBold, maxLines = 1)
-                Text("${holder.selectedScope.label.uppercase(Locale.ROOT)} · ${index + 1} of ${bands.size}" +
-                    if (band.enabled) "" else " · BYPASSED",
-                    color = PeqMutedText, fontSize = 10.sp, maxLines = 1)
+        // Identity, prev / next, close, on / bypassed.
+        Column {
+            Row(Modifier.fillMaxWidth().height(40.dp), verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                Column(Modifier.weight(1f)) {
+                    Text("FILTER $number", color = colour, fontSize = 15.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                    Text("${holder.selectedScope.label.uppercase(Locale.ROOT)} · ${index + 1} of ${bands.size}" +
+                        if (band.enabled) "" else " · BYPASSED",
+                        color = PeqMutedText, fontSize = 10.sp, maxLines = 1)
+                }
+                HeaderButton("‹", "Previous filter", index > 0) { bands.getOrNull(index - 1)?.let(onSelect) }
+                HeaderButton("›", "Next filter", index < bands.lastIndex) { bands.getOrNull(index + 1)?.let(onSelect) }
+                HeaderButton("✕", "Close filter", true, onClose)
+                app.siphondsp.compose.controls.BmwSwitch(
+                    checked = band.enabled,
+                    onCheckedChange = { holder.setBandEnabled(index, it) },
+                    contentDescription = if (band.enabled) "Filter on, tap to bypass" else "Filter bypassed, tap to enable",
+                )
             }
-            PeqActionButton("‹", { bands.getOrNull(index - 1)?.let(onSelect) },
-                Modifier.width(40.dp).semantics { contentDescription = "Previous filter" },
-                contentPadding = 0.dp, enabled = index > 0)
-            PeqActionButton("›", { bands.getOrNull(index + 1)?.let(onSelect) },
-                Modifier.width(40.dp).semantics { contentDescription = "Next filter" },
-                contentPadding = 0.dp, enabled = index < bands.lastIndex)
-            PeqActionButton("✕", onClose, Modifier.width(40.dp).semantics { contentDescription = "Close filter" },
-                contentPadding = 0.dp)
+            Spacer(Modifier.height(4.dp))
+            Box(Modifier.fillMaxWidth().height(1.5.dp).background(colour.copy(alpha = .45f)))
         }
         // Type (shape icons) + channel.
         Row(Modifier.fillMaxWidth().height(36.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -144,23 +146,23 @@ internal fun PeqSelectedFilter(
                 }
             }
         }
-        InspectorParameter("FREQ") {
+        InspectorParameter("Freq") {
             PeqNumericControl("Frequency", "${formatFrequency(band.frequency)}", actions::frequency,
                 actions::stepFrequency, actions::commit, Modifier.fillMaxWidth(), stepWidth = 40.dp,
                 valueFontSize = 18.sp, height = InspectorRowHeight,
-                rangeFraction = (log10(band.frequency / 20.0) / 3.0).toFloat(), rangeColor = colour, scrubbable = true)
+                rangeFraction = (log10(band.frequency / 20.0) / 3.0).toFloat(), rangeColor = colour, scrubbable = true, pill = true)
         }
-        InspectorParameter("GAIN") {
+        InspectorParameter("Gain") {
             PeqNumericControl("Gain", "${signed(band.gain)} dB", actions::gain, actions::stepGain, actions::commit,
                 Modifier.fillMaxWidth(), stepWidth = 40.dp, valueFontSize = 18.sp, height = InspectorRowHeight,
                 rangeFraction = ((band.gain + 30.0) / 60.0).toFloat(), rangeCentred = true, rangeColor = colour,
-                scrubbable = true)
+                scrubbable = true, pill = true)
         }
         InspectorParameter("Q") {
             PeqNumericControl("Q", formatPeqValue(band.q), actions::q, actions::stepQ, actions::commit,
                 Modifier.fillMaxWidth(), stepWidth = 40.dp, valueFontSize = 18.sp, height = InspectorRowHeight,
                 rangeFraction = (ln(band.q / 0.1) / ln(300.0)).toFloat(), rangeColor = colour,
-                trailing = bandwidthLabel(band), scrubbable = true)
+                trailing = bandwidthLabel(band), scrubbable = true, pill = true)
         }
         Row(Modifier.fillMaxWidth().padding(start = InspectorLabelWidth).height(28.dp),
             horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -176,7 +178,7 @@ internal fun PeqSelectedFilter(
 @Composable
 private fun InspectorParameter(label: String, control: @Composable () -> Unit) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Text(label, color = PeqMutedText, fontSize = 11.sp, fontWeight = FontWeight.Medium,
+        Text(label, color = Color(0xFFC9CCCF), fontSize = 14.sp, fontWeight = FontWeight.Medium,
             modifier = Modifier.width(InspectorLabelWidth))
         Box(Modifier.weight(1f)) { control() }
     }
@@ -195,7 +197,6 @@ private fun FilterActionsRow(holder: PeqStateHolder, index: Int, band: Parametri
     }
     Row(Modifier.fillMaxWidth().height(40.dp), horizontalArrangement = Arrangement.spacedBy(4.dp),
         verticalAlignment = Alignment.CenterVertically) {
-        BypassSwitch(band.enabled, { holder.setBandEnabled(index, !band.enabled) }, Modifier.fillMaxHeight())
         Box(Modifier.weight(1f).fillMaxHeight()) {
             SmallButton("Copy to…", { copyMenu = true }, Modifier.fillMaxSize())
             GlassMenu(expanded = copyMenu, onDismissRequest = { copyMenu = false }) {
@@ -228,29 +229,17 @@ private fun FilterActionsRow(holder: PeqStateHolder, index: Int, band: Parametri
     }
 }
 
-/** On = the filter is heard; off = bypassed (kept, but out of the engine and the curves). */
+/** A small square button in the filter header (previous, next, close). */
 @Composable
-private fun BypassSwitch(on: Boolean, onToggle: () -> Unit, modifier: Modifier = Modifier) {
+private fun HeaderButton(glyph: String, description: String, enabled: Boolean, onClick: () -> Unit) {
     val source = remember { MutableInteractionSource() }
-    Row(
-        modifier.clip(RoundedCornerShape(8.dp)).background(PeqControlFill)
-            .clickable(interactionSource = source, indication = null, role = Role.Switch, onClick = onToggle)
+    Box(
+        Modifier.width(32.dp).height(32.dp).alpha(if (enabled) 1f else .4f).clip(RoundedCornerShape(8.dp)).background(PeqControlFill)
+            .clickable(interactionSource = source, indication = null, role = Role.Button, enabled = enabled, onClick = onClick)
             .bmwFocusRing(source)
-            .semantics { contentDescription = if (on) "Filter on, tap to bypass" else "Filter bypassed, tap to enable" }
-            .padding(horizontal = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        Box(
-            Modifier.width(32.dp).height(18.dp).clip(RoundedCornerShape(9.dp))
-                .background(if (on) PeqControlBlue else PeqValueFill)
-                .border(1.dp, if (on) PeqControlBlue else PeqMutedText, RoundedCornerShape(9.dp)),
-            contentAlignment = if (on) Alignment.CenterEnd else Alignment.CenterStart,
-        ) {
-            Box(Modifier.padding(2.dp).size(14.dp).clip(CircleShape).background(if (on) Color.White else PeqMutedText))
-        }
-        Text(if (on) "On" else "Off", color = PeqControlText, fontSize = 13.sp, fontWeight = FontWeight.Medium)
-    }
+            .semantics { contentDescription = description },
+        contentAlignment = Alignment.Center,
+    ) { Text(glyph, color = PeqControlText, fontSize = 15.sp, fontWeight = FontWeight.Bold) }
 }
 
 @Composable
@@ -377,13 +366,14 @@ internal fun PeqFilterChip(
 ) {
     val source = remember { MutableInteractionSource() }
     val colour = Color(peqFilterColor(number - 1))
-    val shape = RoundedCornerShape(8.dp)
+    // Styled like the Convolver's slot tiles: edged in the filter's colour while selected.
+    val shape = RoundedCornerShape(12.dp)
     Row(
         modifier.width(118.dp).fillMaxHeight()
             .alpha(if (band.enabled) 1f else .5f)
             .clip(shape)
-            .background(if (selected) PeqPanelFill else PeqControlFill)
-            .then(if (selected) Modifier.border(2.dp, PeqControlBlue, shape) else Modifier)
+            .background(Color(0xFF111216))
+            .border(if (selected) 2.dp else 1.dp, if (selected) colour else Color(0xFF353840), shape)
             .clickable(interactionSource = source, indication = null, role = Role.Button, onClick = onClick)
             .bmwFocusRing(source)
             .semantics {
@@ -393,7 +383,7 @@ internal fun PeqFilterChip(
             },
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.width(6.dp).fillMaxHeight().background(colour))
+        Box(Modifier.padding(start = 4.dp).width(3.dp).fillMaxHeight(.62f).clip(RoundedCornerShape(2.dp)).background(colour))
         Column(Modifier.weight(1f).padding(horizontal = 8.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                 Text("%02d".format(Locale.ROOT, number), color = PeqControlText, fontSize = 18.sp,
@@ -410,6 +400,25 @@ internal fun PeqFilterChip(
                 fontFamily = FontFamily.Monospace, maxLines = 1)
         }
     }
+}
+
+/** "+ Add": a dashed tile beside the filter tiles. */
+@Composable
+internal fun PeqAddTile(onClick: () -> Unit) {
+    val source = remember { MutableInteractionSource() }
+    Box(
+        Modifier.width(80.dp).fillMaxHeight().clip(RoundedCornerShape(12.dp)).background(Color(0xFF111216))
+            .drawBehind {
+                drawRoundRect(
+                    PeqControlBlue.copy(alpha = .7f), style = Stroke(1.5.dp.toPx(),
+                        pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(5.dp.toPx(), 4.dp.toPx()))),
+                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(12.dp.toPx()),
+                )
+            }
+            .clickable(interactionSource = source, indication = null, role = Role.Button, onClick = onClick)
+            .bmwFocusRing(source),
+        contentAlignment = Alignment.Center,
+    ) { Text("+ Add", color = PeqControlText, fontSize = 14.sp, fontWeight = FontWeight.Bold) }
 }
 
 /**
@@ -438,7 +447,7 @@ internal fun PeqPreampControl(holder: PeqStateHolder, systemValues: FloatArray, 
     }
     Row(modifier.fillMaxHeight(), verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text("PREAMP", color = PeqMutedText, fontSize = 11.sp, fontWeight = FontWeight.Medium)
+        Text("Preamp", color = Color(0xFFC9CCCF), fontSize = 14.sp, fontWeight = FontWeight.Medium)
         PeqNumericControl(
             "Preamp", "${signed(state.preampDb.toDouble())} dB",
             onValueClick = {
@@ -452,7 +461,8 @@ internal fun PeqPreampControl(holder: PeqStateHolder, systemValues: FloatArray, 
                 holder.previewPreamp(next)
             },
             onCommit = { holder.commitPreview("preamp_step") },
-            modifier = Modifier.width(170.dp), stepWidth = 40.dp, valueFontSize = 16.sp, height = 64.dp,
+            modifier = Modifier.width(200.dp), stepWidth = 40.dp, valueFontSize = 16.sp, height = 48.dp,
+            accent = PreampAccent, pill = true,
         )
         Column(
             Modifier.fillMaxHeight().clip(RoundedCornerShape(8.dp)).background(PeqControlFill).padding(horizontal = 8.dp),
@@ -475,6 +485,7 @@ internal fun PeqPreampControl(holder: PeqStateHolder, systemValues: FloatArray, 
 }
 
 private const val PREAMP_MIN_DB = -30.0
+private val PreampAccent = Color(app.siphondsp.view.BmwDashboardSkin.LIGHT_BLUE_BRIGHT)
 private const val PEAK_DEBOUNCE_MS = 150L
 private const val PREAMP_MAX_DB = 12.0
 
