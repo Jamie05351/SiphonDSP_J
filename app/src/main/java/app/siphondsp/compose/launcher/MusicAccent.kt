@@ -2,6 +2,8 @@ package app.siphondsp.compose.launcher
 
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.toPixelMap
 
 /**
@@ -9,8 +11,10 @@ import androidx.compose.ui.graphics.toPixelMap
  * in the art, from a coarse grid of samples. Null for art that is near grey throughout (black and
  * white covers), where the player's own colour reads better.
  */
-internal fun artAccent(art: ImageBitmap): Color? {
-    val step = maxOf(1, minOf(art.width, art.height) / 24)
+internal fun artAccent(full: ImageBitmap): Color? {
+    // A 24 x 24 copy is all the sampling needs: never the whole (possibly 1000 px) art's pixels.
+    val art = android.graphics.Bitmap.createScaledBitmap(full.asAndroidBitmap(), AccentSamples, AccentSamples, true).asImageBitmap()
+    val step = 1
     val pixels = art.toPixelMap(0, 0, art.width, art.height)
     // Hue buckets of 30°, weighted by saturation and brightness so a vivid area wins over a big dull one.
     val weight = FloatArray(12)
@@ -48,6 +52,8 @@ internal fun artAccent(art: ImageBitmap): Color? {
     hsv[2] = 1f
     return Color(android.graphics.Color.HSVToColor(hsv))
 }
+
+private const val AccentSamples = 24
 
 /** "1:23" / "1:02:03" for [ms]. */
 internal fun formatPlayTime(ms: Long): String {

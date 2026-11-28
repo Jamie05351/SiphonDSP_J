@@ -11,7 +11,9 @@ import org.junit.Test
 class DockFactsTest {
     private val values = NativeBmwDspValues.DEFAULTS.copyOf().apply {
         this[NativeBmwDspValues.INDEX_LOW_CROSSOVER_FREQ] = 80f
-        this[NativeBmwDspValues.INDEX_MID_CROSSOVER_FREQ] = 3200f
+        this[NativeBmwDspValues.INDEX_MID_CROSSOVER_FREQ] = 80f
+        this[app.siphondsp.model.ThreeWayCrossover.midLowpassIndex] = 3200f
+        this[app.siphondsp.model.ThreeWayCrossover.highHighpassIndex] = 3200f
         this[NativeBmwDspValues.INDEX_TILT_ENABLED] = 0f
         this[NativeBmwDspValues.INDEX_MASTER_VOLUME_DB] = -18f
         this[NativeBmwDspValues.INDEX_LOW_DELAY_L] = 1.2f
@@ -33,6 +35,17 @@ class DockFactsTest {
         val output = dockFacts(HomeStage.OUTPUT, values, peq, -1.5, 3)
         assertEquals("−1.5 dBFS", output[0].second)
         assertEquals("−18.0 dB", output[1].second)
+    }
+
+    @Test
+    fun aSplitWhoseTwoFiltersDifferShowsBoth() {
+        val v = values.copyOf().apply {
+            this[NativeBmwDspValues.INDEX_MID_CROSSOVER_FREQ] = 100f
+            this[app.siphondsp.model.ThreeWayCrossover.highHighpassIndex] = 3500f
+        }
+        val facts = dockFacts(HomeStage.XOVERS, v, peq, null, 3)
+        assertEquals("80 / 100 Hz", facts[0].second)
+        assertEquals("3.2k / 3.5k Hz", facts[1].second)
     }
 
     @Test

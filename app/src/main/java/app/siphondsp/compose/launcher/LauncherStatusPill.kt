@@ -21,6 +21,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -106,9 +107,18 @@ private fun OutMeter(readout: () -> LevelReadout, ceilingDb: Float, modifier: Mo
                 }
             }
         }
-        val levels = readout()
+        // The number five times a second from the same readout: read in a coroutine, not in
+        // composition, so it updates without recomposing the pill at the meter's rate.
+        var shown by remember { mutableStateOf("—") }
+        LaunchedEffect(readout) {
+            while (true) {
+                val levels = readout()
+                shown = if (levels.silent) "—" else "%.1f".format(Locale.ROOT, max(levels.leftPeakDb, levels.rightPeakDb)).replace('-', '−')
+                delay(200)
+            }
+        }
         Text(
-            if (levels.silent) "—" else "%.1f".format(Locale.ROOT, max(levels.leftPeakDb, levels.rightPeakDb)).replace('-', '−'),
+            shown,
             color = Color.White, fontSize = s.sp(10f), fontFamily = FontFamily.Monospace, maxLines = 1,
             modifier = Modifier.width(s.dp(38f)),
         )

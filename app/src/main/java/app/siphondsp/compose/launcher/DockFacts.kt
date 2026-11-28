@@ -13,6 +13,7 @@ import app.siphondsp.dsp.AutoHeadroomCalculator
 import app.siphondsp.dsp.GainBudget
 import app.siphondsp.model.BmwPeqState
 import app.siphondsp.model.NativeBmwDspValues
+import app.siphondsp.model.ThreeWayCrossover
 import app.siphondsp.service.RootlessAudioProcessorService
 import app.siphondsp.utils.AppEvent
 import app.siphondsp.utils.AppEvents
@@ -47,8 +48,12 @@ internal fun dockFacts(
             if (crossoverWays == 0) {
                 add("bands" to "bypassed")
             } else {
-                add("low|mid" to hz(values[NativeBmwDspValues.INDEX_LOW_CROSSOVER_FREQ]))
-                if (crossoverWays >= 3) add("mid|high" to hz(values[NativeBmwDspValues.INDEX_MID_CROSSOVER_FREQ]))
+                // Each split is two filters set independently: the lower band's lowpass and the
+                // upper band's highpass. One figure when they meet, both when they don't.
+                add("low|mid" to split(values[NativeBmwDspValues.INDEX_LOW_CROSSOVER_FREQ], values[NativeBmwDspValues.INDEX_MID_CROSSOVER_FREQ]))
+                if (crossoverWays >= 3) {
+                    add("mid|high" to split(values[ThreeWayCrossover.midLowpassIndex], values[ThreeWayCrossover.highHighpassIndex]))
+                }
             }
             add("tilt" to if (on(NativeBmwDspValues.INDEX_TILT_ENABLED)) {
                 "${signed(values[NativeBmwDspValues.INDEX_TILT_AMOUNT] * NativeBmwDspValues.TILT_END_GAIN_PER_AMOUNT.toDouble())} dB"
@@ -112,5 +117,10 @@ private fun signed(v: Double): String = when {
 }
 
 private fun ms(v: Float): String = "%.2f ms".format(Locale.ROOT, v)
+
+private fun split(lowpass: Float, highpass: Float): String =
+    if (kotlin.math.abs(lowpass - highpass) < 0.5f) hz(lowpass) else "${short(lowpass)} / ${hz(highpass)}"
+
+private fun short(v: Float): String = if (v >= 1000f) "%.1fk".format(Locale.ROOT, v / 1000f) else "%.0f".format(Locale.ROOT, v)
 
 private fun hz(v: Float): String = if (v >= 1000f) "%.1fk Hz".format(Locale.ROOT, v / 1000f) else "%.0f Hz".format(Locale.ROOT, v)

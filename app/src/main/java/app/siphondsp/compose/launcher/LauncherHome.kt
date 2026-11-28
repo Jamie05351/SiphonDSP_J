@@ -1,5 +1,8 @@
 package app.siphondsp.compose.launcher
 
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
+import androidx.compose.runtime.produceState
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.runtime.mutableLongStateOf
@@ -639,7 +642,10 @@ private fun MusicTile(
     val corner = s.dp(MusicCorner)
     // The edge and glow take the album art's colour while there is art; else the player's.
     val art = track?.art
-    val artColour = remember(art) { art?.let { runCatching { artAccent(it) }.getOrNull() } }
+    // Worked out off the main thread, once per piece of art.
+    val artColour by produceState<Color?>(null, art) {
+        value = art?.let { withContext(Dispatchers.Default) { runCatching { artAccent(it) }.getOrNull() } }
+    }
     val accent = artColour ?: player?.accent ?: tile.accent
     Box(Modifier.fillMaxSize()) {
         Box(
