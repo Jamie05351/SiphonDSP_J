@@ -85,6 +85,15 @@ class LauncherHomeRenderTest {
     @Test
     fun dockExpanded() = render("dock-expanded", overlay = LauncherOverlay.None, expanded = true)
 
+    /** The head unit's real window: the KSW bar takes 63 dp above it. */
+    @Test
+    @Config(qualifiers = "w1280dp-h417dp-land-mdpi")
+    fun headUnitWindow() = render("head-unit-window", overlay = LauncherOverlay.None, minWidth = 1100)
+
+    @Test
+    @Config(qualifiers = "w1280dp-h417dp-land-mdpi")
+    fun headUnitWindowDock() = render("head-unit-window-dock", overlay = LauncherOverlay.None, minWidth = 1100, expanded = true)
+
     /** The open panel on the smaller screen: the five tiles still fit. */
     @Test
     @Config(qualifiers = "w800dp-h400dp-land-mdpi")
