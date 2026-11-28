@@ -29,7 +29,20 @@ data class Track(
     val art: ImageBitmap?,
     val playing: Boolean,
     val packageName: String,
-)
+    /** The track's length, ms; 0 when the player doesn't say. */
+    val durationMs: Long = 0L,
+    /** Where playback was at [positionAtMs] ([SystemClock.elapsedRealtime]), ms; it moves on at [speed] while playing. */
+    val positionMs: Long = 0L,
+    val positionAtMs: Long = 0L,
+    val speed: Float = 1f,
+) {
+    /** Where playback is at [nowMs] (elapsedRealtime), clamped to the track; null without a length. */
+    fun positionAt(nowMs: Long): Long? {
+        if (durationMs <= 0L || positionMs < 0L) return null
+        val moved = if (playing && positionAtMs > 0L) ((nowMs - positionAtMs) * speed).toLong() else 0L
+        return (positionMs + moved).coerceIn(0L, durationMs)
+    }
+}
 
 /**
  * The media session the home screen shows: the one that is playing, else the most recent one.
@@ -157,6 +170,10 @@ class NowPlaying(context: Context) {
                 art = art?.asImageBitmap(),
                 playing = c.playbackState?.state == PlaybackState.STATE_PLAYING,
                 packageName = c.packageName,
+                durationMs = meta.getLong(MediaMetadata.METADATA_KEY_DURATION).coerceAtLeast(0L),
+                positionMs = c.playbackState?.position ?: 0L,
+                positionAtMs = c.playbackState?.lastPositionUpdateTime ?: 0L,
+                speed = c.playbackState?.playbackSpeed?.takeIf { it > 0f } ?: 1f,
             )
         }
         // Only a session that is playing counts: pick() falls back to any session, and a paused or

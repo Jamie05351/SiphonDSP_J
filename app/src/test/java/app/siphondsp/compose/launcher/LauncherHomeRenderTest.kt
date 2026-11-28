@@ -218,7 +218,8 @@ class LauncherHomeRenderTest {
                     apps = apps, slots = slots, carFunctions = CarFunction.entries,
                     overlay = overlay, onOverlayChange = {},
                     openingStage = null, animateTiles = false, actions = NoActions,
-                    track = if (playing) Track("Blinding Lights", "The Weeknd", icon(0xFF8E2DE2.toInt()), playing = true, packageName = "test.Spotify") else null,
+                    track = if (playing) Track("Blinding Lights", "The Weeknd", icon(0xFF8E2DE2.toInt()), playing = true, packageName = "test.Spotify",
+                        durationMs = 200_000L, positionMs = 83_000L) else null,
                     lastPlayer = "test.Spotify",
                     nowPlayingAllowed = false,
                     knobFocusRequests = knobRequests,
@@ -231,6 +232,11 @@ class LauncherHomeRenderTest {
         // Let enter animations and the power sweep finish.
         repeat(40) {
             shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(100))
+        }
+        // The open dock's facts load off the main thread: give them time to land.
+        if (expanded) repeat(40) {
+            Thread.sleep(50)
+            shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(50))
         }
         val root = activity.window.decorView.findViewById<View>(android.R.id.content)
         if (knob > 0) {

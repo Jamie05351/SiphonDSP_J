@@ -1,5 +1,8 @@
 package app.siphondsp.compose.launcher
 
+import androidx.compose.ui.graphics.drawscope.scale
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -357,6 +360,8 @@ fun LauncherHome(
                             painterResource(R.drawable.launcher_wallpaper), contentDescription = null,
                             contentScale = ContentScale.Crop, alignment = Alignment.CenterEnd, modifier = Modifier.fillMaxSize(),
                         )
+                        // Only on the built-in wallpaper, where the car's place is known.
+                        CarUnderglow(readout, g, Modifier.fillMaxSize())
                     }
                     // The volume and tiles fade away while a drawer or menu is up, so what's
                     // over the blurred background isn't competing with them.
@@ -365,6 +370,7 @@ fun LauncherHome(
                             VolumePod(
                                 engine.masterVolumeDb, engine.masterMuted, g, actions::volumeStep, actions::toggleMute,
                                 Modifier.at(PodX, TilesTop, PodWidth, TileHeight),
+                                bassBoostDb = engine.deepBassDb,
                             )
                             TileGrid(apps, slots, look.hidden, track, lastPlayer, onOverlayChange, actions)
                             CornerButton(designWidth - 2 * CornerSize - 12f, stringResource(R.string.launcher_drawer), { onOverlayChange(LauncherOverlay.Drawer()) }) { drawDrawerGlyph() }
@@ -402,6 +408,53 @@ fun LauncherHome(
                 LauncherOverlay.None -> {}
             }
             }
+        }
+    }
+}
+
+/**
+ * A soft violet-blue glow on the floor under the built-in wallpaper's car, breathing slowly with the
+ * output level while the DSP is on ([g]). Drawn where [ContentScale.Crop] with [Alignment.CenterEnd]
+ * puts the car's underside, so it stays under the car on any screen. Read while drawing, so it never
+ * recomposes the home screen.
+ */
+@Composable
+private fun CarUnderglow(readout: () -> LevelReadout, g: Float, modifier: Modifier) {
+    if (g <= 0f) return
+    // The smoothed level, 0..1: rises over about a third of a second, falls over about two.
+    val level = remember { floatArrayOf(0f) }
+    val frame = remember { mutableLongStateOf(0L) }
+    // 20 redraws a second is plenty for a slow breathe, and costs the head unit little.
+    LaunchedEffect(Unit) {
+        while (true) {
+            kotlinx.coroutines.delay(UnderglowTickMs)
+            frame.longValue++
+        }
+    }
+    Canvas(modifier) {
+        frame.longValue
+        val levels = readout()
+        val peak = if (levels.silent) -60f else maxOf(levels.leftPeakDb, levels.rightPeakDb)
+        val target = ((peak + 40f) / 40f).coerceIn(0f, 1f)
+        level[0] += (target - level[0]) * if (target > level[0]) 0.25f else 0.04f
+        val scale = maxOf(size.width / WallpaperW, size.height / WallpaperH)
+        val left = size.width - WallpaperW * scale
+        val top = (size.height - WallpaperH * scale) / 2
+        val centre = Offset(left + UnderglowX * scale, top + UnderglowY * scale)
+        val radiusX = UnderglowHalfWidth * scale
+        val radiusY = UnderglowHalfHeight * scale
+        val alpha = g * (0.35f + 0.45f * level[0])
+        // An ellipse: a radial gradient drawn in a circle, squashed vertically.
+        scale(1f, radiusY / radiusX, pivot = centre) {
+            drawCircle(
+                Brush.radialGradient(
+                    0f to UnderglowCore.copy(alpha = alpha),
+                    0.5f to UnderglowEdge.copy(alpha = alpha * 0.55f),
+                    1f to Color.Transparent,
+                    center = centre, radius = radiusX,
+                ),
+                radius = radiusX, center = centre,
+            )
         }
     }
 }
@@ -584,18 +637,21 @@ private fun MusicTile(
     // or without a launcher entry), which then simply isn't named.
     val playerName = player?.label.orEmpty()
     val corner = s.dp(MusicCorner)
+    // The edge and glow take the album art's colour while there is art; else the player's.
+    val art = track?.art
+    val artColour = remember(art) { art?.let { runCatching { artAccent(it) }.getOrNull() } }
+    val accent = artColour ?: player?.accent ?: tile.accent
     Box(Modifier.fillMaxSize()) {
         Box(
             Modifier
                 .fillMaxSize()
                 .knobFocusRing(corner, grow = true)
-                .neonEdge(MusicCorner, player?.accent ?: tile.accent)
+                .neonEdge(MusicCorner, accent)
                 .clip(RoundedCornerShape(corner))
                 .background(HomePalette.TileBase)
                 .combinedClickable(role = Role.Button, onClick = open, onLongClick = { menu = true })
                 .semantics { contentDescription = listOf(title, heading, track?.artist.orEmpty(), playerName).filter { it.isNotEmpty() }.distinct().joinToString(": ") },
         ) {
-            val art = track?.art
             if (art != null) {
                 // The album art over the whole tile: what the tile is this size for.
                 Image(art, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
@@ -622,46 +678,69 @@ private fun MusicTile(
                     ),
                 ),
             )
+            // Title, artist and player, then the controls on their own row (the tile is too narrow
+            // for them beside the artist), then where the track is.
             Column(Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(s.dp(MusicPad))) {
                 Text(
                     heading, color = Color.White, fontSize = s.sp(18f), fontWeight = FontWeight.SemiBold,
                     maxLines = 1, overflow = TextOverflow.Ellipsis,
                 )
-                Row(Modifier.padding(top = s.dp(6f)), verticalAlignment = Alignment.CenterVertically) {
-                    // The artist and player take what the controls leave, so they never run under them.
-                    Column(Modifier.weight(1f).clipToBounds()) {
-                        Text(detail, color = HomePalette.Subtitle, fontSize = s.sp(13f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        if (playerName.isNotEmpty() && playerName != heading) {
-                            Text(
-                                playerName, color = player?.accent ?: tile.accent, fontSize = s.sp(12f), fontWeight = FontWeight.Medium,
-                                maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = s.dp(2f)),
-                            )
-                        }
-                    }
-                    Spacer(Modifier.width(s.dp(MusicInfoGap)))
-                    Row(
-                        Modifier.width(s.dp(MediaControlsWidth)).height(s.dp(MediaButtonSize)),
-                        horizontalArrangement = Arrangement.spacedBy(s.dp(MediaButtonGap)),
-                    ) {
-                        if (track != null) {
-                            MediaButton(stringResource(R.string.launcher_media_previous), actions::mediaPrevious) { drawSkip(forward = false) }
-                            MediaButton(
-                                stringResource(if (track.playing) R.string.launcher_media_pause else R.string.launcher_media_play), actions::mediaPlayPause,
-                            ) { if (track.playing) drawPause() else drawPlay() }
-                            MediaButton(stringResource(R.string.launcher_media_next), actions::mediaNext) { drawSkip(forward = true) }
-                        } else {
-                            // Nothing playing: only Play, in its usual place, which resumes the last player.
-                            // Play, not play / pause: a session can be playing without a title (so no
-                            // track), and a toggle would then pause it.
-                            Spacer(Modifier.width(s.dp(MediaButtonSize)))
-                            MediaButton(stringResource(R.string.launcher_media_play), actions::mediaPlay) { drawPlay() }
-                        }
+                Text(detail, color = HomePalette.Subtitle, fontSize = s.sp(13f), maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(top = s.dp(4f)))
+                if (playerName.isNotEmpty() && playerName != heading) {
+                    Text(
+                        playerName, color = accent, fontSize = s.sp(12f), fontWeight = FontWeight.Medium,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = s.dp(2f)),
+                    )
+                }
+                Row(
+                    Modifier.padding(top = s.dp(MusicInfoGap)).fillMaxWidth().height(s.dp(MediaButtonSize)),
+                    horizontalArrangement = Arrangement.spacedBy(s.dp(MediaButtonGap), Alignment.CenterHorizontally),
+                ) {
+                    if (track != null) {
+                        MediaButton(stringResource(R.string.launcher_media_previous), actions::mediaPrevious) { drawSkip(forward = false) }
+                        MediaButton(
+                            stringResource(if (track.playing) R.string.launcher_media_pause else R.string.launcher_media_play), actions::mediaPlayPause,
+                        ) { if (track.playing) drawPause() else drawPlay() }
+                        MediaButton(stringResource(R.string.launcher_media_next), actions::mediaNext) { drawSkip(forward = true) }
+                    } else {
+                        // Nothing playing: only Play, in its usual place, which resumes the last player.
+                        // Play, not play / pause: a session can be playing without a title (so no
+                        // track), and a toggle would then pause it.
+                        MediaButton(stringResource(R.string.launcher_media_play), actions::mediaPlay) { drawPlay() }
                     }
                 }
+                if (track != null && track.durationMs > 0L) TrackProgress(track, accent)
             }
         }
         // No Hide: the music tile always shows.
         SlotMenu(menu, { menu = false }, i, target, onOverlayChange, actions, hide = null)
+    }
+}
+
+/** Elapsed and total time over a thin bar in [accent], moving on once a second while playing. */
+@Composable
+private fun TrackProgress(track: Track, accent: Color) {
+    val s = LocalHomeScale.current
+    var now by remember { mutableLongStateOf(android.os.SystemClock.elapsedRealtime()) }
+    LaunchedEffect(track) {
+        while (track.playing) {
+            now = android.os.SystemClock.elapsedRealtime()
+            kotlinx.coroutines.delay(1000)
+        }
+        now = android.os.SystemClock.elapsedRealtime()
+    }
+    val position = track.positionAt(now) ?: return
+    val fraction = (position.toFloat() / track.durationMs).coerceIn(0f, 1f)
+    Column(Modifier.padding(top = s.dp(10f)).fillMaxWidth()) {
+        Row(Modifier.fillMaxWidth()) {
+            Text(formatPlayTime(position), color = HomePalette.Subtitle, fontSize = s.sp(10f), fontFamily = FontFamily.Monospace)
+            Spacer(Modifier.weight(1f))
+            Text(formatPlayTime(track.durationMs), color = HomePalette.Subtitle, fontSize = s.sp(10f), fontFamily = FontFamily.Monospace)
+        }
+        Box(Modifier.padding(top = s.dp(3f)).fillMaxWidth().height(s.dp(4f)).clip(RoundedCornerShape(s.dp(2f))).background(Color.White.copy(alpha = 0.15f))) {
+            Box(Modifier.fillMaxWidth(fraction).fillMaxHeight().background(accent))
+        }
     }
 }
 
@@ -791,9 +870,14 @@ private fun Dock(
     if (!expanded || pillAlpha > 0f) {
         // Fading out under the opening panel, or not yet back as the panel closes, it takes no taps.
         Box(Modifier.at(pillX, PillTop, PillWidth, PillHeight).graphicsLayer { alpha = pillAlpha }.blockTouches(expanded || pillAlpha < 1f)) {
-            CompositionLocalProvider(LocalHomeScale provides HomeScale(s.k * DockScale)) {
-                Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.Center) {
+            // One long, low row along the floor under the car: power, what the DSP is doing with
+            // the output meter and status chips, then the headroom (which opens the panel).
+            Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
+                CompositionLocalProvider(LocalHomeScale provides HomeScale(s.k * PillNodeScale)) {
                     PowerNode(powered, g, actions::togglePower, caption = false)
+                }
+                PillStatus(powered, engine, readout, Modifier.weight(1f))
+                CompositionLocalProvider(LocalHomeScale provides HomeScale(s.k * PillNodeScale)) {
                     HeadroomNode(
                         readout, engine.ceilingDb, g, { ChainSweep.arrived(sweep.value) }, Modifier,
                         showLabel, { onExpandedChange(true) }, if (!expanded) knobEntry else null,
@@ -804,6 +888,7 @@ private fun Dock(
     }
     if (o <= 0f) return
     val panelAlpha = (o * 2f - 1f).coerceIn(0f, 1f)
+    val facts = rememberDockFacts(open = true, crossoverWays = engine.crossoverWays)
     val chainWidth = width - DockButtonsWidth
     // Not yet showing on the way out, or sliding away, the panel's controls take no taps.
     Box(Modifier.at(0f, PanelTop, width, PanelHeight).graphicsLayer { alpha = panelAlpha }.blockTouches(!expanded || panelAlpha <= 0f)) {
@@ -835,6 +920,7 @@ private fun Dock(
                                 .then(if (expanded && stage == HomeStage.entries.first()) Modifier.focusRequester(knobEntry) else Modifier),
                             width = layout.cardWidth,
                             animateArt = animateTiles,
+                            facts = facts[stage].orEmpty(),
                         )
                     }
                 }
@@ -1072,6 +1158,17 @@ private fun DrawScope.drawSkip(forward: Boolean) {
     drawRect(HomePalette.Button, Offset(if (forward) size.width - bar else 0f, 0f), Size(bar, size.height))
 }
 
+// The built-in wallpaper's size, and where the floor under its car is, in its own pixels.
+private const val WallpaperW = 2020f
+private const val WallpaperH = 779f
+private const val UnderglowX = 1420f
+private const val UnderglowY = 618f
+private const val UnderglowHalfWidth = 470f
+private const val UnderglowHalfHeight = 46f
+private val UnderglowCore = Color(0xFFB07CFF)
+private const val UnderglowTickMs = 50L
+private val UnderglowEdge = Color(0xFF5A6BFF)
+
 // The layout, in design dp at 1280 x 480.
 internal const val DesignW = 1280f
 internal const val DesignH = 480f
@@ -1095,9 +1192,12 @@ private const val PanelScale = 0.8f
 private const val PanelTileInset = 24f
 private const val PanelShadeTop = 1f
 private const val PanelShadeBottom = 1f
-// The pill: power and the headroom side by side, in the bottom-right corner.
-private const val PillWidth = 2 * ColumnWidth * DockScale + 8f
-private const val PillHeight = 116f
+// The pill: one long, low row in the bottom-right corner, along the floor under the wallpaper's car
+// (power, the status, the headroom), its power and headroom at PillNodeScale. It ends 12 dp clear of
+// the tiles on the 1280 wide design.
+private const val PillWidth = 500f
+private const val PillHeight = 72f
+private const val PillNodeScale = 0.5f
 private const val PillTop = DesignH - DockInset - PillHeight
 private const val PillCorner = 24f
 private const val PillShade = 0.9f
@@ -1115,23 +1215,25 @@ private const val DockButtonSize = 60f
 private const val HeadroomSize = 104f
 // All apps and the car menu, at the padded right edge.
 private const val CornerSize = 58f
-// The tiles beside the volume strip: the music tile, then the grid of the other tiles, two
-// columns as wide as the music tile.
-private const val TileWidth = 165f
-private const val TileGap = 19f
+// The tiles beside the volume strip: the music tile, then the grid of the other tiles in two
+// columns. Narrow enough that the grid ends (at 668, 683 dp on screen) before the wallpaper's car,
+// whose front starts at about 695 dp on the head unit: none of it hides behind a tile.
+private const val TileWidth = 148f
+private const val TileGap = 16f
 private const val GridWidth = HomeTile.Columns * TileWidth + (HomeTile.Columns - 1) * TileGap
-private const val MusicWidth = GridWidth
+private const val MusicWidth = 256f
 // The music tile's insides: the art square, then the text and the controls under it.
 private const val MusicCorner = 16f
 private const val MusicPad = 16f
 private const val MusicInfoGap = 13f
 private const val MediaButtonSize = 48f
 private const val MediaButtonGap = 10f
-private const val MediaControlsWidth = 3 * MediaButtonSize + 2 * MediaButtonGap
 // Slim and against the left edge: a fallback for when the steering-wheel buttons fail.
 private const val PodWidth = 64f
 private const val PodX = 0f
 private const val TilesX = PodX + PodWidth + 20f
+/** Where the tiles end, in design dp: the wallpaper's car must start right of it. */
+internal const val TilesRight = TilesX + MusicWidth + TileGap + GridWidth
 private const val TilesTop = 60f
 private const val GridX = TilesX + MusicWidth + TileGap
 // Down to the bottom of the screen, level with the DSP pill: the open panel goes over them.
@@ -1141,8 +1243,8 @@ private const val GridTileHeight = (TileHeight - TileGap) / 2
 // The text and controls' band along the bottom, which the fade darkens; the fade starts at
 // MusicFadeStart of the tile's height and is solid from MusicFadeSolid.
 private const val MusicBand = 100f
-private const val MusicFadeStart = 0.42f
-private const val MusicFadeSolid = 0.7f
+private const val MusicFadeStart = 0.30f
+private const val MusicFadeSolid = 0.58f
 // The player's icon while there's no art.
 private const val MusicIcon = 96f
 private const val PanelMs = 380

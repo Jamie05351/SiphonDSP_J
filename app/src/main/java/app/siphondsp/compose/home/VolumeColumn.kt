@@ -197,13 +197,15 @@ internal fun VolumePod(
     onStep: (Int) -> Unit,
     onToggleMute: () -> Unit,
     modifier: Modifier = Modifier,
+    /** Deep bass's boost at this volume (it follows the volume), shown under the level; 0 hides it. */
+    bassBoostDb: Float = 0f,
 ) {
     val s = LocalHomeScale.current
     // Half as bright as the other edges.
     val edge = lerp(HomePalette.NodeEdgeOff, BmwTheme.colors.sliderHeadroom.copy(alpha = 0.5f).compositeOver(HomePalette.NodeFill), g)
     Column(modifier, verticalArrangement = Arrangement.spacedBy(s.dp(PodGap))) {
         PodStep(stringResource(R.string.home_volume_up), plus = true, g, edge, Modifier.weight(1f)) { onStep(1) }
-        PodLevel(volumeDb, muted, g, edge, onToggleMute, Modifier.weight(PodLevelShare))
+        PodLevel(volumeDb, muted, g, edge, onToggleMute, Modifier.weight(PodLevelShare), bassBoostDb)
         PodStep(stringResource(R.string.home_volume_down), plus = false, g, edge, Modifier.weight(1f)) { onStep(-1) }
     }
 }
@@ -239,7 +241,7 @@ private fun PodStep(label: String, plus: Boolean, g: Float, edge: Color, modifie
 
 /** "VOLUME", the dB in large type and the −80..0 dB bar; MUTED and dimmed while muted. Tap: mute. */
 @Composable
-private fun PodLevel(volumeDb: Float, muted: Boolean, g: Float, edge: Color, onToggleMute: () -> Unit, modifier: Modifier) {
+private fun PodLevel(volumeDb: Float, muted: Boolean, g: Float, edge: Color, onToggleMute: () -> Unit, modifier: Modifier, bassBoostDb: Float = 0f) {
     val s = LocalHomeScale.current
     val signal = BmwTheme.colors.sliderHeadroom
     val whole = if (volumeDb.isFinite()) volumeDb.roundToInt() else null
@@ -296,8 +298,20 @@ private fun PodLevel(volumeDb: Float, muted: Boolean, g: Float, edge: Color, onT
                 drawRoundRect(colour, size = Size(w, size.height), cornerRadius = corner)
             }
         }
+        // Deep bass follows the volume: what it adds at this level, in its gold, as you turn down.
+        if (!muted && bassBoostDb >= 0.05f) {
+            Text(
+                text = "+%.1f".format(java.util.Locale.ROOT, bassBoostDb),
+                color = lerp(HomePalette.Dim, BassGold, lit),
+                fontSize = s.sp(12f), fontWeight = FontWeight.Bold, maxLines = 1,
+                modifier = Modifier.padding(top = s.dp(8f)),
+            )
+            Text("BASS", color = lerp(HomePalette.Dim, BassGold, lit), fontSize = s.sp(8f), fontWeight = FontWeight.Bold, maxLines = 1)
+        }
     }
 }
+
+private val BassGold = Color(app.siphondsp.view.BmwDashboardSkin.SLIDER_DEEP_BASS_COLOR)
 
 /**
  * The level on its own small screen: "VOLUME", the dB in large type, and a bar along the
