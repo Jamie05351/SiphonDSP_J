@@ -444,8 +444,42 @@ private fun FilterToolsMenu(
 
     Box {
         GlassMenu(expanded = expanded, onDismissRequest = onDismiss) {
-            // Per-filter actions (duplicate, move, copy one filter) live on the filter inspector;
-            // this menu keeps the whole-bank tools.
+            // The selected filter first (as before the inspector existed, and on it too): move or
+            // copy it to another bank, duplicate it, or reorder it. Then the whole-bank tools.
+            val bands = holder.visibleBands
+            val selectedIndex = bands.indexOfFirst { it.uuid == holder.selectedUuid }
+            if (selectedIndex >= 0) {
+                PeqScope.entries.filter { it != scope }.forEach { target ->
+                    GlassItem(
+                        text = "Move selected to ${target.label}",
+                        colour = Color(scopeColour(target)),
+                        onClick = {
+                            val result = PeqBandEditor.moveFilterToScope(holder.peqState, scope, selectedIndex, target)
+                            run(result)
+                            // Only once it's really there (apply() keeps the old state if refused).
+                            if (result is PeqBandEditResult.Changed && holder.hasBand(target, result.select)) {
+                                holder.selectedScope = target
+                                holder.selectedUuid = result.select
+                            }
+                        },
+                    )
+                }
+                PeqScope.entries.filter { it != scope }.forEach { target ->
+                    GlassItem(
+                        text = "Copy selected to ${target.label}",
+                        onClick = { run(PeqBandEditor.copyFilter(holder.peqState, scope, selectedIndex, target)) },
+                    )
+                }
+                GlassItem("Duplicate selected filter", onClick = { run(PeqBandEditor.duplicateFilter(holder.peqState, scope, selectedIndex)) })
+                GlassItem("Move selected up", enabled = selectedIndex > 0,
+                    onClick = { run(PeqBandEditor.moveFilter(holder.peqState, scope, selectedIndex, selectedIndex - 1)) })
+                GlassItem("Move selected down", enabled = selectedIndex < bands.lastIndex,
+                    onClick = { run(PeqBandEditor.moveFilter(holder.peqState, scope, selectedIndex, selectedIndex + 1)) })
+                GlassDivider()
+            } else {
+                GlassNote("Select a filter to move, copy or duplicate it")
+                GlassDivider()
+            }
             PeqScope.entries.filter { it != scope }.forEach { target ->
                 GlassItem(
                     text = "Copy all ${scope.label} to ${target.label}…",

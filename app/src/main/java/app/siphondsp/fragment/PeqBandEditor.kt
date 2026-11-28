@@ -108,6 +108,29 @@ object PeqBandEditor {
         return PeqBandEditResult.Changed(candidate, "copy-filter", select = copied.uuid)
     }
 
+    /**
+     * Moves the filter at [index] in [from] to the end of [to]: out of one bank and into the other in
+     * one step (one undo), keeping its identity. Overflows, changing nothing, when [to] is full.
+     */
+    fun moveFilterToScope(
+        state: BmwPeqState,
+        from: PeqScope,
+        index: Int,
+        to: PeqScope,
+    ): PeqBandEditResult {
+        if (from == to) return PeqBandEditResult.Ignored
+        val candidate = state.deepCopy()
+        val source = bandsFor(candidate, from)
+        if (index !in source.indices) return PeqBandEditResult.Ignored
+        val destination = bandsFor(candidate, to)
+        if (destination.size >= BmwPeqState.MAX_BANDS) {
+            return PeqBandEditResult.Overflow(to, alreadyFull = true)
+        }
+        val moved = source.removeAt(index)
+        destination.add(moved)
+        return PeqBandEditResult.Changed(candidate, "move-filter", select = moved.uuid)
+    }
+
     fun moveFilter(state: BmwPeqState, scope: PeqScope, from: Int, to: Int): PeqBandEditResult {
         val candidate = state.deepCopy()
         val bands = bandsFor(candidate, scope)
