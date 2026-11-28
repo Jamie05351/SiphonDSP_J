@@ -170,21 +170,23 @@ private fun PillChips(powered: Boolean, modifier: Modifier) {
         val bus = FloatArray(3)
         val mbc = FloatArray(12)
         var tick = 0
+        // Whether the last MBC read worked: a failed read leaves the array holding the read before.
+        var mbcOk = false
         while (true) {
             val t = System.nanoTime()
             if (powered) {
                 val master = RootlessAudioProcessorService.nativeBmwMasterLimiterMeter()?.getOrNull(0) ?: 0f
                 val busOn = RootlessAudioProcessorService.readNativeBmwMeter(NativeDsp.METER_BUS_LIMITER, bus)
                 if (master > LimitingDb || (busOn && bus.any { it > LimitingDb })) lastLimit = t
-                mbcDb = if (RootlessAudioProcessorService.readNativeBmwMeter(NativeDsp.METER_MBC, mbc)) {
-                    maxOf(mbc[2], mbc[5], mbc[8], mbc[11])
-                } else 0f
+                mbcOk = RootlessAudioProcessorService.readNativeBmwMeter(NativeDsp.METER_MBC, mbc)
+                mbcDb = if (mbcOk) maxOf(mbc[2], mbc[5], mbc[8], mbc[11]) else 0f
             } else {
+                mbcOk = false
                 mbcDb = 0f
             }
             if (++tick % 6 == 0) {
                 now = t
-                for (b in 0..3) bands[b] = if (powered) mbc[b * 3 + 2].coerceAtLeast(0f) else 0f
+                for (b in 0..3) bands[b] = if (powered && mbcOk) mbc[b * 3 + 2].coerceAtLeast(0f) else 0f
             }
             delay(33)
         }
